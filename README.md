@@ -14,9 +14,10 @@ The app works offline as a plain file (open `public/index.html` directly); the *
 ## Deploying
 
 1. **Install & auth**: `npx wrangler login` (interactive), or set `CLOUDFLARE_API_TOKEN` in non-interactive environments.
-2. **Create the KV namespace** (once): `npx wrangler kv namespace create MOCKS`, then paste the returned id into `wrangler.toml` under `[[kv_namespaces]]` (replacing `REPLACE_WITH_KV_NAMESPACE_ID`).
-3. **Deploy**: `npx wrangler deploy`. This publishes to `https://aeo-draft-lab.<your-subdomain>.workers.dev` (or a custom domain if configured).
-4. **Verify**: `curl https://aeo-draft-lab.<your-subdomain>.workers.dev/api/setup` should return `{}`. Open the site → **Mocks** tab → should read "☁ Cloud connected." Run a draft → name it → **Save current draft to cloud**. It now shows on every device.
+2. **Deploy**: `npx wrangler deploy`. This publishes to `https://aeo-draft-lab.<your-subdomain>.workers.dev` (or a custom domain if configured). The `MOCKS` KV namespace id is already set in `wrangler.toml`.
+3. **Verify**: `curl https://aeo-draft-lab.<your-subdomain>.workers.dev/api/setup` should return `{}`. Open the site → **Mocks** tab → should read "☁ Cloud connected." Run a draft → name it → **Save current draft to cloud**. It now shows on every device.
+
+This repo also has a Cloudflare Workers Build integration connected via GitHub, which auto-deploys on pushes to the connected branch — see the [Workers dashboard](https://dash.cloudflare.com) for that project's build status.
 
 ### Optional — make history private
 

@@ -39,13 +39,15 @@ Deploys as a single **Cloudflare Worker** to
 npx wrangler deploy
 ```
 
-Requires:
-1. A real KV namespace id in `wrangler.toml` under `[[kv_namespaces]]`
-   (create with `npx wrangler kv namespace create MOCKS`, then paste the id
-   in — the placeholder `REPLACE_WITH_KV_NAMESPACE_ID` will fail deploy).
-2. Cloudflare auth: `npx wrangler login` interactively, or a
-   `CLOUDFLARE_API_TOKEN` env var in non-interactive environments (CI,
-   sandboxed sessions).
+Requires Cloudflare auth: `npx wrangler login` interactively, or a
+`CLOUDFLARE_API_TOKEN` env var in non-interactive environments (CI,
+sandboxed sessions). The `MOCKS` KV namespace id is already set in
+`wrangler.toml`.
+
+This repo also has a Cloudflare Workers Build integration connected via
+GitHub — pushes to the branch backing the connected deployment (see the
+Cloudflare dashboard) trigger an automatic build/deploy independent of
+running `wrangler deploy` locally.
 
 Verify after deploy: `curl https://aeo-draft-lab.hkeseyan.workers.dev/api/setup`
 should return `{}`, not a 404. If it 404s, the Worker isn't routing `/api/*`
