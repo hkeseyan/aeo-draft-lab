@@ -1,0 +1,21 @@
+name = "aeo-draft-lab"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# KV namespace for cross-device mock draft history (bound as env.MOCKS in worker.js).
+# Create it with `npx wrangler kv namespace create MOCKS` and paste the resulting
+# id below before deploying. This container has no Cloudflare credentials, so the
+# id could not be created or filled in automatically.
+[[kv_namespaces]]
+binding = "MOCKS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Optional: restrict mock history to a single shared secret.
+# Set with `npx wrangler secret put AUTH_TOKEN` (do not put real secrets in this file).
+# [vars]
+# AUTH_TOKEN = ""
