@@ -4,6 +4,25 @@ Interactive keeper-league draft tool (12-team, Half-PPR, snake) with rival
 rosters, keeper modeling, a mock-draft simulator, and cloud-saved mock
 history that syncs across devices.
 
+## Feedback & specs workflow — check this every session
+
+The user moves between Claude Cowork, Claude Code, and other environments,
+and captures feedback in the moment while using the app rather than trying
+to remember it later. To keep that from getting lost on handoff:
+
+- **`FEEDBACK.md`** — running inbox of feedback/ideas, newest first, each
+  tagged 🆕 new / 🔧 in progress / ✅ done / ⛔ won't do. **Read it at the
+  start of every session** and triage anything 🆕: act on it if small and
+  unambiguous, ask the user if it's larger or ambiguous, or note why it's
+  deferred.
+- **`SPECS.md`** — the current, authoritative description of what the app
+  does. When a `FEEDBACK.md` item is resolved, fold the resulting behavior
+  into `SPECS.md` and mark the feedback entry ✅ (keep the line — it's
+  history, don't delete it).
+- Whenever the user gives feedback in conversation (in any environment),
+  append it to `FEEDBACK.md` as a new 🆕 entry before doing anything else,
+  even if you're also acting on it immediately in the same turn.
+
 ## Architecture
 
 Deploys as a single **Cloudflare Worker** to
@@ -74,6 +93,8 @@ correctly — check `worker.js`.
 
 ## Roadmap
 
+- Check `FEEDBACK.md` for unaddressed 🆕 items first — that's the live
+  backlog, more current than this list.
 - Multi-league selector for the auction/superflex leagues (next item after
   this Worker deploy is confirmed stable — confirm with the user before
   starting).
