@@ -16,6 +16,12 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🆕 2026-08-20 — **Planned: live walkthrough.** User offered to run a draft
+  on-screen and talk through how they actually use the features. Worth doing
+  before building more UI — the Draft Wizard research had to be done from
+  search results (fantasypros.com is blocked by the sandbox egress proxy), so
+  first-hand observation is the best calibration available. Capture what comes
+  out of it as new entries here.
 - 🆕 2026-08-20 — Overall direction: make the app look/feel/behave closer to
   **FantasyPros Draft Wizard** (a working baseline, not a clone — it stays
   custom to this league). Researched their feature set and wrote a gap
@@ -28,14 +34,23 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   in the pool list, plus a "N left in this tier" counter that turns red as a
   tier empties. Currently `players-2026.csv` has a `tier` column that the app
   parses but never displays.
-- 🆕 2026-08-20 — **Smarter rival pick logic** — today rivals pick randomly
+- ✅ 2026-08-20 — **Smarter rival pick logic** — today rivals pick randomly
   within an ADP noise window. Draft Wizard weighs roster needs + positional
   scarcity per team, and offers Basic vs Advanced modes. Wants: rivals
   respect starting-lineup needs and stop taking a 3rd QB in round 8.
-- 🆕 2026-08-20 — **Per-owner draft tendencies** (our version of "Draft
+  *Done — rivals now score on ADP + roster need + tendency, with a hard veto
+  on positions at their depth cap. See SPECS.md → Opponent model.*
+- ✅ 2026-08-20 — **Per-owner draft tendencies** (our version of "Draft
   Intel") — since this is the same 12 guys every year, let each owner carry a
   tendency profile (e.g. "Taron reaches for QB early", "Jiro is RB-heavy
   rounds 1-3") that biases their sim picks. Toggle per owner.
+  *Done — per-owner QB/RB/WR/TE bias with enable toggles on the Teams &
+  Keepers tab; persisted in saved config.*
+- 🆕 2026-08-20 — **Player pool is smaller than the draft** — `players-2026.csv`
+  has 184 players but the draft is 192 slots (12 × 16), so mocks run dry ~8
+  picks early and the last round or two become forced scavenging. Either
+  extend the CSV past 192 or shorten `LEAGUE.rounds`. Surfaced while testing
+  the new opponent model.
 - 🆕 2026-08-20 — **Post-draft analysis / draft grade** — after a mock: grade,
   projected standings/finish vs the other 11 rosters, positional ranks,
   strengths & weaknesses, and biggest steals/reaches vs ADP.

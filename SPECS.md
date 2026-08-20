@@ -30,12 +30,48 @@ delete one. Falls back to local-only ("Save config" in the Data tab) when
 the cloud API isn't reachable.
 
 ### Strategy Lab
-Compares draft paths/strategies side by side (`renderStratCards`).
+Compares draft paths/strategies side by side (`renderStratCards`). Rival picks
+here use the same opponent model as the Draft Room, so Lab results and live
+mocks don't diverge.
 
 ### Data
 Player pool view (ADP/ECR/projection) and keeper list, plus config
 export/import (JSON) as an offline backup independent of the cloud Mocks
 feature.
+
+## Opponent model
+
+How simulated rivals pick, used by both the Draft Room and the Strategy Lab.
+
+Each rival scores a consideration set (the top 40 available by ADP — nobody
+scans the whole board) and takes the highest scorer:
+
+```
+score = −ADP                       // ADP is the backbone
+      + 26 × needScore(pos)        // roster need
+      −  8 × biasFor(owner, pos)   // per-owner tendency, if enabled
+      − 90 if K/DST before round 14
+      ± noise-slider jitter
+```
+
+**`needScore`** answers "how badly does this team need another of this
+position?" — `1` while a starting slot is unfilled, `0.6` if it can still fill
+FLEX, `0.15` for ordinary bench depth, and `−1` once the team is at its depth
+cap (starters + 3 for RB/WR, starters + 1 for everyone else).
+
+A position at its depth cap is **vetoed outright**, not merely penalized, so
+no tendency bias — however strong — makes a team stockpile a 4th QB. The veto
+falls back to the full candidate list only when every option is capped, which
+is what produces plausible scavenging in the final rounds.
+
+### Owner tendencies
+
+Draft Wizard's Draft Intel mines 5 years of synced league history. We don't
+need that: it's the same 12 owners every year and their habits are known, so
+tendencies are hand-set instead. On **Teams & Keepers**, each rival owner has
+an enable checkbox and a bias per position (QB/RB/WR/TE, range −3 to +3;
+positive = reaches, negative = fades). Unchecked owners draft on value and
+roster need alone. Biases persist in saved config and in exported JSON.
 
 ## Draft order
 

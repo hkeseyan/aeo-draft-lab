@@ -142,6 +142,21 @@
       </div>
       <div class="small muted" style="margin-top:6px" id="keeperTally"></div>
     </div>
+    <div class="card">
+      <h2>Owner tendencies <span class="muted small">(bias the sim: + = reaches for that position, − = fades it)</span></h2>
+      <div class="row" style="margin-bottom:6px">
+        <button class="btn ghost" id="tendAllOn">Enable all</button>
+        <button class="btn ghost" id="tendAllOff">Disable all</button>
+        <button class="btn ghost" id="tendReset">Reset biases</button>
+        <span class="muted small">Only checked owners use their profile; unchecked owners draft on value + roster need alone.</span>
+      </div>
+      <div class="scroll" style="max-height:340px">
+        <table id="tendTable">
+          <thead><tr><th>Use</th><th>Owner</th><th>QB</th><th>RB</th><th>WR</th><th>TE</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
     <div id="teamsWrap" class="stratgrid"></div>
   </section>
 
@@ -762,9 +777,9 @@ function makePick(playerId, ov){
 }
 function rivalPick(ov,noise){
   const pool=available(); if(!pool.length)return;
-  const topN=Math.min(pool.length, 1+ (Math.random()* (noise*2)|0));
-  const choice=pool[Math.floor(Math.random()*Math.max(1,topN))]; // pick within noise window of best ADP
-  makePick(choice.id,ov);
+  const {round,slot}=slotForOverall(ov);
+  const choice=bestRivalChoice(pool,countsOf(rosterOfSlot(slot)),SLOT_OWNER[slot],round,noise);
+  if(choice)makePick(choice.id,ov);
 }
 function advanceOne(){
   const ov=nextOpenPick(curPick); if(ov>totalPicks)return;
@@ -791,6 +806,54 @@ function undo(){
 
 // ---------- ROSTER NEED ----------
 function myRoster(){return picks.filter(p=>p.slot===mySlot).map(p=>PLAYERS.find(x=>x.id===p.playerId)).filter(Boolean);}
+function rosterOfSlot(slot){return picks.filter(p=>p.slot===slot).map(p=>PLAYERS.find(x=>x.id===p.playerId)).filter(Boolean);}
+function blankCounts(){return {QB:0,RB:0,WR:0,TE:0,K:0,DST:0};}
+function countsOf(roster){const c=blankCounts(); roster.forEach(p=>{if(c[p.pos]!=null)c[p.pos]++;}); return c;}
+
+// ---------- OPPONENT MODEL (need-aware picks + per-owner tendencies) ----------
+// slot -> owner name (inverse of OWNER_SLOT)
+const SLOT_OWNER={}; Object.entries(OWNER_SLOT).forEach(([o,s])=>{SLOT_OWNER[s]=o;});
+// Per-owner tendency profile: bias is added to a player's score when that owner
+// weighs the position. Positive = reaches for it, negative = fades it.
+// Same 12 guys every year, so these are hand-set rather than mined from history.
+const TEND_POS=['QB','RB','WR','TE'];
+const TENDENCIES={}; // owner -> {enabled:bool, bias:{QB,RB,WR,TE}}
+OWNERS.forEach(o=>{TENDENCIES[o]={enabled:false,bias:{QB:0,RB:0,WR:0,TE:0}};});
+
+// How badly does a team need another <pos>? 1 = filling a starter, negative = hoarding.
+function needScore(counts,pos){
+  const S=LEAGUE.starters, base=S[pos]||0, have=counts[pos]||0;
+  if(have<base)return 1;
+  if(LEAGUE.flexEligible.includes(pos)){
+    const flexUsed=LEAGUE.flexEligible.reduce((n,q)=>n+Math.max(0,(counts[q]||0)-(S[q]||0)),0);
+    if(flexUsed<(S.FLEX||0))return 0.6;
+  }
+  const depthCap=(pos==='RB'||pos==='WR')?base+3:base+1;
+  if(have>=depthCap)return -1; // don't stockpile a 3rd QB in round 8
+  return 0.15;
+}
+const RIVAL_W={need:26,tendency:8,lateKDST:90};
+// ADP is the backbone; need, tendency, and a K/DST lateness rule bend it.
+function rivalScore(p,counts,owner,round,noise){
+  let s=-p.adp;
+  s+=RIVAL_W.need*needScore(counts,p.pos);
+  if((p.pos==='K'||p.pos==='DST')&&round<LEAGUE.rounds-2)s-=RIVAL_W.lateKDST;
+  const t=TENDENCIES[owner];
+  if(t&&t.enabled)s+=RIVAL_W.tendency*(t.bias[p.pos]||0);
+  s+=(Math.random()*2-1)*noise*4;
+  return s;
+}
+// Best-scoring player from a realistic consideration set (nobody scans all 300).
+// Positions at their depth cap are vetoed outright rather than merely penalized, so
+// even a strong tendency bias can't make a team stockpile a 4th QB.
+function bestRivalChoice(pool,counts,owner,round,noise){
+  const cands=pool.slice(0,40);
+  const ok=cands.filter(p=>needScore(counts,p.pos)>-1);
+  const set=ok.length?ok:cands;
+  let best=set[0],bestS=-Infinity;
+  set.forEach(p=>{const s=rivalScore(p,counts,owner,round,noise); if(s>bestS){bestS=s;best=p;}});
+  return best;
+}
 
 // ---------- RENDER ----------
 const el=id=>document.getElementById(id);
@@ -869,6 +932,25 @@ function renderRoster(){
 }
 function renderKeeperList(){
   el('keeperList').innerHTML = KEEPERS.map(k=>`<span class="pill">${k.name} · T${k.team} · R${k.round}</span>`).join('');
+}
+
+// ---------- OWNER TENDENCIES UI ----------
+function renderTendencies(){
+  const tb=el('tendTable'); if(!tb)return;
+  const body=tb.querySelector('tbody'); body.innerHTML='';
+  OWNERS.filter(o=>o!==ME_OWNER).forEach(owner=>{
+    const t=TENDENCIES[owner]; const tr=document.createElement('tr');
+    tr.innerHTML=`<td><input type="checkbox" data-tend-on="${owner}" ${t.enabled?'checked':''}></td>
+      <td>${owner}</td>`+
+      TEND_POS.map(pos=>`<td><input type="number" data-tend-bias="${owner}" data-pos="${pos}"
+        value="${t.bias[pos]}" min="-3" max="3" step="0.5" style="width:56px"></td>`).join('');
+    body.appendChild(tr);
+  });
+  body.querySelectorAll('[data-tend-on]').forEach(cb=>cb.onchange=()=>{
+    TENDENCIES[cb.dataset.tendOn].enabled=cb.checked;});
+  body.querySelectorAll('[data-tend-bias]').forEach(inp=>inp.onchange=()=>{
+    const v=Math.max(-3,Math.min(3,+inp.value||0));
+    inp.value=v; TENDENCIES[inp.dataset.tendBias].bias[inp.dataset.pos]=v;});
 }
 
 // ---------- TEAMS & KEEPERS ----------
@@ -951,6 +1033,9 @@ function runLab(){
   for(let sim=0;sim<nSims;sim++){
     STRATS.forEach((s,si)=>{
       const taken=new Set(baseDrafted);
+      // per-slot position counts so sim rivals weigh roster need like the Draft Room does
+      const simCounts={}; for(let s=1;s<=LEAGUE.teams;s++)simCounts[s]=blankCounts();
+      picks.forEach(pk=>{const pl=PLAYERS.find(x=>x.id===pk.playerId); if(pl&&simCounts[pk.slot]&&simCounts[pk.slot][pl.pos]!=null)simCounts[pk.slot][pl.pos]++;});
       let planIdx=0;
       // walk full remaining draft
       let ov=nextOpenPick(1); // from start of remaining
@@ -958,13 +1043,13 @@ function runLab(){
       const startOv=nextOpenPick(curPick);
       for(let o=startOv;o<=totalPicks;o++){
         if(picks.find(p=>p.overall===o))continue;
-        const {slot}=slotForOverall(o);
+        const {round,slot}=slotForOverall(o);
         const pool=PLAYERS.filter(p=>!taken.has(p.id)).sort((a,b)=>a.adp-b.adp);
         if(!pool.length)break;
         if(slot===mySlot){
           const want=s.plan[planIdx]||'BPA';
           let pick = want==='BPA'?pool[0]:(fitPosition(pool,want)||pool[0]);
-          taken.add(pick.id);
+          taken.add(pick.id); if(simCounts[slot][pick.pos]!=null)simCounts[slot][pick.pos]++;
           const slot_i=planIdx; if(slot_i<results[si].landed.length){
             const key=pick.pos; results[si].landed[slot_i][key]=(results[si].landed[slot_i][key]||0)+1;
             results[si].landed[slot_i]._names=results[si].landed[slot_i]._names||{};
@@ -972,9 +1057,9 @@ function runLab(){
           }
           planIdx++;
         } else {
-          const topN=Math.max(1,1+((Math.random()*noise*2)|0));
-          const pick=pool[Math.floor(Math.random()*Math.min(topN,pool.length))];
-          taken.add(pick.id);
+          const pick=bestRivalChoice(pool,simCounts[slot],SLOT_OWNER[slot],round,noise);
+          if(!pick)break;
+          taken.add(pick.id); if(simCounts[slot][pick.pos]!=null)simCounts[slot][pick.pos]++;
         }
       }
     });
@@ -1040,9 +1125,10 @@ function addSuggested(){
 function setStatus(s){el('saveStatus').textContent=s; setTimeout(()=>el('saveStatus').textContent='',4000);}
 
 // config persistence
-function getConfig(){return {PLAYERS,KEEPERS,picks,curPick,seed:el('seedWarn').style.display};}
+function getConfig(){return {PLAYERS,KEEPERS,picks,curPick,tendencies:TENDENCIES,seed:el('seedWarn').style.display};}
 function applyConfig(cfg){PLAYERS=cfg.PLAYERS;KEEPERS=cfg.KEEPERS;picks=cfg.picks;curPick=cfg.curPick;
-  if(cfg.seed==='none')el('seedWarn').style.display='none'; render();}
+  if(cfg.tendencies)OWNERS.forEach(o=>{const t=cfg.tendencies[o]; if(t)TENDENCIES[o]={enabled:!!t.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},t.bias||{})};});
+  if(cfg.seed==='none')el('seedWarn').style.display='none'; render(); renderTendencies();}
 function saveLocal(){try{localStorage.setItem('aeoDraft',JSON.stringify(getConfig()));setStatus('Saved to browser.');}catch(e){setStatus('Save failed: '+e.message);}}
 function loadLocal(){try{const s=localStorage.getItem('aeoDraft');if(!s){setStatus('No saved config.');return;}applyConfig(JSON.parse(s));setStatus('Loaded saved config.');}catch(e){setStatus('Load failed.');}}
 
@@ -1052,11 +1138,14 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); el('view-'+b.dataset.view).classList.add('active');
   if(b.dataset.view==='lab')renderStratCards();
-  if(b.dataset.view==='teams')renderTeams();
+  if(b.dataset.view==='teams'){renderTeams();renderTendencies();}
   if(b.dataset.view==='mocks')renderMocks();
 });
 el('autoKeepers').onclick=autoKeepers;
 el('clearKeepers').onclick=clearRivalKeepers;
+el('tendAllOn').onclick=()=>{OWNERS.forEach(o=>{TENDENCIES[o].enabled=true;});renderTendencies();};
+el('tendAllOff').onclick=()=>{OWNERS.forEach(o=>{TENDENCIES[o].enabled=false;});renderTendencies();};
+el('tendReset').onclick=()=>{OWNERS.forEach(o=>{TEND_POS.forEach(p=>{TENDENCIES[o].bias[p]=0;});});renderTendencies();};
 el('saveMock').onclick=saveMock; el('refreshMocks').onclick=renderMocks;
 el('saveToken').onclick=()=>{localStorage.setItem('aeoToken',el('tokenInput').value.trim());setStatus&&setStatus('Token set.');renderMocks();};
 el('simToMe').onclick=simToMe;
