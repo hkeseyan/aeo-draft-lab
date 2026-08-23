@@ -37,5 +37,7 @@ Then in the app: **Mocks** tab → **Privacy token** → paste the same string �
 ## Notes
 
 - KV free tier easily covers a season of mocks. Records are tiny (just your picks + keeper assignments); the player/roster data lives in the app.
-- The Data tab's export/import config still works as an offline backup.
+- The Data tab's export/import config still works as an offline backup, independent of the cloud KV store.
+- **Multiple leagues**: the **Leagues** tab manages league profiles (settings, owners/draft slots, rosters, player pool) in KV — create/edit/delete without touching code. A header dropdown switches the active league; every `/api/*` route accepts a `?league=` param to scope its data. You can also pull a league's owners/rosters from a public Sleeper league ID as a starting point to review before saving.
+- **Backups**: every setup save (keepers/trades/tendencies/picks) keeps a rolling history of the last 30 snapshots, restorable from the Trades tab if something gets overwritten.
 - See `CLAUDE.md` for the full project brief and conventions.

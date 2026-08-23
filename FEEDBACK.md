@@ -64,9 +64,25 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 - 🆕 2026-08-20 — **Keeper cost/value view** — a dedicated read on each
   keeper: cost round vs ADP round, surplus value, and which rival keepers are
   bargains. The math exists (`keepValue`) but isn't surfaced as its own view.
-- 🆕 2026-08-18 — Draft order should be editable from within the app (today
+- ✅ 2026-08-23 — **Multi-league support, League Manager, versioned backups,
+  Sleeper import.** Built independently (local Claude Code session, no
+  network access to this repo at the time) alongside today's PR #2 merge —
+  reconciled together once both were discovered. League profiles (settings,
+  owners/slots, rosters, player pool) moved from hardcoded consts into
+  KV, editable from a new **Leagues** tab (create/edit/delete, no code
+  changes needed); a header dropdown switches the active league and every
+  `/api/*` route scopes by `?league=`. Also adds: draft-pick and player/
+  keeper trades (new **Trades** tab); full cloud persistence of keepers/
+  trades/tendencies/in-progress picks (previously only keepers+trades
+  round-tripped, a real draft-in-progress could be lost on reload); a
+  rolling 30-snapshot backup history with one-click restore; and a
+  best-effort Sleeper-league import (owners + rosters, reviewed before
+  saving — Sleeper doesn't expose ADP/projections or draft type). See
+  SPECS.md → "League profiles".
+- ✅ 2026-08-18 — Draft order should be editable from within the app (today
   it's a hardcoded constant, `OWNER_SLOT`, in `public/index.html`; no UI to
   change it).
+  *Done — solved by the above: the Leagues tab's owner/slot editor.*
 - 🆕 2026-08-18 — More feature ideas exist from a prior Claude Cowork spec
   session, not yet transcribed here — user will bring them over from another
   device. Once added, triage each into its own entry below.

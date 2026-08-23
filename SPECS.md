@@ -12,16 +12,28 @@ incomplete, not final.
 
 ## App shape
 
-Single-page app (`public/index.html`), five tabs:
+Single-page app (`public/index.html`), seven tabs:
 
 ### Draft Room
 Live mock draft UI — best-available player pool, "on the clock" indicator,
 my picks & projected availability, my roster, and a full snake draft board
 (dashed cells = keepers; clicking a team header on the board lets you set
-who's on the clock manually).
+who's on the clock manually). Auction-type leagues (see "League profiles"
+below) show a placeholder here instead — the auction draft engine isn't
+built yet.
 
 ### Teams & Keepers
-Rival roster view and keeper assignment/modeling across the league.
+Rival roster view and keeper assignment/modeling across the league, plus
+the owner-tendency controls (see Opponent model below).
+
+### Trades
+Reassign a draft pick to another manager (by round), or move a player/keeper
+to a different roster — both change who's on the clock, who owns which
+pick, and keeper eligibility. Saved to the cloud (`/api/setup`) alongside
+keepers so trades only need entering once. Includes a "backup history"
+panel that lists the last 30 auto-saved snapshots of this league's
+keepers/trades/tendencies/picks with one-click restore, for when something
+gets overwritten by mistake.
 
 ### Mocks
 Cloud-saved mock draft history (KV-backed via `/api/mocks`), synced across
@@ -32,12 +44,16 @@ the cloud API isn't reachable.
 ### Strategy Lab
 Compares draft paths/strategies side by side (`renderStratCards`). Rival picks
 here use the same opponent model as the Draft Room, so Lab results and live
-mocks don't diverge.
+mocks don't diverge. Not available for auction-type leagues yet.
 
 ### Data
 Player pool view (ADP/ECR/projection) and keeper list, plus config
 export/import (JSON) as an offline backup independent of the cloud Mocks
-feature.
+feature. Also has a button to save the pasted player-pool CSV directly onto
+the active league's cloud profile (see "League profiles").
+
+### Leagues
+Create, edit, or delete league profiles — see "League profiles" below.
 
 ## Opponent model
 
@@ -75,14 +91,36 @@ roster need alone. Biases persist in saved config and in exported JSON.
 
 ## Draft order
 
-Fixed by the `OWNER_SLOT` constant in `public/index.html`, e.g.:
+Part of each league's profile (`ownerSlot`, e.g.
+`{Robert:1,Edward:2,...,Hovo:6,...}`) — editable from the **Leagues** tab's
+owner/slot editor, no code change or redeploy needed. See "League profiles".
 
-```js
-const OWNER_SLOT={Robert:1,Edward:2,Haiko:3,Aren:4,Taron:5,Dirty:7,Hovo:6,Savada:8,Jiro:9,Mher:10,Shant:11,Sako:12};
-```
+## League profiles
 
-Not editable from the UI today — changing it means editing source and
-redeploying. Open request to make this editable in-app: see `FEEDBACK.md`.
+The app serves multiple leagues from one deployment. A league profile bundles
+everything that used to be hardcoded — team count, scoring label, draft type
+(snake/auction), superflex flag, starting lineup + flex eligibility, max
+keepers, keeper-cost type (round/dollar), draft/keeper dates, owners, draft
+order (`ownerSlot`), locked/known keepers, the roster data (`rostersRaw`,
+pipe-delimited `owner|player|drafted_round|keeper_round`), and the player
+pool CSV (`playersCsv`).
+
+Profiles live in KV (`league:<id>`), fetched via `GET /api/leagues` on boot.
+The **Leagues** tab is full CRUD: create a new league, edit any field on an
+existing one (including pasting in roster/player CSVs), or delete a league
+(refused for `aeo-keepers` — the one with real, currently-in-use data). A
+header dropdown switches the active league; `/api/*` routes take a `?league=`
+param so setup/trades/mocks/backups are all scoped per league. AEO-Keepers'
+hardcoded values remain in the code as an offline/first-run fallback (this
+app still works if the API is unreachable, or the very first time it's ever
+booted against an empty KV store) but the cloud copy is authoritative once
+it exists.
+
+**Sleeper import**: paste a public Sleeper league ID into the Leagues tab to
+pull that league's owners and current rosters into the edit form for review.
+Sleeper doesn't expose ADP/ECR/projections or a reliable draft-type/superflex
+flag, so those aren't guessed — only owners/rosters get pre-filled, and
+nothing saves until you review the form and click Save, same as manual entry.
 
 ## Target feature set (Draft Wizard baseline)
 
@@ -120,10 +158,12 @@ finish), not in the overall layout.
 ### Deliberately out of scope
 
 - Live-draft sync with Yahoo/ESPN/Sleeper (Draft Assistant's real-time
-  tracking) — this league doesn't draft on a synced platform.
-- Salary-cap/auction and dynasty/rookie modes — the auction and superflex
-  leagues are a separate roadmap item (multi-league selector), not part of
-  matching Draft Wizard here.
+  tracking) — this league doesn't draft on a synced platform. (Sleeper is
+  used for a one-time, review-before-save structure import — see "League
+  profiles" — not live sync.)
+- Salary-cap/auction draft engine — multi-league support (see "League
+  profiles") added auction-type league profiles, but the auction draft
+  room itself isn't built yet; it shows a placeholder.
 - Accounts, subscriptions, tiers of access — personal tool.
 
 ## Deployment

@@ -1,100 +1,146 @@
 # AEO-Keepers Draft Lab — project brief
 
-Interactive keeper-league draft tool (12-team, Half-PPR, snake) with rival
-rosters, keeper modeling, a mock-draft simulator, and cloud-saved mock
-history that syncs across devices.
+Interactive fantasy-football **keeper draft tool** for the "AEO-Keepers" league (plus
+two auction/superflex leagues, see Multi-league below), deployed as a Cloudflare
+Worker. This file orients a fresh session; read it first, then skim the files named
+below.
 
 ## Feedback & specs workflow — check this every session
 
-The user moves between Claude Cowork, Claude Code, and other environments,
-and captures feedback in the moment while using the app rather than trying
-to remember it later. To keep that from getting lost on handoff:
+The user moves between Claude Cowork, Claude Code, and other environments, and
+captures feedback in the moment while using the app rather than trying to remember
+it later. To keep that from getting lost on handoff:
 
-- **`FEEDBACK.md`** — running inbox of feedback/ideas, newest first, each
-  tagged 🆕 new / 🔧 in progress / ✅ done / ⛔ won't do. **Read it at the
-  start of every session** and triage anything 🆕: act on it if small and
-  unambiguous, ask the user if it's larger or ambiguous, or note why it's
-  deferred.
-- **`SPECS.md`** — the current, authoritative description of what the app
-  does. When a `FEEDBACK.md` item is resolved, fold the resulting behavior
-  into `SPECS.md` and mark the feedback entry ✅ (keep the line — it's
-  history, don't delete it).
-- Whenever the user gives feedback in conversation (in any environment),
-  append it to `FEEDBACK.md` as a new 🆕 entry before doing anything else,
-  even if you're also acting on it immediately in the same turn.
+- **`FEEDBACK.md`** — running inbox of feedback/ideas, newest first, each tagged
+  🆕 new / 🔧 in progress / ✅ done / ⛔ won't do. **Read it at the start of every
+  session** and triage anything 🆕: act on it if small and unambiguous, ask the user
+  if it's larger or ambiguous, or note why it's deferred.
+- **`SPECS.md`** — the current, authoritative description of what the app does. When
+  a `FEEDBACK.md` item is resolved, fold the resulting behavior into `SPECS.md` and
+  mark the feedback entry ✅ (keep the line — it's history, don't delete it).
+- Whenever the user gives feedback in conversation (in any environment), append it
+  to `FEEDBACK.md` as a new 🆕 entry before doing anything else, even if you're also
+  acting on it immediately in the same turn.
 
-## Architecture
+## What it is
+A single-page web app (`public/index.html`) for pre-draft prep: ranked player board,
+per-team rosters + keeper modeling, draft-pick & player trades, a need-aware
+snake-draft simulator with per-owner tendencies, a strategy-comparison "lab," and
+cloud-saved mock history — all synced across devices via Cloudflare KV. Multiple
+leagues are served from one deployment via KV-backed league profiles, editable
+in-app (see "Multi-league support" below) — no code change needed to add a league.
 
-Deploys as a single **Cloudflare Worker** to
-`https://aeo-draft-lab.hkeseyan.workers.dev`.
+## Tech stack & deploy
+- **Cloudflare Worker + Static Assets.** `worker.js` is authoritative for all
+  server-side logic — routes `/api/*` to a KV-backed API and serves everything else
+  from the `ASSETS` binding (`public/`). No build step; don't add one.
+- **KV** namespace `mocks` (id `1d439dfe62f1412da95101491c170cef`) bound as
+  **`MOCKS`** in `wrangler.toml`. `[assets] directory = "./public"` with
+  `not_found_handling = "single-page-application"`.
+- **Deploy:** `npx wrangler deploy` from this folder. Live at
+  https://aeo-draft-lab.hkeseyan.workers.dev
+- Local preview: `npx wrangler dev`.
+- This repo also has a Cloudflare Workers Build integration connected via GitHub —
+  pushes to the connected branch trigger an automatic build/deploy independent of
+  running `wrangler deploy` locally (see the Cloudflare dashboard for that project's
+  build status). Ship changes via a PR against `main`, not a force-push — this repo
+  uses PRs (see closed PR history) and other sessions/devices may be working from
+  the same `main`.
+- `functions/` is a leftover Cloudflare Pages Functions implementation, superseded
+  by `worker.js`. Left in place for reference only; unused by the current deploy.
+  Don't touch it.
 
-- `worker.js` — authoritative Worker entry point. Routes `/api/*` to a
-  KV-backed API and serves everything else from the `ASSETS` binding
-  (`public/`). Do not add a build step; this repo has no bundler.
-- `wrangler.toml` — Worker config: `main = worker.js`, static assets served
-  from `./public`, KV namespace bound as `MOCKS`.
-- `public/index.html` — the whole app UI. Self-contained: player data is
-  embedded inline as `PLAYERS_CSV` (see `players-2026.csv`, the source of
-  truth for that embed — re-embed it here when refreshing ADP/ECR).
-- `players-2026.csv` — source player data, embedded into `index.html`, not
-  served directly.
-- `functions/` — legacy Cloudflare **Pages Functions** implementation
-  (superseded by `worker.js`). Left in place for reference only; unused by
-  the current deploy. Don't touch it.
+## Files
+- `public/index.html` — the entire app (HTML+CSS+JS), self-contained (no external
+  JS/CSS dependencies). AEO-Keepers' player data is embedded as `PLAYERS_CSV_AEO`
+  and roster data as `ROSTERS_RAW_AEO` inside the hardcoded `LEAGUES_DEFAULT`
+  registry — the offline/first-run fallback (see Multi-league support). Key
+  globals: `LEAGUE` (active league's settings), `LEAGUES` (cloud-backed registry of
+  all league profiles), `OWNER_SLOT` (draft order for the active league), `PLAYERS`,
+  `ROSTERS`, `assigned` (keeper picks), `pickOwnerOverride`/`playerTrades` (trades),
+  `TENDENCIES` (per-owner opponent-model bias). Views: Draft Room, Teams & Keepers,
+  Trades, Mocks, Strategy Lab, Data, Leagues.
+- `worker.js` — API, all KV-backed, league-scoped via `?league=`: `GET/PUT
+  /api/setup` (keepers/trades/tendencies/in-progress picks) with rolling backup
+  history (`GET /api/setup/history`, `POST /api/setup/restore`); `GET/POST
+  /api/leagues`, `PUT/DELETE /api/leagues/:id` (league profile CRUD); `GET
+  /api/import/sleeper/:id` (best-effort structure import); `GET/POST /api/mocks`,
+  `GET/DELETE /api/mocks/:id`. Optional `AUTH_TOKEN` env var gates the API.
+- `wrangler.toml` — Worker + assets (`./public`) + KV binding.
+- `players-2026.csv` — AEO-Keepers source player data (source of truth for the
+  `PLAYERS_CSV_AEO` embed); not served directly.
+- `.assetsignore` — keeps dotfiles/non-public files out of the servable asset set
+  (defense-in-depth; the `public/` directory boundary does the structural work).
+- Domain context lives one level up in the parent project `../` (Google Drive):
+  `../football/leagues/aeo-keepers/{settings,keepers,strategy}.md`,
+  `../football/leagues/aeo-keepers/data/{team-rosters-2026,keeper-pool-2026,players-2026}.csv`,
+  `../shared/{strategy-principles,data-sources,glossary}.md`,
+  `../football/_shared/strategy.md`.
 
-## API (implemented in worker.js)
+## League facts (AEO-Keepers)
+- 12-team, **Half-PPR**, **snake**, keeper league. Draft **Sept 8 2026**; keeper deadline **Sept 1**.
+- Scoring quirks: **6-pt passing TDs** + 300/450 passing-yard bonuses (FantasyPros proj assumes 4-pt pass TDs → our QBs outscore `proj`); **0.5 per rushing first down**; **40+ yard play bonuses**; FG by yardage. Roster: QB, 3WR, 2RB, TE, W/R/T flex, K, DEF, 6 BN, 2 IR. No superflex.
+- **Draft order (slot→owner):** 1 Mher, 2 Sako, 3 Savada, 4 Taron, 5 Dirty, **6 Hovo (the user)**, 7 Shant, 8 Edward, 9 Aren, 10 Jiro, 11 Haiko, 12 Robert. Editable in-app via the Leagues tab (see Multi-league support) — this list reflects the current default, not a hardcoded ceiling.
+- User = **Hovo**, drafts 6th. Keepers (editable in app): JSN 5.06, Judkins 8.07, Burden 11.06 (Tuten 5th and Herbert 10th are alternates).
+- Keeper rules: up to 3; cost = one round earlier than last year's draft round (escalates yearly); FA keeper = 10th; declare 7 days pre-draft. Rules WATCH: a pending league vote may add superflex (would ban QB keepers) and/or remove DEF+K — confirm status before relying on QB strategy.
+- Data sources: FantasyPros ECR/ADP + projections (primary) blended with Yahoo ADP weighted <50% (`adp = 0.67*FP + 0.33*Yahoo`). A Cowork scheduled task refreshes ADP Friday mornings and updates `players-2026.csv` + the embedded `PLAYERS_CSV_AEO`.
 
-- `GET /api/setup` — health/config check, returns `{}`.
-- `GET /api/mocks` — list saved mock drafts (index only).
-- `POST /api/mocks` — save a mock `{name, summary, data}`.
-- `GET /api/mocks/:id` — full mock record.
-- `DELETE /api/mocks/:id` — remove a mock.
-- Optional `AUTH_TOKEN` env var (set via `wrangler secret put AUTH_TOKEN`)
-  requires a matching `x-auth-token` header on all of the above.
+## Opponent model (need-aware rival picks + per-owner tendencies)
+Rivals score a consideration set (top 40 available by ADP) on `-ADP + 26×needScore
+(pos) - 8×tendencyBias(owner,pos) - 90 if K/DST before round (rounds-2) ± noise`.
+`needScore` is 1 while a starter slot is open, 0.6 if FLEX-eligible and FLEX is
+open, -1 once at depth cap (vetoed outright, not just penalized — no tendency bias
+can make a team stockpile a 4th QB), else 0.15 bench depth. Tendencies are hand-set
+per owner (same people every year) rather than mined from history: an enable
+checkbox + QB/RB/WR/TE bias (-3..+3) on Teams & Keepers, persisted in saved config
+and cloud setup. Shared by Draft Room and Strategy Lab (`rivalScore`/
+`bestRivalChoice` in `public/index.html`) so their results don't diverge. See
+`SPECS.md` → "Opponent model" for the full writeup.
 
-## Deploying
-
-```
-npx wrangler deploy
-```
-
-Requires Cloudflare auth: `npx wrangler login` interactively, or a
-`CLOUDFLARE_API_TOKEN` env var in non-interactive environments (CI,
-sandboxed sessions). The `MOCKS` KV namespace id is already set in
-`wrangler.toml`.
-
-This repo also has a Cloudflare Workers Build integration connected via
-GitHub — pushes to the branch backing the connected deployment (see the
-Cloudflare dashboard) trigger an automatic build/deploy independent of
-running `wrangler deploy` locally.
-
-Verify after deploy: `curl https://aeo-draft-lab.hkeseyan.workers.dev/api/setup`
-should return `{}`, not a 404. If it 404s, the Worker isn't routing `/api/*`
-correctly — check `worker.js`.
-
-## Testing changes before deploy
-
-- `node --check worker.js` for syntax.
-- For `public/index.html`'s inline scripts, extract with a regex and run
-  through `new Function(...)`, or boot the whole page in `jsdom`
-  (`runScripts: 'dangerously'`) with `fetch`/`localStorage` stubbed, to
-  catch reference/runtime errors before they hit production.
-- `npx wrangler deploy --dry-run` validates `wrangler.toml` + bindings
-  without needing auth or pushing anything live.
-
-## Conventions
-
-- Keep `index.html` self-contained — no external JS/CSS dependencies, no
-  build step. Data embedded inline.
-- `worker.js` is authoritative for all server-side logic; don't resurrect
-  `functions/`.
-- Don't add features/abstractions beyond what's asked — this is a personal
-  fantasy-football tool, not a product.
+## Multi-league support
+League profiles (settings + owners/rosters/players) live in KV (`league:<id>`),
+editable from the **Leagues** tab — create/edit/delete without a code change or
+redeploy. `LEAGUES_DEFAULT` in `public/index.html` remains as the offline/first-run
+fallback (and what seeds the cloud on a truly empty KV store) but the cloud copy is
+authoritative once it exists. A header dropdown switches the active league;
+`/api/*` routes take `?league=` to scope their data. Auction-type league profiles
+are supported structurally (draft type, superflex, keeper-cost-in-dollars) but the
+auction draft room itself isn't built yet — Draft Room/Strategy Lab show a
+placeholder for those leagues. A Sleeper-league-ID import pulls owners/rosters into
+the Leagues tab's edit form for review (never auto-saves). See `SPECS.md` → "League
+profiles" for the full writeup.
 
 ## Roadmap
+Check `FEEDBACK.md` for unaddressed 🆕 items first — that's the live backlog, more
+current than this list.
+1. ~~Get `wrangler deploy` working and verify KV~~ — done.
+2. ~~Multi-league support~~ — done (see above); auction draft room itself is still
+   a placeholder, not yet built.
+3. A **standard redraft** profile for quick drafts (no keepers).
+4. **Commissioner mode** — track per-league membership (returning y/n, dues owed/
+   paid, contact info). Scoped as its own tab (not the fantasy-roster Teams &
+   Keepers tab) reusing the `league:<id>` KV entity and `?league=` API pattern,
+   e.g. `commish:<leagueId>` + `GET/PUT /api/commish`. Not started.
+5. Later (explicitly deferred): in-season tools — waivers/FAAB, start/sit, trade
+   analysis; live-draft sync with Yahoo/ESPN/Sleeper; Yahoo Fantasy import (needs
+   the user to register an OAuth app first — see conversation history, not
+   recorded here since it involves credentials).
 
-- Check `FEEDBACK.md` for unaddressed 🆕 items first — that's the live
-  backlog, more current than this list.
-- Multi-league selector for the auction/superflex leagues (next item after
-  this Worker deploy is confirmed stable — confirm with the user before
-  starting).
+## Conventions
+- Keep `public/index.html` self-contained (data embedded) — no external JS/CSS
+  dependencies, no build step.
+- `worker.js` is authoritative for all server-side logic; don't resurrect
+  `functions/`.
+- When ADP/projection data changes, update `players-2026.csv` AND re-embed it into
+  the `PLAYERS_CSV_AEO` template literal in `public/index.html` (or, going forward,
+  PUT it directly to the `aeo-keepers` league profile via `/api/leagues/aeo-keepers`
+  — the Data tab's "Save players CSV to this league" button does this from the UI).
+- Test after edits: `node --check worker.js`; for `public/index.html`'s inline
+  scripts, extract with a regex and run through `node --check`, or boot the whole
+  page in `jsdom` (`runScripts: 'dangerously'`) with `fetch`/`localStorage` stubbed,
+  to catch reference/runtime errors before they hit production. `npx wrangler
+  deploy --dry-run` validates `wrangler.toml` + bindings without needing auth or
+  pushing anything live. Verify `/api/*` after deploy (`GET /api/setup` returns
+  `{}` or the real saved data, not a 404).
+- Don't add features/abstractions beyond what's asked — this is a personal
+  fantasy-football tool, not a product.
