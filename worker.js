@@ -14,12 +14,22 @@
 //   GET     /api/import/sleeper/:sleeperLeagueId -> best-effort structure import
 //   GET/POST /api/mocks            -> list / save mock drafts
 //   GET/DELETE /api/mocks/:id      -> load / delete a mock
+//   GET     /api/yahoo/status      -> is a Yahoo account connected?
+//   GET     /api/yahoo/leagues     -> diagnostic: list the connected account's
+//                                     NFL leagues (raw Yahoo JSON + best-effort
+//                                     parse; roster import isn't built yet)
+//   GET     /auth/yahoo/start      -> redirect to Yahoo's OAuth consent screen
+//   GET     /auth/yahoo/callback   -> OAuth code exchange, stores the token in KV
 //
-// All routes accept a ?league= query param to scope KV keys per league profile;
-// aeo-keepers keeps its original unprefixed keys (setup:main, index, mock:<id>)
-// so its pre-existing saved data needed zero migration when multi-league support
-// was added. Requires a KV namespace bound as MOCKS (see wrangler.toml). Optional
-// AUTH_TOKEN env var requires a matching x-auth-token header on all /api/* routes.
+// All /api/* routes accept a ?league= query param to scope KV keys per league
+// profile; aeo-keepers keeps its original unprefixed keys (setup:main, index,
+// mock:<id>) so its pre-existing saved data needed zero migration when
+// multi-league support was added. Requires a KV namespace bound as MOCKS (see
+// wrangler.toml). Optional AUTH_TOKEN env var requires a matching x-auth-token
+// header on all /api/* routes (not /auth/yahoo/*, which Yahoo's redirect hits
+// directly and can't attach custom headers to). Yahoo OAuth needs YAHOO_CLIENT_ID
+// and YAHOO_CLIENT_SECRET secrets (npx wrangler secret put ...) — not set in
+// wrangler.toml, never committed.
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -56,10 +66,79 @@ function slugify(s) {
     .slice(0, 40) || "league";
 }
 
+// ---- Yahoo OAuth (single connected account — this is a personal tool, not
+// multi-tenant, so one stored grant covers whichever Yahoo leagues you import) ----
+const YAHOO_AUTH_KEY = "yahooAuth:default";
+const yahooRedirectUri = (url) => `${url.origin}/auth/yahoo/callback`;
+
+async function yahooTokenRequest(env, params) {
+  const basic = btoa(`${env.YAHOO_CLIENT_ID}:${env.YAHOO_CLIENT_SECRET}`);
+  const r = await fetch("https://api.login.yahoo.com/oauth2/get_token", {
+    method: "POST",
+    headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(params).toString(),
+  });
+  if (!r.ok) throw new Error("Yahoo token endpoint returned " + r.status + ": " + (await r.text()).slice(0, 300));
+  return r.json();
+}
+
+// Returns a valid access token, refreshing it first if it's expired (or close to
+// it). Returns null if no Yahoo account has ever been connected.
+async function getYahooAccessToken(env, kv, url) {
+  const auth = await kv.get(YAHOO_AUTH_KEY, { type: "json" });
+  if (!auth) return null;
+  if (Date.now() < auth.expires_at - 60000) return auth.access_token;
+  const tok = await yahooTokenRequest(env, {
+    grant_type: "refresh_token",
+    redirect_uri: yahooRedirectUri(url),
+    refresh_token: auth.refresh_token,
+  });
+  const updated = {
+    access_token: tok.access_token,
+    refresh_token: tok.refresh_token || auth.refresh_token,
+    expires_at: Date.now() + tok.expires_in * 1000,
+  };
+  await kv.put(YAHOO_AUTH_KEY, JSON.stringify(updated));
+  return updated.access_token;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // ---- /auth/yahoo/* : OAuth handshake, outside /api/ (Yahoo's redirect can't
+    // carry our x-auth-token header, so this must not be gated by authed()) ----
+    if (path === "/auth/yahoo/start") {
+      if (!env.YAHOO_CLIENT_ID) return new Response("Yahoo OAuth isn't configured (missing YAHOO_CLIENT_ID secret).", { status: 500 });
+      const authUrl = "https://api.login.yahoo.com/oauth2/request_auth?" + new URLSearchParams({
+        client_id: env.YAHOO_CLIENT_ID,
+        redirect_uri: yahooRedirectUri(url),
+        response_type: "code",
+        language: "en-us",
+      }).toString();
+      return Response.redirect(authUrl, 302);
+    }
+    if (path === "/auth/yahoo/callback") {
+      const code = url.searchParams.get("code");
+      if (!code) return new Response("Missing ?code from Yahoo.", { status: 400 });
+      if (!env.MOCKS) return new Response("KV namespace 'MOCKS' is not bound.", { status: 500 });
+      try {
+        const tok = await yahooTokenRequest(env, {
+          grant_type: "authorization_code",
+          redirect_uri: yahooRedirectUri(url),
+          code,
+        });
+        await env.MOCKS.put(YAHOO_AUTH_KEY, JSON.stringify({
+          access_token: tok.access_token,
+          refresh_token: tok.refresh_token,
+          expires_at: Date.now() + tok.expires_in * 1000,
+        }));
+        return new Response("Yahoo account connected. You can close this tab and go back to the app's Leagues tab.", { headers: { "Content-Type": "text/plain" } });
+      } catch (e) {
+        return new Response("Yahoo auth failed: " + e.message, { status: 500 });
+      }
+    }
 
     if (path.startsWith("/api/")) {
       if (request.method === "OPTIONS") return J({}, 204);
@@ -254,6 +333,53 @@ export default {
           });
         } catch (e) {
           return J({ error: "Sleeper import failed: " + e.message }, 502);
+        }
+      }
+
+      // ---- /api/yahoo/status : is a Yahoo account connected? ----
+      if (path === "/api/yahoo/status") {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const auth = await kv.get(YAHOO_AUTH_KEY, { type: "json" });
+        return J({ connected: !!auth });
+      }
+
+      // ---- /api/yahoo/leagues : diagnostic — list the connected account's NFL
+      // fantasy leagues. Returns Yahoo's raw JSON alongside a best-effort flat
+      // list, since Yahoo's XML-to-JSON shape is easy to get wrong un-tested —
+      // the raw payload lets us verify the real shape before building the full
+      // roster-import mapping (see /api/import/sleeper/:id for that pattern once
+      // this is confirmed working end-to-end).
+      if (path === "/api/yahoo/leagues") {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        try {
+          const token = await getYahooAccessToken(env, kv, url);
+          if (!token) return J({ error: "Yahoo account not connected. Visit /auth/yahoo/start first." }, 401);
+          const r = await fetch(
+            "https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_keys=nfl/leagues?format=json",
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          const text = await r.text();
+          if (!r.ok) return J({ error: "Yahoo API returned " + r.status, body: text.slice(0, 1000) }, 502);
+          let raw; try { raw = JSON.parse(text); } catch { return J({ error: "Yahoo response wasn't valid JSON", body: text.slice(0, 1000) }, 502); }
+          let leagues = [];
+          try {
+            const games = raw.fantasy_content.users[0].user[1].games;
+            for (const gk of Object.keys(games)) {
+              if (gk === "count") continue;
+              const game = games[gk].game;
+              const leaguesObj = (game[1] && game[1].leagues) || {};
+              for (const lk of Object.keys(leaguesObj)) {
+                if (lk === "count") continue;
+                const league = leaguesObj[lk].league[0];
+                leagues.push({ key: league.league_key, name: league.name, season: league.season });
+              }
+            }
+          } catch (e) {
+            leagues = null; // shape didn't match what we expected — raw is still returned below
+          }
+          return J({ leagues, raw });
+        } catch (e) {
+          return J({ error: "Yahoo leagues request failed: " + e.message }, 502);
         }
       }
 

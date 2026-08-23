@@ -298,6 +298,16 @@
       <div class="small muted" id="sleeperImportStatus" style="margin-top:6px"></div>
     </div>
     <div class="card">
+      <h2>Connect Yahoo (in progress)</h2>
+      <p class="small muted">OAuth handshake works; the roster-import mapping isn't built yet. "List my leagues" is a diagnostic to see what Yahoo returns.</p>
+      <div class="row">
+        <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account</button>
+        <button class="btn ghost" id="yahooListBtn">List my leagues</button>
+      </div>
+      <div class="small muted" id="yahooStatus" style="margin-top:6px"></div>
+      <pre id="yahooRaw" class="small muted" style="margin-top:6px;white-space:pre-wrap;max-height:240px;overflow:auto"></pre>
+    </div>
+    <div class="card">
       <h2>Profile</h2>
       <div class="row">
         <label class="small">Name <input type="text" id="lgName" style="min-width:200px"></label>
@@ -1465,6 +1475,25 @@ async function importFromSleeper(){
   }catch(e){ el('sleeperImportStatus').textContent='⚠ Import failed: '+e.message; }
 }
 
+// Yahoo import — OAuth handshake is wired; roster-import mapping is not built
+// yet (Yahoo's JSON shape is easy to get wrong un-tested). "List my leagues" is
+// a diagnostic to confirm the connection and see the raw shape.
+function connectYahoo(){ window.open('/auth/yahoo/start','_blank'); el('yahooStatus').textContent='Opened Yahoo sign-in in a new tab — come back here once you approve access.'; }
+async function listYahooLeagues(){
+  el('yahooStatus').textContent='Checking…'; el('yahooRaw').textContent='';
+  try{
+    const r=await fetch('/api/yahoo/leagues');
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
+    if(Array.isArray(data.leagues)){
+      el('yahooStatus').textContent='✓ '+data.leagues.length+' league(s): '+data.leagues.map(l=>l.name+' ('+l.key+')').join(', ');
+    } else {
+      el('yahooStatus').textContent='Connected, but the response shape didn\'t match what we expected — raw JSON below for review.';
+    }
+    el('yahooRaw').textContent=JSON.stringify(data.raw,null,1);
+  }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
+}
+
 // ---------- EVENTS ----------
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
@@ -1505,6 +1534,8 @@ el('newLeagueBtn').onclick=newLeagueForm;
 el('deleteLeagueBtn').onclick=deleteSelectedLeague;
 el('saveLeagueBtn').onclick=saveLeagueForm;
 el('importSleeperBtn').onclick=importFromSleeper;
+el('yahooConnectBtn').onclick=connectYahoo;
+el('yahooListBtn').onclick=listYahooLeagues;
 el('lgOwners').oninput=()=>{
   const owners=el('lgOwners').value.split(',').map(s=>s.trim()).filter(Boolean);
   const existing=LEAGUES[editingLeagueId]||{};
