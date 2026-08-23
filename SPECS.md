@@ -30,12 +30,48 @@ delete one. Falls back to local-only ("Save config" in the Data tab) when
 the cloud API isn't reachable.
 
 ### Strategy Lab
-Compares draft paths/strategies side by side (`renderStratCards`).
+Compares draft paths/strategies side by side (`renderStratCards`). Rival picks
+here use the same opponent model as the Draft Room, so Lab results and live
+mocks don't diverge.
 
 ### Data
 Player pool view (ADP/ECR/projection) and keeper list, plus config
 export/import (JSON) as an offline backup independent of the cloud Mocks
 feature.
+
+## Opponent model
+
+How simulated rivals pick, used by both the Draft Room and the Strategy Lab.
+
+Each rival scores a consideration set (the top 40 available by ADP — nobody
+scans the whole board) and takes the highest scorer:
+
+```
+score = −ADP                       // ADP is the backbone
+      + 26 × needScore(pos)        // roster need
+      −  8 × biasFor(owner, pos)   // per-owner tendency, if enabled
+      − 90 if K/DST before round 14
+      ± noise-slider jitter
+```
+
+**`needScore`** answers "how badly does this team need another of this
+position?" — `1` while a starting slot is unfilled, `0.6` if it can still fill
+FLEX, `0.15` for ordinary bench depth, and `−1` once the team is at its depth
+cap (starters + 3 for RB/WR, starters + 1 for everyone else).
+
+A position at its depth cap is **vetoed outright**, not merely penalized, so
+no tendency bias — however strong — makes a team stockpile a 4th QB. The veto
+falls back to the full candidate list only when every option is capped, which
+is what produces plausible scavenging in the final rounds.
+
+### Owner tendencies
+
+Draft Wizard's Draft Intel mines 5 years of synced league history. We don't
+need that: it's the same 12 owners every year and their habits are known, so
+tendencies are hand-set instead. On **Teams & Keepers**, each rival owner has
+an enable checkbox and a bias per position (QB/RB/WR/TE, range −3 to +3;
+positive = reaches, negative = fades). Unchecked owners draft on value and
+roster need alone. Biases persist in saved config and in exported JSON.
 
 ## Draft order
 
@@ -47,6 +83,48 @@ const OWNER_SLOT={Robert:1,Edward:2,Haiko:3,Aren:4,Taron:5,Dirty:7,Hovo:6,Savada
 
 Not editable from the UI today — changing it means editing source and
 redeploying. Open request to make this editable in-app: see `FEEDBACK.md`.
+
+## Target feature set (Draft Wizard baseline)
+
+FantasyPros' **Draft Wizard** is the agreed working baseline for where this
+app is headed — the look, feel, and capability bar. This is not a clone: it
+stays custom to this 12-team keeper league (real owner names, real rosters,
+our keeper rules). Researched 2026-08-20; individual items are tracked as 🆕
+entries in `FEEDBACK.md`.
+
+### What Draft Wizard does, and where we stand
+
+| Draft Wizard capability | What it does | Our status |
+|---|---|---|
+| **Mock Draft Simulator** | Fast mocks vs simulated opponents, no waiting between picks | ✅ Have it — Draft Room |
+| **Keeper support** | Enter keepers per team with the round each costs; mocks account for them | ✅ Have it, and ours is more specific (real rosters + locked keepers) |
+| **Opponent pick logic** | Weighs rankings + team needs + positional scarcity; Basic vs Advanced modes | ⚠️ Partial — ours picks randomly within an ADP noise window; no roster-need or scarcity awareness |
+| **Draft Intel** | Analyzes leaguemates' past drafts for tendencies; toggle per team into mocks | ❌ Missing — but high value here since it's the same 12 owners yearly |
+| **Player queue** | Shortlist of targets, surfaced when you're on the clock | ❌ Missing |
+| **Tiers** | Tier breaks in rankings + "players left in tier" counter that reddens | ❌ Missing (CSV already carries a `tier` column, unused) |
+| **Draft Analyzer** | Post-draft grade, projected standings, positional ranks, strengths/weaknesses, steals & reaches | ❌ Missing |
+| **Redo / restart from any pick** | Branch a mock from an earlier point to test alternatives | ⚠️ Partial — single-step `undo()` only |
+| **Cheat Sheet Creator** | Import/blend rankings from any source, drag-drop reorder, custom tiers | ⚠️ Partial — Data tab imports a CSV; no reordering or blending UI |
+| **Strategy comparison** | — (not a distinct DW tool) | ✅ Ours already exceeds this — Strategy Lab compares draft paths over N sims |
+
+### Design direction
+
+Draft Wizard's during-draft screen is dense and information-forward: best
+available on the left with per-player value context, your roster and needs
+alongside, the board underneath, and always-visible "what should I do right
+now" guidance. Our Draft Room is already shaped this way — the gap is mostly
+in the *decision support* (tiers, queue, scarcity/run signals, need-aware
+opponents) and the *after-action review* (grade, steals/reaches, projected
+finish), not in the overall layout.
+
+### Deliberately out of scope
+
+- Live-draft sync with Yahoo/ESPN/Sleeper (Draft Assistant's real-time
+  tracking) — this league doesn't draft on a synced platform.
+- Salary-cap/auction and dynasty/rookie modes — the auction and superflex
+  leagues are a separate roadmap item (multi-league selector), not part of
+  matching Draft Wizard here.
+- Accounts, subscriptions, tiers of access — personal tool.
 
 ## Deployment
 
