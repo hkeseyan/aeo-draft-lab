@@ -1484,7 +1484,11 @@ async function listYahooLeagues(){
   try{
     const r=await fetch('/api/yahoo/leagues');
     const data=await r.json();
-    if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
+    if(!r.ok){
+      el('yahooStatus').textContent='⚠ '+(data.error||('HTTP '+r.status));
+      if(data.body)el('yahooRaw').textContent=data.body;
+      return;
+    }
     if(Array.isArray(data.leagues)){
       el('yahooStatus').textContent='✓ '+data.leagues.length+' league(s): '+data.leagues.map(l=>l.name+' ('+l.key+')').join(', ');
     } else {
