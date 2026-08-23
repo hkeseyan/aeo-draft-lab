@@ -2,3 +2,11 @@
 node_modules/
 .DS_Store
 *.log
+# macOS custom-folder-icon marker files. This repo lives in a Google-Drive-synced
+# folder, which keeps dropping these into every directory (including inside .git,
+# where an untracked one landing in refs/ can make git misread it as a corrupt
+# ref — "fatal: bad object refs/Icon?"). Keep this ignored so it's never committed
+# and so `git status` doesn't get noisy; if it recurs inside .git itself, delete
+# the zero-byte file directly (`find .git -iname "Icon*" -type f -size 0 -delete`).
+Icon?
+Icon
