@@ -1,5 +1,6 @@
 .wrangler/
 node_modules/
+.claude/
 .DS_Store
 *.log
 # macOS custom-folder-icon marker files. This repo lives in a Google-Drive-synced
