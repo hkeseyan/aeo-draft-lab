@@ -16,6 +16,29 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🔧 2026-08-25 — **Roadmap/priority order, as of today.** User wants friends
+  actively using the app now for feedback. Stated order: (1) this push —
+  board row/header fixes, keeper cost/value view, friendlier roster entry
+  UI, guillotine/bestball categories [all below]; (2) commissioner mode,
+  started today; (3) league-aware custom rankings/projections engine, 2-4
+  days, needs several discussions (phone/Remote Control), the real blocker
+  for guillotine/bestball; (4) live draft capability (see the 2026-08-24
+  "Live draft assistance" entry — was deprioritized, now scheduled for the
+  next 2-3 days); (5) multiple people/separate save files, fits in after
+  commissioner mode, alongside league-aware and live draft work. Recorded
+  here so a future session picks up the right thread without re-asking.
+- ✅ 2026-08-25 — **Commissioner mode** (roadmap item 4 in `CLAUDE.md`) —
+  track per-league membership: returning y/n, dues owed/paid, contact info.
+  Not started as of this morning; user asked to start today.
+  *Done (v1) — new **Commish** tab, one row per owner (returning
+  yes/no/unsure, dues owed/paid in $, contact, notes), auto-saves to the
+  cloud via a new `GET/PUT /api/commish` endpoint — a separate KV entity
+  (`commish:<league>`) from `/api/setup` on purpose, since this is league
+  administration, not draft/roster state, and shouldn't get mixed into
+  keeper/trade backups or wiped by a league-profile restore. Same
+  versioned-backup pattern as `/api/setup`/`/api/leagues`. Scoped per league
+  like everything else. Hidden entirely in guest mode. First pass — no
+  polish pass on what fields matter most yet, revisit if asked.*
 - 🆕 2026-08-25 — **Multiple people logging in with separate save files** —
   user's friend is now testing the app (via the guest link) and this came up
   as a "maybe later" idea: real multi-user accounts, each with their own
@@ -158,6 +181,14 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   model would silently resolve to whichever franchise's import line
   processed last — fixed by having the MFL import disambiguate repeat names
   with the colliding player's MFL team in parens.*
+  *Update 2026-08-25 — added `guillotine` and `bestball` as selectable
+  `leagueType` values too, per the user: what actually differentiates them
+  (how players get ranked/valued, e.g. bestball caring about weekly ceiling
+  more than season-long ADP) needs the league-aware custom
+  rankings/projections engine, which is a bigger multi-day design effort
+  (see FEEDBACK entry below) — not built yet. For now they're categorized
+  the same as `redraft` (no keeper concept) so leagues of these types can
+  exist and run ordinary mock drafts; real differentiation comes later.*
 - ✅ 2026-08-24 — **Linear draft type** — a third `draftType` alongside snake/
   auction: same team order every round, no snaking. Trades must still work.
   User notes dynasty drafts using this will have far fewer available players
@@ -194,19 +225,32 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 - 🔧 2026-08-24 — **Live walkthrough, in progress.** User is running a draft
   on-screen and narrating friction points. Entries below are from that
   session; more may follow as it continues.
-- 🆕 2026-08-24 — **Draft board row misalignment** — when a cell's content
+- ✅ 2026-08-25 — **Draft board row misalignment** — when a cell's content
   wraps to a different height than its neighbors (e.g. a longer player name),
   rows across team columns fall out of sync, making the grid hard to read
   across teams at a glance.
-- 🆕 2026-08-24 — **Draft board column headers show "T1"/"T2" instead of
+  *Done — root cause: each team was its own independent block-stacked `.col`
+  div, so a taller cell only pushed *that* column's later cells down, not the
+  row as a whole. Rebuilt `#boardGrid` as a true CSS grid (explicit
+  `grid-template-columns`, header + every round's cells appended as direct
+  grid children in row-major order) so a row's height is shared across every
+  column natively — no JS height-syncing needed.*
+- ✅ 2026-08-25 — **Draft board column headers show "T1"/"T2" instead of
   owner names** — hard to tell at a glance whose team a column is without
   cross-referencing the draft order elsewhere.
-- 🆕 2026-08-24 — **Traded picks are hard to track on the board** — a traded
+  *Done — headers and traded-pick tags (`→T4`) both now show the real owner
+  name via a new `ownerLabel(slot)` helper, falling back to `T<slot>` only if
+  `SLOT_OWNER` genuinely has no name for that slot.*
+- ✅ 2026-08-24 — **Traded picks are hard to track on the board** — a traded
   pick shows in its original slot's column with a "→T4" tag; user finds this
   hard to parse and considered wanting it to show under the new owner's
   column instead, but wasn't sure that's actually better on reflection —
   showing owner names instead of "T4" (see above) may be enough to fix this
   without restructuring where traded picks appear. Revisit after that ships.
+  *Done 2026-08-25 — resolved by the column-header fix above: the tag now
+  reads `→<Owner Name>` instead of `→T4`. Not restructuring where traded
+  picks physically appear on the board — that idea was already shelved by
+  the user pending this fix, and this fix was enough.*
 - 🆕 2026-08-24 — **Can't see a rival's roster without scrolling, and can only
   see "my" roster** — wants a dropdown to pull up any owner's roster (not
   just mine), and wants the roster panel repositioned/prioritized ahead of
@@ -237,17 +281,35 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   their own player rankings instead of relying solely on ECR. User explicitly
   deferred this themselves ("we can keep it that way until we develop a
   different page or something") — not blocking, revisit later.
-- 🆕 2026-08-24 — **League-aware custom projections engine** — a projections
-  model unique to the league's settings/rules (e.g., in a keeper league,
-  weight younger players higher). User explicitly deferred this themselves
-  ("maybe that's something we can build later, not in this next iteration")
-  — bigger idea, not scoped yet.
-- 🆕 2026-08-24 — **Friendlier roster/keeper entry UI for new leagues** —
+- 🔧 2026-08-25 — **League-aware custom projections/rankings engine** — a
+  projections model unique to each league type's actual scoring incentives
+  (e.g. bestball caring about weekly ceiling more than season-long value,
+  guillotine caring about early-season floor since a bad week can eliminate
+  you, a keeper league weighting age/contract-years higher). User explicitly
+  deferred this themselves ("maybe that's something we can build later, not
+  in this next iteration") — bigger idea, not scoped yet.
+  *Elevated 2026-08-25 — this is now the actual blocker for guillotine/
+  bestball leagues having any real identity beyond a label (see the
+  leagueType entry above): "the main difference... is really going to be how
+  I rank the players." User wants to spend the next 2-4 days designing this
+  together via several discussions (planned over phone/Remote Control) —
+  not a solo build. Nothing implemented yet; this entry is the anchor for
+  that design work across sessions.*
+- ✅ 2026-08-24 — **Friendlier roster/keeper entry UI for new leagues** —
   today, populating League B/C's rosters/keepers means pasting pipe-delimited
   text into the Leagues tab's raw textarea (works, but not friendly). User is
   fine continuing to paste data via chat for now (or using the existing raw
   textarea directly) until either Yahoo import lands or this gets a proper
   form — explicitly deferred, not needed yet.
+  *Done 2026-08-25 — "Edit rosters with a form instead of raw text" button on
+  the Leagues tab builds a per-owner card (add-player row + a table of
+  existing entries with a remove button) from the current Owners +
+  Rosters-raw fields; every add/remove immediately re-serializes back into
+  `#lgRostersRaw` in the same `owner|player|drafted|keeper` format, so
+  nothing else about saving/loading a league profile had to change — this is
+  a friendlier editor for the exact same data, not a new data model. One-way
+  sync (raw → builder) on open; re-click the button to resync after a manual
+  raw edit.*
 - ✅ 2026-08-24 — **Tendency bias granularity too fine** — half-point steps
   (-3 to +3 by 0.5) were more precision than the user ever actually uses.
   *Done — step is now whole integers only (-3..3 by 1); typed-in fractional
@@ -316,9 +378,15 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 - 🆕 2026-08-20 — **Redo / rewind to any point** — Draft Wizard can restart a
   mock from any earlier pick to test a different branch. Today there's only a
   single-step `undo()`.
-- 🆕 2026-08-20 — **Keeper cost/value view** — a dedicated read on each
+- ✅ 2026-08-20 — **Keeper cost/value view** — a dedicated read on each
   keeper: cost round vs ADP round, surplus value, and which rival keepers are
   bargains. The math exists (`keepValue`) but isn't surfaced as its own view.
+  *Done 2026-08-25 — new "Keeper cost/value" card on the Data tab: every
+  currently-kept player league-wide, owner/pos/cost round/ADP round/value,
+  sorted best-value-first. Only shown for classic round-cost keeper leagues
+  (`leagueType==='keeper' && keeperCostType==='round'`) — dynasty has no cost
+  round, dollar-cost auction keepers aren't comparable to a round, redraft
+  has no keepers at all.*
 - ✅ 2026-08-23 — **Multi-league support, League Manager, versioned backups,
   Sleeper import.** Built independently (local Claude Code session, no
   network access to this repo at the time) alongside today's PR #2 merge —

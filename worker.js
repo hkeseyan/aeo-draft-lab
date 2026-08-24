@@ -9,6 +9,9 @@
 //   GET/PUT /api/setup             -> current league setup (keepers/trades/picks)
 //   GET     /api/setup/history     -> rolling backup snapshots (last 30)
 //   POST    /api/setup/restore     -> roll back to a snapshot {ts}
+//   GET/PUT /api/commish           -> commissioner-mode membership (returning/dues/contact)
+//   GET     /api/commish/history   -> rolling backup snapshots (last 30)
+//   POST    /api/commish/restore   -> roll back to a snapshot {ts}
 //   GET/POST /api/leagues          -> list / create league profiles
 //   PUT/DELETE /api/leagues/:id    -> update / delete a league profile
 //   GET     /api/leagues/:id/history  -> rolling backup snapshots of that profile
@@ -60,6 +63,8 @@ const mocksIndexKey = (lg) => (lg === "aeo-keepers" ? "index" : `index:${lg}`);
 const mockRecordKey = (lg, id) => (lg === "aeo-keepers" ? `mock:${id}` : `mock:${lg}:${id}`);
 const leagueProfileKey = (id) => `league:${id}`;
 const leagueHistoryKey = (id) => `leagueHistory:${id}`;
+const commishKey = (lg) => `commish:${lg}`;
+const commishHistoryKey = (lg) => `commishHistory:${lg}`;
 
 function slugify(s) {
   return String(s || "")
@@ -192,6 +197,54 @@ export default {
           if (current) hist.unshift({ ts: Date.now(), data: current });
           await kv.put(historyKey(lg), JSON.stringify(hist.slice(0, 30)));
           await kv.put(setupKey(lg), JSON.stringify(entry.data));
+          return J(entry.data);
+        }
+        return J({ error: "method" }, 405);
+      }
+
+      // ---- /api/commish : commissioner-mode membership tracking (per league) ----
+      // Separate KV entity from /api/setup on purpose — this is league
+      // administration (returning y/n, dues, contact info), not draft/roster
+      // state, and shouldn't get mixed into keeper/trade backups or wiped by
+      // a league-profile restore. Same versioned-backup pattern as /api/setup.
+      if (path === "/api/commish") {
+        if (request.method === "GET") {
+          const s = await kv.get(commishKey(lg), { type: "json" });
+          return J(s || {});
+        }
+        if (request.method === "PUT") {
+          let b; try { b = await request.json(); } catch { return J({ error: "bad json" }, 400); }
+          const prev = await kv.get(commishKey(lg), { type: "json" });
+          if (prev) {
+            const hist = (await kv.get(commishHistoryKey(lg), { type: "json" })) || [];
+            hist.unshift({ ts: Date.now(), data: prev });
+            await kv.put(commishHistoryKey(lg), JSON.stringify(hist.slice(0, 30)));
+          }
+          await kv.put(commishKey(lg), JSON.stringify(b));
+          return J({ ok: true });
+        }
+        return J({ error: "method" }, 405);
+      }
+
+      // ---- /api/commish/history : list backup snapshots ----
+      if (path === "/api/commish/history") {
+        if (request.method === "GET") {
+          return J((await kv.get(commishHistoryKey(lg), { type: "json" })) || []);
+        }
+        return J({ error: "method" }, 405);
+      }
+
+      // ---- /api/commish/restore : roll back to a snapshot ----
+      if (path === "/api/commish/restore") {
+        if (request.method === "POST") {
+          let b; try { b = await request.json(); } catch { return J({ error: "bad json" }, 400); }
+          const hist = (await kv.get(commishHistoryKey(lg), { type: "json" })) || [];
+          const entry = hist.find((h) => h.ts === b.ts);
+          if (!entry) return J({ error: "snapshot not found" }, 404);
+          const current = await kv.get(commishKey(lg), { type: "json" });
+          if (current) hist.unshift({ ts: Date.now(), data: current });
+          await kv.put(commishHistoryKey(lg), JSON.stringify(hist.slice(0, 30)));
+          await kv.put(commishKey(lg), JSON.stringify(entry.data));
           return J(entry.data);
         }
         return J({ error: "method" }, 405);

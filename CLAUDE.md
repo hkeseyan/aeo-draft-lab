@@ -116,15 +116,29 @@ current than this list.
 1. ~~Get `wrangler deploy` working and verify KV~~ — done.
 2. ~~Multi-league support~~ — done (see above); auction draft room itself is still
    a placeholder, not yet built.
-3. A **standard redraft** profile for quick drafts (no keepers).
-4. **Commissioner mode** — track per-league membership (returning y/n, dues owed/
-   paid, contact info). Scoped as its own tab (not the fantasy-roster Teams &
-   Keepers tab) reusing the `league:<id>` KV entity and `?league=` API pattern,
-   e.g. `commish:<leagueId>` + `GET/PUT /api/commish`. Not started.
-5. Later (explicitly deferred): in-season tools — waivers/FAAB, start/sit, trade
-   analysis; live-draft sync with Yahoo/ESPN/Sleeper; Yahoo Fantasy import (needs
-   the user to register an OAuth app first — see conversation history, not
-   recorded here since it involves credentials).
+3. ~~A **standard redraft** profile for quick drafts (no keepers)~~ — done via
+   `leagueType==='redraft'` (see SPECS.md → "League profiles").
+4. ~~**Commissioner mode**~~ — v1 done 2026-08-25: a **Commish** tab, its own
+   `commish:<league>` KV entity, `GET/PUT /api/commish` (+ history/restore).
+   No restore-panel UI yet; revisit fields/polish if asked.
+5. **League-aware custom rankings/projections engine** — in active design as
+   of 2026-08-25, planned over several sessions/days (user wants to discuss
+   via phone/Remote Control, not a solo build). This is what actually
+   differentiates `guillotine`/`bestball` from plain `redraft` (they exist as
+   selectable `leagueType`s already but behave identically to redraft until
+   this lands). See `FEEDBACK.md` for the live state of that design thread.
+6. **Live draft capability** (real-time sync with an in-progress draft on
+   Yahoo/Sleeper/MFL) — was explicitly deprioritized earlier, now scheduled
+   for the next 2-3 days per the user (2026-08-25).
+7. **Multiple people / separate save files** — real per-user accounts, each
+   with their own save data (today it's one shared setup per league; guest
+   mode is read-only and doesn't address this). Explicitly low priority;
+   user wants it after commissioner mode, alongside the two items above.
+8. Later, still deferred: in-season tools — waivers/FAAB, start/sit, trade
+   analysis; ESPN/FanTracks import; Yahoo Fantasy import (needs the user to
+   register an OAuth app first — see conversation history, not recorded here
+   since it involves credentials; also blocked on Yahoo's manual Fantasy
+   Sports API access review as of 2026-08-23).
 
 ## Conventions
 - Keep `public/index.html` self-contained (data embedded) — no external JS/CSS
