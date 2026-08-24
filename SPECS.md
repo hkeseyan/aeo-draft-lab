@@ -123,6 +123,20 @@ order (`ownerSlot`), locked/known keepers, the roster data (`rostersRaw`,
 pipe-delimited `owner|player|drafted_round|keeper_round`), and the player
 pool CSV (`playersCsv`).
 
+**League type** (`leagueType`, separate from `draftType`): `keeper` (default)
+— today's model, pick up to `maxKeepers` at a per-player cost round, opt-in
+via checkboxes on Teams & Keepers. `redraft` — no keepers at all; the keeper
+UI on Teams & Keepers is hidden. `dynasty` — the opposite of opt-in: every
+rostered player is assumed kept with no cost round, shown pre-checked on
+Teams & Keepers, and unchecking one cuts them back to the draft pool
+(tracked in `cutPlayers`, separate from classic keepers' `assigned`). Dynasty
+keepers don't occupy a slot on the draft board the way classic keepers do —
+there's no "cost round" to place them at — so they're excluded from the
+incoming draft's `picks[]`/board entirely and merged back in for display by
+`rosterOf()` reading the roster data directly. This matters for the two
+Sleeper-imported dynasty leagues and MFL-imported leagues like "NCAA Power 5
+Football" (dynasty) vs. "NFL Promotion & Relegation" (redraft).
+
 Profiles live in KV (`league:<id>`), fetched via `GET /api/leagues` on boot.
 The **Leagues** tab is full CRUD: create a new league, edit any field on an
 existing one (including pasting in roster/player CSVs), or delete a league
@@ -154,7 +168,11 @@ year, defaults to the current one) to pull owners/rosters via MFL's public
 export API (no OAuth needed). MFL doesn't expose ADP/ECR/projections, a
 draft-type/superflex flag, or a keeper flag either, so imported rosters land
 as FA/NONE for you to set on Teams & Keepers after saving — same
-review-before-save policy as Sleeper import.
+review-before-save policy as Sleeper import. MFL's player pool has occasional
+real-name collisions (two different players sharing a display name); the
+import disambiguates repeats by appending the colliding player's MFL team so
+the app's name-keyed roster model doesn't silently merge two different
+people.
 
 ## Target feature set (Draft Wizard baseline)
 

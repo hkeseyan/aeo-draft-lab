@@ -62,7 +62,7 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   pull, which has real ADP-consensus depth to ~338 players so 250 has
   headroom before hitting fabricated/synthetic data. 250+ for other leagues
   is just a matter of pulling more rows the same way.*
-- 🆕 2026-08-24 — **League *type* beyond keeper/redraft: dynasty, guillotine,
+- ✅ 2026-08-24 — **League *type* beyond keeper/redraft: dynasty, guillotine,
   bestball.** Dynasty: no keeper cost/value — every rostered player is
   assumed kept by default, removable individually later (e.g. a roster-space
   cut), rather than today's opt-in "choose up to N keepers" model. Applies
@@ -71,6 +71,19 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   concept distinct from `draftType` (snake/auction/linear) and needs a
   design pass before building (see conversation — proposed as a `leagueType`
   field, confirming with the user before implementing).
+  *Done 2026-08-24 — new `leagueType` field (`keeper`/`redraft`/`dynasty`) on
+  the league profile, editable in the Leagues tab. Dynasty: Teams & Keepers
+  shows every rostered player pre-checked ("kept"); unchecking one cuts them
+  back to the draft pool (`cutPlayers`, opt-out — the inverse of classic
+  keepers' opt-in `assigned`). No cost round is needed or used. Redraft: the
+  keeper UI is hidden entirely, nobody's ever eligible. Confirmed against the
+  user's real MFL leagues: 42578 "NCAA Power 5 Football" → dynasty, 49263
+  "NFL Promotion & Relegation" → redraft. Surfaced and fixed a real bug along
+  the way: MFL's ~2600-player pool has genuine name collisions (multiple
+  different players named "A.J. Brown"), which the app's name-keyed roster
+  model would silently resolve to whichever franchise's import line
+  processed last — fixed by having the MFL import disambiguate repeat names
+  with the colliding player's MFL team in parens.*
 - ✅ 2026-08-24 — **Linear draft type** — a third `draftType` alongside snake/
   auction: same team order every round, no snaking. Trades must still work.
   User notes dynasty drafts using this will have far fewer available players
