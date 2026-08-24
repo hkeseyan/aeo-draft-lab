@@ -2,7 +2,7 @@
 // Serves the static SPA (public/index.html via the ASSETS binding) and a
 // KV-backed API for cross-device setup persistence (keepers, trades, in-progress
 // picks), versioned backups, league profiles, mock draft history, and best-effort
-// Sleeper league imports. functions/api/* is legacy Cloudflare Pages Functions
+// Sleeper/MFL league imports. functions/api/* is legacy Cloudflare Pages Functions
 // code, unused now that the app deploys as a Worker — don't resurrect it.
 //
 // API:
@@ -14,6 +14,7 @@
 //   GET     /api/leagues/:id/history  -> rolling backup snapshots of that profile
 //   POST    /api/leagues/:id/restore  -> roll back a league profile to a snapshot {ts}
 //   GET     /api/import/sleeper/:sleeperLeagueId -> best-effort structure import
+//   GET     /api/import/mfl/:mflLeagueId          -> best-effort structure import (?year=)
 //   GET/POST /api/mocks            -> list / save mock drafts
 //   GET/DELETE /api/mocks/:id      -> load / delete a mock
 //   GET     /api/yahoo/status      -> is a Yahoo account connected?
@@ -371,6 +372,99 @@ export default {
           });
         } catch (e) {
           return J({ error: "Sleeper import failed: " + e.message }, 502);
+        }
+      }
+
+      // ---- /api/import/mfl/:mflLeagueId : best-effort structure import ----
+      // Same policy as Sleeper import above: structure only (owners + rosters),
+      // never writes anything itself, review-before-save. MyFantasyLeague needs no
+      // OAuth — plain GETs to api.myfantasyleague.com, following its redirect to the
+      // league's actual host. MFL doesn't expose draft round or a keeper flag via
+      // this export, so every rostered player comes back FA/NONE, same as Sleeper's
+      // fallback, for the user to fill in on Teams & Keepers after saving.
+      if (path.startsWith("/api/import/mfl/")) {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const mflId = decodeURIComponent(path.split("/").pop());
+        const year = url.searchParams.get("year") || String(new Date().getFullYear());
+        const mflGet = (type) =>
+          fetch(`https://api.myfantasyleague.com/${year}/export?TYPE=${type}&L=${mflId}&JSON=1`, {
+            headers: { "User-Agent": "aeo-draft-lab/1.0" },
+          }).then((r) => r.json());
+        try {
+          const [leagueData, rostersData] = await Promise.all([mflGet("league"), mflGet("rosters")]);
+          const league = leagueData && leagueData.league;
+          if (!league || leagueData.error) return J({ error: "MFL league not found" }, 404);
+
+          // MFL's player pool is large and slow-changing — cache it 24h, same as Sleeper's.
+          const playersCacheKey = `mfl:players:${year}`;
+          let players = await kv.get(playersCacheKey, { type: "json" });
+          const cachedAt = await kv.get(`${playersCacheKey}:ts`);
+          const stale = !cachedAt || Date.now() - Number(cachedAt) > 24 * 60 * 60 * 1000;
+          if (!players) {
+            const pd = await mflGet("players");
+            const list = (pd && pd.players && pd.players.player) || [];
+            players = {};
+            list.forEach((p) => {
+              players[p.id] = p;
+            });
+            await kv.put(playersCacheKey, JSON.stringify(players));
+            await kv.put(`${playersCacheKey}:ts`, String(Date.now()));
+          } else if (stale) {
+            // Serve the cached copy for this response but let it refresh in the background.
+            mflGet("players").then((pd) => {
+              const list = (pd && pd.players && pd.players.player) || [];
+              const fresh = {};
+              list.forEach((p) => {
+                fresh[p.id] = p;
+              });
+              return Promise.all([
+                kv.put(playersCacheKey, JSON.stringify(fresh)),
+                kv.put(`${playersCacheKey}:ts`, String(Date.now())),
+              ]);
+            });
+          }
+
+          const nameFor = (id) => {
+            const p = players[id];
+            if (!p) return `Player ${id}`;
+            const [last, first] = String(p.name || "").split(",").map((s) => s.trim());
+            return first ? `${first} ${last}` : p.name || `Player ${id}`;
+          };
+
+          const franchises = (league.franchises && league.franchises.franchise) || [];
+          const ownerById = {};
+          const owners = [];
+          const ownerSlot = {};
+          franchises.forEach((f, i) => {
+            const owner = f.name || `Team ${f.id}`;
+            ownerById[f.id] = owner;
+            owners.push(owner);
+            ownerSlot[owner] = i + 1;
+          });
+
+          const rosterFranchises = (rostersData && rostersData.rosters && rostersData.rosters.franchise) || [];
+          const rosterLines = [];
+          rosterFranchises.forEach((f) => {
+            const owner = ownerById[f.id] || `Team ${f.id}`;
+            const list = f.player ? (Array.isArray(f.player) ? f.player : [f.player]) : [];
+            list.forEach((p) => {
+              rosterLines.push(`${owner}|${nameFor(p.id)}|FA|NONE`);
+            });
+          });
+
+          return J({
+            name: league.name || "Imported League",
+            teams: franchises.length || 12,
+            owners,
+            ownerSlot,
+            rostersRaw: rosterLines.join("\n"),
+            _source: "mfl",
+            _mflLeagueId: mflId,
+            _mflYear: year,
+            _note: "Structure only — review draft type, superflex, scoring, keeper rules, and dates before saving. MFL doesn't expose a keeper flag or draft round via this export, so every player comes back FA/NONE — set keepers on Teams & Keepers after saving.",
+          });
+        } catch (e) {
+          return J({ error: "MFL import failed: " + e.message }, 502);
         }
       }
 
