@@ -28,6 +28,9 @@ owner's roster slotted into starters — one row per starting slot in
 `LEAGUE.starters` order (exact positions, then FLEX, then SUPERFLEX if the
 league has one), with unfilled slots shown as "— empty —" so you can see how
 full a lineup is at a glance — then a bench list of whatever's left over.
+Best-ECR-first within a position: a worse-ECR keeper doesn't camp an exact
+starter slot ahead of a better-ECR player drafted later — the better player
+wins the exact slot and the keeper gets pushed to FLEX/bench instead.
 
 **Queue**: check "Q" next to any player in Best Available to add them to
 "My Queue" — a shortlist of upcoming targets, shown in ADP order with a
@@ -217,6 +220,20 @@ finish), not in the overall layout.
   profiles") added auction-type league profiles, but the auction draft
   room itself isn't built yet; it shows a placeholder.
 - Accounts, subscriptions, tiers of access — personal tool.
+
+## Guest mode
+
+`?guest=1` on the app URL gives a read-only, single-league, Draft-Room-only
+view for sharing with someone who shouldn't see (or touch) anything else —
+locked to AEO-Keepers, every other nav tab hidden, and their `<section>`s
+removed from the DOM entirely at boot rather than just CSS-hidden, so
+inspecting the page doesn't leak trades/keepers/other leagues either. Picks,
+undo, and the queue all still work locally for a live demo feel, but
+`saveSetup()` is a no-op in guest mode so nothing a guest does ever reaches
+the cloud or touches the real setup data. This is a UI-level restriction, not
+a real auth boundary — someone hitting the API directly from devtools isn't
+blocked — which is an accepted tradeoff for "show a friend," not a security
+posture for a hostile viewer.
 
 ## Deployment
 
