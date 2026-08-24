@@ -16,6 +16,13 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🆕 2026-08-24 — **Player headshots** — next to drafted picks, possibly in
+  Best Available too, for faster visual scanning. User explicitly deferred
+  this themselves, anticipating it's a bigger lift — correctly: our player
+  list is name-keyed with no image source. Would likely need a name→image
+  crosswalk via Sleeper's player IDs (already integrated) rather than a
+  simple UI change. Not started.
+
 - ✅ 2026-08-24 — **Incident: Sleeper import overwrote the AEO-Keepers league
   profile.** User was viewing AEO-Keepers in the Leagues tab, used "Import
   from Sleeper" intending to create a new league, and Save silently PUT the
@@ -103,9 +110,14 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   custom to this league). Researched their feature set and wrote a gap
   analysis into `SPECS.md` → "Target feature set (Draft Wizard baseline)".
   The individual features below are the broken-out backlog from that.
-- 🆕 2026-08-20 — **Player queue** — pre-rank/star players you want, shown as
+- ✅ 2026-08-20 — **Player queue** — pre-rank/star players you want, shown as
   an ordered shortlist during the draft; Draft Wizard queues players and
   surfaces the top queued option when you're on the clock.
+  *Done 2026-08-24 — a "Q" checkbox column in Best Available adds/removes a
+  player from a "My Queue" card (ADP order); queue entries drop out of view
+  once that player is drafted (by anyone) and reappear automatically on
+  undo, since it's a display filter over the live pool, not a one-time
+  removal. Persists via /api/setup like keepers/trades/tendencies.*
 - 🆕 2026-08-20 — **Tiers** — group players into tiers with a visible break
   in the pool list, plus a "N left in this tier" counter that turns red as a
   tier empties. Currently `players-2026.csv` has a `tier` column that the app

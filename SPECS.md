@@ -15,12 +15,20 @@ incomplete, not final.
 Single-page app (`public/index.html`), seven tabs:
 
 ### Draft Room
-Live mock draft UI — best-available player pool, "on the clock" indicator,
-my picks & projected availability, my roster, and a full snake draft board
-(dashed cells = keepers; clicking a team header on the board lets you set
-who's on the clock manually). Auction-type leagues (see "League profiles"
-below) show a placeholder here instead — the auction draft engine isn't
-built yet.
+Live mock draft UI — best-available player pool, a queue of targeted picks,
+"on the clock" indicator, my picks & projected availability, my roster, and
+a full snake draft board (dashed cells = keepers; clicking a team header on
+the board lets you set who's on the clock manually). Auction-type leagues
+(see "League profiles" below) show a placeholder here instead — the auction
+draft engine isn't built yet.
+
+**Queue**: check "Q" next to any player in Best Available to add them to
+"My Queue" — a shortlist of upcoming targets, shown in ADP order with a
+one-click draft action. A queued player disappears from the queue once
+they're drafted (by you or a rival) and reappears automatically on undo,
+since the queue is a live filter over the pool's `drafted` flag rather than
+a one-time removal — nothing to manually re-add after backing up a pick.
+Persists via `/api/setup` alongside keepers/trades/tendencies.
 
 ### Teams & Keepers
 Rival roster view and keeper assignment/modeling across the league, plus

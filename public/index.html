@@ -118,13 +118,17 @@
           </div>
           <div class="scroll">
             <table id="poolTable">
-              <thead><tr><th>ADP</th><th>ECR</th><th>Pos</th><th>Player</th><th>P.Rk</th><th>Proj</th><th class="dcol">Δ</th><th></th></tr></thead>
+              <thead><tr><th title="Queue">Q</th><th>ADP</th><th>ECR</th><th>Pos</th><th>Player</th><th>P.Rk</th><th>Proj</th><th class="dcol">Δ</th><th></th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
         </div>
       </div>
       <div>
+        <div class="card">
+          <h2>My queue <span class="muted small">(targets for upcoming picks — drops off automatically once drafted)</span></h2>
+          <div id="myQueue" class="small muted">Check "Q" next to a player in Best Available to add them.</div>
+        </div>
         <div class="card">
           <h2>My picks & projected availability</h2>
           <div id="myPicks"></div>
@@ -884,6 +888,7 @@ function parseRosters(){
 let assigned=new Set(); // "owner|player" rival keepers currently checked
 let pickOwnerOverride={}; // overall pick# -> owning slot (pick trades)
 let playerTrades={};      // player name -> new owner (roster/keeper trades)
+let queued=new Set();     // player name -> targeted for an upcoming pick; auto-drops once drafted
 function effOwner(pl){return playerTrades[pl]||ORIG_OWNER[pl];}
 function effRoster(owner){const out=[];Object.keys(ROSTERS).forEach(o=>ROSTERS[o].forEach(r=>{if(effOwner(r.player)===owner)out.push(r);}));return out;}
 function ownerOf(ov){return pickOwnerOverride[ov]||slotForOverall(ov).slot;}
@@ -1033,16 +1038,17 @@ function myRoster(){return picks.filter(p=>ownerOf(p.overall)===mySlot).map(p=>P
 const el=id=>document.getElementById(id);
 function render(){
   if(LEAGUE.draftType==='auction'){ renderAuctionPlaceholder(); return; }
-  renderPool();renderBoard();renderMyPicks();renderRoster();renderOnClock();renderKeeperList();
+  renderPool();renderBoard();renderMyPicks();renderRoster();renderOnClock();renderKeeperList();renderQueue();
 }
 function renderAuctionPlaceholder(){
   const msg='Auction drafting isn\'t built yet for this league. Teams, Trades, Mocks, and Data still work.';
   const onClock=el('onClock'); if(onClock) onClock.textContent=msg;
-  const pool=el('poolTable'); if(pool){const tb=pool.querySelector('tbody'); if(tb) tb.innerHTML=`<tr><td colspan="8" class="muted small">${msg}</td></tr>`;}
+  const pool=el('poolTable'); if(pool){const tb=pool.querySelector('tbody'); if(tb) tb.innerHTML=`<tr><td colspan="9" class="muted small">${msg}</td></tr>`;}
   const poolCount=el('poolCount'); if(poolCount) poolCount.textContent='';
   const board=el('boardGrid'); if(board) board.innerHTML=`<div class="muted small">${msg}</div>`;
   const myPicks=el('myPicks'); if(myPicks) myPicks.innerHTML=`<div class="muted small">${msg}</div>`;
   const myRoster=el('myRoster'); if(myRoster) myRoster.textContent='—';
+  const myQueue=el('myQueue'); if(myQueue) myQueue.innerHTML=`<div class="muted small">${msg}</div>`;
 }
 function renderOnClock(){
   const ov=nextOpenPick(curPick);
@@ -1064,7 +1070,8 @@ function renderPool(){
   rows.slice(0,220).forEach(p=>{
     const d=Math.round((p.adp-p.ecr)*10)/10; // + = falls later than ranked = value
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${p.adp}</td><td>${p.ecr}</td><td><span class="pos ${p.pos}">${p.pos}</span></td>
+    tr.innerHTML=`<td><input type="checkbox" class="qcheck" data-q="${p.name.replace(/"/g,'&quot;')}" ${queued.has(p.name)?'checked':''}></td>
+      <td>${p.adp}</td><td>${p.ecr}</td><td><span class="pos ${p.pos}">${p.pos}</span></td>
       <td>${p.name}${p.keeper?`<span class="kchip">K</span>`:''}</td><td class="muted small">${p.pos}${p.posRank||''}</td><td class="small">${p.proj?p.proj.toFixed(1):''}</td>
       <td class="dcol ${valClass(d)}">${d>0?'+':''}${d}</td>
       <td><button class="pick-btn" data-pk="${p.id}">draft →</button></td>`;
@@ -1073,6 +1080,26 @@ function renderPool(){
   tb.querySelectorAll('[data-pk]').forEach(b=>b.onclick=()=>{
     const ov=nextOpenPick(curPick); if(ov>totalPicks)return;
     makePick(+b.dataset.pk,ov); curPick=nextOpenPick(ov+1); render(); saveSetup();
+  });
+  tb.querySelectorAll('[data-q]').forEach(cb=>cb.onchange=()=>{
+    if(cb.checked)queued.add(cb.dataset.q); else queued.delete(cb.dataset.q);
+    renderQueue(); saveSetup();
+  });
+}
+function renderQueue(){
+  const box=el('myQueue'); if(!box)return;
+  const targets=available().filter(p=>queued.has(p.name));
+  if(!targets.length){ box.innerHTML='Check "Q" next to a player in Best Available to add them.'; return; }
+  box.innerHTML=targets.map(p=>`<div class="mypick-row">
+    <span class="small"><span class="pos ${p.pos}">${p.pos}</span> ${p.name} <span class="muted">(adp ${p.adp})</span></span>
+    <span><button class="pick-btn" data-qpick="${p.id}">draft →</button> <a href="#" data-qrm="${p.name.replace(/"/g,'&quot;')}" style="margin-left:6px">✕</a></span>
+  </div>`).join('');
+  box.querySelectorAll('[data-qpick]').forEach(b=>b.onclick=()=>{
+    const ov=nextOpenPick(curPick); if(ov>totalPicks)return;
+    makePick(+b.dataset.qpick,ov); curPick=nextOpenPick(ov+1); render(); saveSetup();
+  });
+  box.querySelectorAll('[data-qrm]').forEach(a=>a.onclick=(e)=>{
+    e.preventDefault(); queued.delete(a.dataset.qrm); renderQueue(); saveSetup();
   });
 }
 function renderBoard(){
@@ -1321,9 +1348,10 @@ function setStatus(s){el('saveStatus').textContent=s; setTimeout(()=>el('saveSta
 // Full backup, independent of the cloud KV store — includes keepers/trades/picks
 // so "Export config JSON" is a real point-in-time snapshot you can keep as a file.
 function getConfig(){return {league:CURRENT_LEAGUE_ID,PLAYERS,KEEPERS,picks,curPick,
-  assigned:[...assigned],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,seed:el('seedWarn').style.display};}
+  assigned:[...assigned],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],seed:el('seedWarn').style.display};}
 function applyConfig(cfg){PLAYERS=cfg.PLAYERS;KEEPERS=cfg.KEEPERS;picks=cfg.picks;curPick=cfg.curPick;
   if(Array.isArray(cfg.assigned))assigned=new Set(cfg.assigned);
+  if(Array.isArray(cfg.queued))queued=new Set(cfg.queued);
   pickOwnerOverride=cfg.pickOwnerOverride||{}; playerTrades=cfg.playerTrades||{};
   if(cfg.tendencies)OWNERS.forEach(o=>{const t=cfg.tendencies[o]; if(t)TENDENCIES[o]={enabled:!!t.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},t.bias||{})};});
   if(cfg.seed==='none')el('seedWarn').style.display='none';
@@ -1679,6 +1707,7 @@ async function restoreBackup(ts){
     if(!r.ok)throw new Error('HTTP '+r.status);
     const s=await r.json();
     if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
+    if(Array.isArray(s.queued))queued=new Set(s.queued);
     pickOwnerOverride=s.pickOwnerOverride||{}; playerTrades=s.playerTrades||{};
     applyTendencies(s.tendencies);
     rebuildKeepers(); applyKeepers();
@@ -1698,10 +1727,11 @@ async function apiSetup(method,body){const r=await fetch('/api/setup?league='+en
 let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
-function saveSetup(){if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,picks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
+function saveSetup(){if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
 function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},v.bias||{})};}); }
 async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.pickOwnerOverride||s.tendencies||(Array.isArray(s.picks)&&s.picks.length))){
   if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
+  if(Array.isArray(s.queued))queued=new Set(s.queued);
   pickOwnerOverride=s.pickOwnerOverride||{}; playerTrades=s.playerTrades||{};
   applyTendencies(s.tendencies);
   rebuildKeepers(); applyKeepers();
@@ -1753,7 +1783,7 @@ function applyLeagueProfile(id){
   parseRosters();
   rebuildSlotOwner(); rebuildTendencies();
 
-  assigned=new Set(); pickOwnerOverride={}; playerTrades={}; KEEPERS=[]; picks=[]; curPick=1;
+  assigned=new Set(); pickOwnerOverride={}; playerTrades={}; queued=new Set(); KEEPERS=[]; picks=[]; curPick=1;
 
   const w=el('seedWarn');
   if(PLAYERS_CSV && PLAYERS_CSV.indexOf('__PLAYERS')!==0 && PLAYERS_CSV.trim().length>20){
