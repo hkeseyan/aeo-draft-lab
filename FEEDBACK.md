@@ -16,6 +16,82 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-08-24 — **Incident: Sleeper import overwrote the AEO-Keepers league
+  profile.** User was viewing AEO-Keepers in the Leagues tab, used "Import
+  from Sleeper" intending to create a new league, and Save silently PUT the
+  imported data over AEO-Keepers instead — the import pre-filled the form
+  but never cleared which league was being edited. Restored immediately from
+  the hardcoded fallback still embedded in `public/index.html` (owners,
+  ownerSlot, rostersRaw, name all recovered); the separate `/api/setup`
+  data — keepers, trades, tendencies, in-progress picks — was never touched,
+  since it's a different KV key entirely.
+  *Done — two fixes shipped: (1) `importFromSleeper()` now resets
+  `editingLeagueId` to null so an import always creates a new league,
+  never overwrites whatever was selected; (2) league profiles now get the
+  same rolling 30-snapshot backup history as `/api/setup`
+  (`GET/POST /api/leagues/:id/history|restore`), with a restore panel in the
+  Leagues tab, so a future mistake here is a one-click undo instead of a
+  manual data-recovery exercise. See SPECS.md → "League profiles".
+
+- 🔧 2026-08-24 — **Live walkthrough, in progress.** User is running a draft
+  on-screen and narrating friction points. Entries below are from that
+  session; more may follow as it continues.
+- 🆕 2026-08-24 — **Draft board row misalignment** — when a cell's content
+  wraps to a different height than its neighbors (e.g. a longer player name),
+  rows across team columns fall out of sync, making the grid hard to read
+  across teams at a glance.
+- 🆕 2026-08-24 — **Draft board column headers show "T1"/"T2" instead of
+  owner names** — hard to tell at a glance whose team a column is without
+  cross-referencing the draft order elsewhere.
+- 🆕 2026-08-24 — **Traded picks are hard to track on the board** — a traded
+  pick shows in its original slot's column with a "→T4" tag; user finds this
+  hard to parse and considered wanting it to show under the new owner's
+  column instead, but wasn't sure that's actually better on reflection —
+  showing owner names instead of "T4" (see above) may be enough to fix this
+  without restructuring where traded picks appear. Revisit after that ships.
+- 🆕 2026-08-24 — **Can't see a rival's roster without scrolling, and can only
+  see "my" roster** — wants a dropdown to pull up any owner's roster (not
+  just mine), and wants the roster panel repositioned/prioritized ahead of
+  "My picks & projected availability" so it's visible without scrolling —
+  specifically so they can check the on-the-clock team's roster/needs while
+  deciding a pick.
+- 🆕 2026-08-24 — **ADP/ECR data feels stale** — user has specific players in
+  mind whose ADP should have dropped and ECR should have changed due to
+  recent injuries, but the app doesn't reflect it. CLAUDE.md says a Cowork
+  scheduled task refreshes this every Friday — worth checking whether that
+  task is actually running/succeeding, or whether the lag is upstream
+  (FantasyPros itself), before assuming the pipeline is broken.
+- 🆕 2026-08-24 — **Custom/personal rankings** — wants the ability to enter
+  their own player rankings instead of relying solely on ECR. User explicitly
+  deferred this themselves ("we can keep it that way until we develop a
+  different page or something") — not blocking, revisit later.
+- 🆕 2026-08-24 — **League-aware custom projections engine** — a projections
+  model unique to the league's settings/rules (e.g., in a keeper league,
+  weight younger players higher). User explicitly deferred this themselves
+  ("maybe that's something we can build later, not in this next iteration")
+  — bigger idea, not scoped yet.
+- 🆕 2026-08-24 — **Friendlier roster/keeper entry UI for new leagues** —
+  today, populating League B/C's rosters/keepers means pasting pipe-delimited
+  text into the Leagues tab's raw textarea (works, but not friendly). User is
+  fine continuing to paste data via chat for now (or using the existing raw
+  textarea directly) until either Yahoo import lands or this gets a proper
+  form — explicitly deferred, not needed yet.
+- ✅ 2026-08-24 — **Tendency bias granularity too fine** — half-point steps
+  (-3 to +3 by 0.5) were more precision than the user ever actually uses.
+  *Done — step is now whole integers only (-3..3 by 1); typed-in fractional
+  values round to the nearest integer on change.*
+- 🆕 2026-08-24 — **Possible future: bulk-set a league-wide baseline
+  tendency** — e.g. "RBs go earlier / QBs go later than usual in this
+  league" as a market-wide adjustment, separate from per-owner tendencies.
+  User plans to hand-edit individual owner values for now and says that's
+  fine; would only want tooling here if hand-editing across a whole league
+  becomes too much work. Explicitly deferred, revisit if asked.
+- 🆕 2026-08-24 — **Rookie flag on players** — wants to see rookie status
+  alongside position, not just POS tags. No data source for this in the
+  current CSV pipeline (`players-2026.csv` has no rookie/experience column)
+  — would need sourcing (FantasyPros data often carries this) before this
+  can be built, not just a UI change.
+
 - 🆕 2026-08-20 — **Planned: live walkthrough.** User offered to run a draft
   on-screen and talk through how they actually use the features. Worth doing
   before building more UI — the Draft Wizard research had to be done from

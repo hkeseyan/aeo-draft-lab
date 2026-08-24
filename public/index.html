@@ -346,6 +346,9 @@
         <button class="btn" id="saveLeagueBtn">💾 Save league</button>
         <span class="small muted" id="leaguesStatus"></span>
       </div>
+      <details style="margin-top:8px"><summary class="small muted">Backup history for this league profile (roll back if a save or import overwrote something)</summary>
+        <div class="scroll" style="margin-top:8px"><table id="lgBackupTable"><thead><tr><th>When</th><th></th></tr></thead><tbody></tbody></table></div>
+      </details>
     </div>
   </section>
 </main>
@@ -1179,13 +1182,13 @@ function renderTendencies(){
     tr.innerHTML=`<td><input type="checkbox" data-tend-on="${owner}" ${t.enabled?'checked':''}></td>
       <td>${owner}</td>`+
       TEND_POS.map(pos=>`<td><input type="number" data-tend-bias="${owner}" data-pos="${pos}"
-        value="${t.bias[pos]}" min="-3" max="3" step="0.5" style="width:56px"></td>`).join('');
+        value="${t.bias[pos]}" min="-3" max="3" step="1" style="width:56px"></td>`).join('');
     body.appendChild(tr);
   });
   body.querySelectorAll('[data-tend-on]').forEach(cb=>cb.onchange=()=>{
     TENDENCIES[cb.dataset.tendOn].enabled=cb.checked; saveSetup();});
   body.querySelectorAll('[data-tend-bias]').forEach(inp=>inp.onchange=()=>{
-    const v=Math.max(-3,Math.min(3,+inp.value||0));
+    const v=Math.max(-3,Math.min(3,Math.round(+inp.value||0)));
     inp.value=v; TENDENCIES[inp.dataset.tendBias].bias[inp.dataset.pos]=v; saveSetup();});
 }
 function updateKeeperCopy(){
@@ -1367,6 +1370,35 @@ function loadLeagueIntoForm(id){
   el('lgPlayersCsv').value=p.playersCsv||'';
   renderStartersInputs(p.starters||{});
   renderOwnerSlotInputs(p.owners||[], p.ownerSlot||{}, p.meOwner||'');
+  renderLeagueBackupHistory(id);
+}
+async function renderLeagueBackupHistory(id){
+  const tb=el('lgBackupTable'); if(!tb)return; const body=tb.querySelector('tbody');
+  body.innerHTML='<tr><td colspan="2" class="muted small">Loading…</td></tr>';
+  try{
+    const r=await fetch('/api/leagues/'+encodeURIComponent(id)+'/history');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const hist=await r.json();
+    body.innerHTML=(hist&&hist.length)?hist.map(h=>{
+      const when=new Date(h.ts).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      const name=(h.data&&h.data.name)||'';
+      return `<tr><td class="small muted">${when} — ${name}</td><td><button class="pick-btn" data-lgrestore="${h.ts}">restore</button></td></tr>`;
+    }).join(''):'<tr><td colspan="2" class="muted small">No backups yet for this league — they accumulate as you save changes.</td></tr>';
+    body.querySelectorAll('[data-lgrestore]').forEach(b=>b.onclick=()=>restoreLeagueBackup(id,+b.dataset.lgrestore));
+  }catch(e){ body.innerHTML='<tr><td colspan="2" class="muted small">Backup history unavailable.</td></tr>'; }
+}
+async function restoreLeagueBackup(id,ts){
+  if(!confirm('Restore this league profile snapshot? The current profile will be saved as a backup first, so this is undoable.'))return;
+  try{
+    const r=await fetch('/api/leagues/'+encodeURIComponent(id)+'/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ts})});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const saved=await r.json();
+    LEAGUES[id]=saved;
+    fillLeagueSelect();
+    if(el('leaguesList'))loadLeagueIntoForm(id);
+    el('leaguesStatus').textContent='☁ Restored league profile backup.';
+    if(id===CURRENT_LEAGUE_ID)applyLeagueProfile(id);
+  }catch(e){ el('leaguesStatus').textContent='⚠ Restore failed: '+e.message; }
 }
 function renderStartersInputs(starters){
   const row=el('lgStartersRow'); if(!row)return;
@@ -1432,6 +1464,7 @@ async function saveLeagueForm(){
     const listSel=el('leaguesList');
     if(listSel){ listSel.innerHTML=Object.values(LEAGUES).map(p=>`<option value="${p.id}">${p.name}</option>`).join(''); listSel.value=saved.id; }
     el('leaguesStatus').textContent='☁ Saved '+new Date().toLocaleTimeString();
+    renderLeagueBackupHistory(saved.id);
     if(saved.id===CURRENT_LEAGUE_ID)applyLeagueProfile(saved.id);
   }catch(e){ el('leaguesStatus').textContent='⚠ Save failed: '+e.message; }
 }
@@ -1461,6 +1494,13 @@ async function deleteSelectedLeague(){
 }
 async function importFromSleeper(){
   const sid=el('sleeperLeagueId').value.trim(); if(!sid)return;
+  // Importing always targets a NEW league, regardless of which league the form
+  // happened to be showing — otherwise clicking Save after an import silently
+  // overwrites whatever league was last selected (this actually happened once:
+  // AEO-Keepers' profile got clobbered by a Sleeper import because the form was
+  // still "editing" it). Set this before the fetch so even a failed import can't
+  // leave editingLeagueId pointed at an existing league by accident.
+  editingLeagueId=null;
   el('sleeperImportStatus').textContent='Importing…';
   try{
     const r=await fetch('/api/import/sleeper/'+encodeURIComponent(sid));
@@ -1471,7 +1511,7 @@ async function importFromSleeper(){
     el('lgOwners').value=(data.owners||[]).join(', ');
     renderOwnerSlotInputs(data.owners||[], data.ownerSlot||{}, (data.owners||[])[0]||'');
     el('lgRostersRaw').value=data.rostersRaw||'';
-    el('sleeperImportStatus').textContent='✓ Imported structure — review fields below (draft type, superflex, scoring, keeper rules aren\'t set by this import) then Save.';
+    el('sleeperImportStatus').textContent='✓ Imported as a NEW league — review fields below (draft type, superflex, scoring, keeper rules aren\'t set by this import) then Save to create it. This will not overwrite any existing league.';
   }catch(e){ el('sleeperImportStatus').textContent='⚠ Import failed: '+e.message; }
 }
 

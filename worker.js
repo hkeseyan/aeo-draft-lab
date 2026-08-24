@@ -11,6 +11,8 @@
 //   POST    /api/setup/restore     -> roll back to a snapshot {ts}
 //   GET/POST /api/leagues          -> list / create league profiles
 //   PUT/DELETE /api/leagues/:id    -> update / delete a league profile
+//   GET     /api/leagues/:id/history  -> rolling backup snapshots of that profile
+//   POST    /api/leagues/:id/restore  -> roll back a league profile to a snapshot {ts}
 //   GET     /api/import/sleeper/:sleeperLeagueId -> best-effort structure import
 //   GET/POST /api/mocks            -> list / save mock drafts
 //   GET/DELETE /api/mocks/:id      -> load / delete a mock
@@ -56,6 +58,7 @@ const historyKey = (lg) => `history:${lg}`;
 const mocksIndexKey = (lg) => (lg === "aeo-keepers" ? "index" : `index:${lg}`);
 const mockRecordKey = (lg, id) => (lg === "aeo-keepers" ? `mock:${id}` : `mock:${lg}:${id}`);
 const leagueProfileKey = (id) => `league:${id}`;
+const leagueHistoryKey = (id) => `leagueHistory:${id}`;
 
 function slugify(s) {
   return String(s || "")
@@ -251,18 +254,53 @@ export default {
         return J({ error: "method" }, 405);
       }
 
+      // ---- /api/leagues/:id/history : list backup snapshots for a league profile ----
+      if (/^\/api\/leagues\/[^/]+\/history$/.test(path)) {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const id = decodeURIComponent(path.split("/")[3]);
+        return J((await kv.get(leagueHistoryKey(id), { type: "json" })) || []);
+      }
+
+      // ---- /api/leagues/:id/restore : roll back a league profile to a snapshot ----
+      // (this is the safety net for the exact mistake that motivated it: a Sleeper
+      // import saved over an existing league's profile because the form was still
+      // "editing" that league — see importFromSleeper() for the actual fix.)
+      if (/^\/api\/leagues\/[^/]+\/restore$/.test(path)) {
+        if (request.method !== "POST") return J({ error: "method" }, 405);
+        const id = decodeURIComponent(path.split("/")[3]);
+        let b; try { b = await request.json(); } catch { return J({ error: "bad json" }, 400); }
+        const hist = (await kv.get(leagueHistoryKey(id), { type: "json" })) || [];
+        const entry = hist.find((h) => h.ts === b.ts);
+        if (!entry) return J({ error: "snapshot not found" }, 404);
+        const current = await kv.get(leagueProfileKey(id), { type: "json" });
+        if (current) hist.unshift({ ts: Date.now(), data: current });
+        await kv.put(leagueHistoryKey(id), JSON.stringify(hist.slice(0, 30)));
+        await kv.put(leagueProfileKey(id), JSON.stringify(entry.data));
+        return J(entry.data);
+      }
+
       // ---- /api/leagues/:id : update / delete a league profile ----
       if (path.startsWith("/api/leagues/")) {
         const id = decodeURIComponent(path.split("/").pop());
         if (request.method === "PUT") {
           let b; try { b = await request.json(); } catch { return J({ error: "bad json" }, 400); }
           const profile = { ...b, id };
+          // Same rolling-backup pattern as /api/setup: keep whatever this PUT is
+          // about to overwrite, so a bad save (import over the wrong league, a
+          // fat-fingered edit) is a restore away instead of a manual reconstruction.
+          const prev = await kv.get(leagueProfileKey(id), { type: "json" });
+          if (prev) {
+            const hist = (await kv.get(leagueHistoryKey(id), { type: "json" })) || [];
+            hist.unshift({ ts: Date.now(), data: prev });
+            await kv.put(leagueHistoryKey(id), JSON.stringify(hist.slice(0, 30)));
+          }
           await kv.put(leagueProfileKey(id), JSON.stringify(profile));
           return J(profile);
         }
         if (request.method === "DELETE") {
           if (id === "aeo-keepers") return J({ error: "cannot delete aeo-keepers" }, 400);
           await kv.delete(leagueProfileKey(id));
+          await kv.delete(leagueHistoryKey(id));
           await kv.delete(setupKey(id));
           await kv.delete(historyKey(id));
           await kv.delete(mocksIndexKey(id));

@@ -116,6 +116,15 @@ app still works if the API is unreachable, or the very first time it's ever
 booted against an empty KV store) but the cloud copy is authoritative once
 it exists.
 
+**Backup history**: every save to a league profile keeps a rolling 30-snapshot
+history (`GET/POST /api/leagues/:id/history|restore`), restorable from a
+panel in the Leagues tab — the same pattern `/api/setup` already had for
+keepers/trades. This exists because an import can otherwise silently
+overwrite the wrong league (see FEEDBACK.md, 2026-08-24 incident): **Sleeper
+import always targets a new league**, never whatever league happens to be
+selected in the form — `editingLeagueId` is explicitly cleared before an
+import runs, so Save can only create, never silently overwrite.
+
 **Sleeper import**: paste a public Sleeper league ID into the Leagues tab to
 pull that league's owners and current rosters into the edit form for review.
 Sleeper doesn't expose ADP/ECR/projections or a reliable draft-type/superflex
