@@ -43,11 +43,14 @@
   .val-good{color:var(--accent2);font-weight:700} .val-bad{color:var(--bad)}
   .pick-btn{background:var(--accent2);color:#04210f;border:none;border-radius:6px;padding:4px 8px;font-weight:700;cursor:pointer;font-size:12px}
   .kchip{font-size:10px;color:var(--warn);border:1px solid var(--warn);border-radius:10px;padding:0 5px;margin-left:4px}
-  .board{display:grid;grid-auto-flow:column;gap:2px;overflow-x:auto;padding-bottom:6px}
-  .col{min-width:120px}
-  .col .h{font-size:11px;color:var(--muted);text-align:center;padding:3px;font-weight:700}
-  .col .h.me{color:#c9b8ff}
-  .cell{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 6px;margin-bottom:2px;font-size:11px;min-height:34px}
+  /* grid-template-columns is set inline per-league (team count varies); every
+     header/cell is a direct grid child in row-major order so a taller cell
+     (e.g. a wrapped long name) grows that whole row for every column instead
+     of pushing just its own column out of alignment. */
+  .board{display:grid;gap:2px;overflow-x:auto;padding-bottom:6px}
+  .h{min-width:120px;font-size:11px;color:var(--muted);text-align:center;padding:3px;font-weight:700}
+  .h.me{color:#c9b8ff}
+  .cell{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:11px;min-height:34px}
   .cell.me{background:var(--me)}
   .cell.now{outline:2px solid var(--accent);outline-offset:-2px}
   .cell .pk{color:var(--muted);font-size:9px}
@@ -83,6 +86,7 @@
     <button data-view="lab">Strategy Lab</button>
     <button data-view="data">Data</button>
     <button data-view="leagues">Leagues</button>
+    <button data-view="commish">Commish</button>
   </nav>
 </header>
 <main>
@@ -268,6 +272,17 @@
         </div>
         <div id="keeperList" class="small" style="margin-top:10px"></div>
       </div>
+      <div class="card" id="keeperValueCard">
+        <h2>Keeper cost/value</h2>
+        <p class="small muted">Every currently-kept player (yours and rivals'), cost round vs. where they'd actually go by ADP. Positive value = paying a later pick than they're worth — a bargain; negative = an overpay. Sorted best value first.</p>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr class="small muted">
+            <th style="text-align:left">Owner</th><th style="text-align:left">Player</th><th>Pos</th>
+            <th>Cost round</th><th>ADP round</th><th>Value</th>
+          </tr></thead>
+          <tbody id="keeperValueTable"></tbody>
+        </table>
+      </div>
     </div>
     <div class="card">
       <div class="row">
@@ -335,6 +350,8 @@
           <option value="keeper">Keeper (pick N, pay a draft-round cost)</option>
           <option value="redraft">Redraft (no keepers)</option>
           <option value="dynasty">Dynasty (whole roster kept by default, cut individually)</option>
+          <option value="guillotine">Guillotine (weekly-elimination redraft)</option>
+          <option value="bestball">Bestball (draft-and-forget redraft)</option>
         </select></label>
         <label class="small">Scoring label <input type="text" id="lgScoring" style="min-width:120px"></label>
         <label class="small">Draft date <input type="text" id="lgDraftDate" style="width:110px"></label>
@@ -357,6 +374,11 @@
       <div style="margin-top:8px">
         <label class="small muted">Rosters — one per line: <code>owner|player|drafted_round|keeper_round</code> (drafted=<code>FA</code> if undrafted, keeper=<code>NONE</code> if not keepable)</label>
         <textarea id="lgRostersRaw"></textarea>
+        <div class="row" style="margin-top:6px">
+          <button class="btn ghost" id="lgOpenRosterBuilderBtn" type="button">Edit rosters with a form instead of raw text</button>
+          <span class="small muted">Builds from the current Owners + Rosters above; re-click after editing raw text by hand to resync.</span>
+        </div>
+        <div id="lgRosterBuilder" style="display:none;margin-top:8px"></div>
       </div>
       <div style="margin-top:8px">
         <label class="small muted">Players CSV — header <code>name,pos,team,adp,ecr,proj,tier,fp_adp,yahoo_adp</code></label>
@@ -369,6 +391,28 @@
       <details style="margin-top:8px"><summary class="small muted">Backup history for this league profile (roll back if a save or import overwrote something)</summary>
         <div class="scroll" style="margin-top:8px"><table id="lgBackupTable"><thead><tr><th>When</th><th></th></tr></thead><tbody></tbody></table></div>
       </details>
+    </div>
+  </section>
+
+  <!-- COMMISH -->
+  <section class="view" id="view-commish">
+    <div class="card">
+      <h2>Commissioner mode</h2>
+      <p class="small muted">Per-league membership tracking — returning status, dues, contact info. Separate from Teams & Keepers (that's rosters/keepers; this is league administration). Saves to the cloud per league, same as everything else.</p>
+      <div class="scroll">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr class="small muted">
+            <th style="text-align:left">Owner</th>
+            <th>Returning</th>
+            <th>Dues owed ($)</th>
+            <th>Dues paid ($)</th>
+            <th style="text-align:left">Contact</th>
+            <th style="text-align:left">Notes</th>
+          </tr></thead>
+          <tbody id="commishTable"></tbody>
+        </table>
+      </div>
+      <div class="small muted" id="commishStatus" style="margin-top:8px"></div>
     </div>
   </section>
 </main>
@@ -1232,24 +1276,31 @@ function renderQueue(){
     e.preventDefault(); queued.delete(a.dataset.qrm); renderQueue(); saveSetup();
   });
 }
+function ownerLabel(slot){ return (SLOT_OWNER&&SLOT_OWNER[slot]) || ('T'+slot); }
 function renderBoard(){
   const g=el('boardGrid'); g.innerHTML='';
+  g.style.gridTemplateColumns=`repeat(${LEAGUE.teams}, minmax(120px,1fr))`;
   const ovNext=nextOpenPick(curPick);
+  // Headers and cells are appended directly as grid children in row-major
+  // order (all team headers, then all round-1 cells, then all round-2
+  // cells, ...) so CSS grid — not per-column block stacking — owns row
+  // alignment; see the .board CSS comment for why that matters.
   for(let s=1;s<=LEAGUE.teams;s++){
-    const col=document.createElement('div'); col.className='col';
     const h=document.createElement('div'); h.className='h'+(s===mySlot?' me':'');
-    h.textContent=(s===mySlot?'★ ':'')+'T'+s; col.appendChild(h);
-    for(let r=1;r<=LEAGUE.rounds;r++){
+    h.textContent=(s===mySlot?'★ ':'')+ownerLabel(s);
+    g.appendChild(h);
+  }
+  for(let r=1;r<=LEAGUE.rounds;r++){
+    for(let s=1;s<=LEAGUE.teams;s++){
       const ov=overall(r,s); const pk=pickTakenAt(ov); const own=ownerOf(ov); const traded=own!==s;
-      const tt=traded?` <span class="tradetag">→T${own}</span>`:'';
+      const tt=traded?` <span class="tradetag">→${ownerLabel(own)}</span>`:'';
       const c=document.createElement('div');
       c.className='cell'+(own===mySlot?' me':'')+(pk&&pk.keeper?' keeper':'')+(ov===ovNext?' now':'')+(traded?' traded':'');
       if(pk){const pl=PLAYERS.find(x=>x.id===pk.playerId);
         c.innerHTML=`<div class="pk">${label(r,s)} ${pk.keeper?'· K':''}${tt}</div><b>${pl?pl.name:''}</b> <span class="pos ${pl?pl.pos:''}">${pl?pl.pos:''}</span>`;
       } else {c.innerHTML=`<div class="pk">${label(r,s)} · #${ov}${tt}</div>`;}
-      col.appendChild(c);
+      g.appendChild(c);
     }
-    g.appendChild(col);
   }
 }
 function renderMyPicks(){
@@ -1308,7 +1359,28 @@ function renderRoster(){
 }
 function renderKeeperList(){
   const wrap=el('keeperList'); if(!wrap)return;
-  wrap.innerHTML = KEEPERS.map(k=>`<span class="pill">${k.name} · T${k.team} · R${k.round}</span>`).join('');
+  wrap.innerHTML = KEEPERS.map(k=>`<span class="pill">${k.name} · ${ownerLabel(k.team)} · R${k.round}</span>`).join('');
+  renderKeeperValueTable();
+}
+function renderKeeperValueTable(){
+  const card=el('keeperValueCard'); if(!card)return;
+  // Cost/value only means something for classic round-cost keeper leagues —
+  // dynasty has no cost round, dollar-cost auction keepers aren't comparable
+  // to a draft round, and redraft has no keepers at all.
+  const applicable=LEAGUE.leagueType==='keeper' && LEAGUE.keeperCostType==='round';
+  card.style.display=applicable?'':'none';
+  if(!applicable)return;
+  const tb=el('keeperValueTable'); if(!tb)return;
+  const rows=KEEPERS.map(k=>({...k, pos:(findPlayer(k.name)||{}).pos||'', adpRound:adpRoundOf(k.name), val:keepValue(k.name,k.round)}))
+    .sort((a,b)=>b.val-a.val);
+  tb.innerHTML=rows.map(k=>`<tr>
+    <td>${ownerLabel(k.team)}</td>
+    <td>${k.name}</td>
+    <td style="text-align:center"><span class="pos ${k.pos}">${k.pos}</span></td>
+    <td style="text-align:center">R${k.round}</td>
+    <td style="text-align:center">R${k.adpRound}</td>
+    <td style="text-align:center" class="${k.val>=3?'val-good':(k.val<=-3?'val-bad':'muted')}">${k.val>0?'+':''}${k.val}</td>
+  </tr>`).join('') || '<tr><td colspan="6" class="muted small">No keepers set yet.</td></tr>';
 }
 
 // ---------- TEAMS & KEEPERS ----------
@@ -1419,17 +1491,22 @@ function renderTendencies(){
     const v=Math.max(-3,Math.min(3,Math.round(+inp.value||0)));
     inp.value=v; TENDENCIES[inp.dataset.tendBias].bias[inp.dataset.pos]=v; saveSetup();});
 }
+// guillotine/bestball are no-keeper redraft-style formats for now — the
+// thing that will actually differentiate them (custom rankings/projections
+// per format) isn't built yet, so they fall back to the same "no keepers"
+// treatment as plain redraft until that lands.
+const NO_KEEPER_TYPES=['redraft','guillotine','bestball'];
 function updateKeeperCopy(){
   let label;
   if(LEAGUE.leagueType==='dynasty') label='Whole roster is kept by default — uncheck a player on Teams & Keepers to cut them.';
-  else if(LEAGUE.leagueType==='redraft') label='Redraft league — no keepers.';
+  else if(NO_KEEPER_TYPES.includes(LEAGUE.leagueType)) label='No keepers in this league type.';
   else label=(LEAGUE.maxKeepers!=null) ? `Your ${LEAGUE.maxKeepers} are locked.` : 'Keeper count not set for this league.';
   const a=el('teamsKeeperNote'); if(a) a.textContent=label;
   const b=el('dataKeeperNote'); if(b) b.textContent=label;
   const autoBtn=el('autoKeepers'), clearBtn=el('clearKeepers');
   if(autoBtn)autoBtn.style.display=(LEAGUE.leagueType==='keeper')?'':'none';
   if(clearBtn){
-    clearBtn.style.display=(LEAGUE.leagueType==='redraft')?'none':'';
+    clearBtn.style.display=NO_KEEPER_TYPES.includes(LEAGUE.leagueType)?'none':'';
     clearBtn.textContent=(LEAGUE.leagueType==='dynasty')?'Un-cut everyone':'Clear rival keepers';
   }
   const valNote=el('teamsKeeperValueNote'); if(valNote)valNote.style.display=(LEAGUE.leagueType==='keeper')?'':'none';
@@ -1658,6 +1735,75 @@ function renderOwnerSlotInputs(owners, ownerSlot, meOwner){
     if(owners.includes(meOwner))meSel.value=meOwner;
   }
 }
+
+// ---------- ROSTER BUILDER (form-based alternative to the raw pipe-text textarea) ----------
+// Reads/writes the exact same owner|player|drafted|keeper format as
+// #lgRostersRaw — this is purely a friendlier editor for it, not a new data
+// model, so nothing else about league profiles has to change.
+function parseRosterBuilderRaw(raw, owners){
+  const struct={}; owners.forEach(o=>struct[o]=[]);
+  (raw||'').trim().split(/\n/).forEach(l=>{
+    if(!l.trim())return;
+    const [owner,player,drafted,keeper]=l.split('|');
+    if(!owner||!player)return;
+    if(!struct[owner])struct[owner]=[];
+    struct[owner].push({player, drafted:drafted||'FA', keeper:keeper||'NONE'});
+  });
+  return struct;
+}
+function serializeRosterBuilder(struct){
+  const lines=[];
+  Object.keys(struct).forEach(owner=>{
+    struct[owner].forEach(r=>lines.push(`${owner}|${r.player}|${r.drafted}|${r.keeper}`));
+  });
+  return lines.join('\n');
+}
+let ROSTER_BUILDER_STRUCT=null;
+function openRosterBuilder(){
+  const owners=el('lgOwners').value.split(',').map(s=>s.trim()).filter(Boolean);
+  ROSTER_BUILDER_STRUCT=parseRosterBuilderRaw(el('lgRostersRaw').value, owners);
+  el('lgRosterBuilder').style.display='';
+  renderRosterBuilder();
+}
+function syncRosterBuilderToRaw(){
+  el('lgRostersRaw').value=serializeRosterBuilder(ROSTER_BUILDER_STRUCT);
+}
+function renderRosterBuilder(){
+  const wrap=el('lgRosterBuilder'); if(!wrap||!ROSTER_BUILDER_STRUCT)return;
+  const owners=Object.keys(ROSTER_BUILDER_STRUCT);
+  wrap.innerHTML=owners.map(owner=>{
+    const rows=ROSTER_BUILDER_STRUCT[owner].map((r,i)=>`<tr>
+        <td>${r.player}</td>
+        <td style="text-align:center">${r.drafted}</td>
+        <td style="text-align:center">${r.keeper}</td>
+        <td><button class="btn ghost" type="button" data-rb-remove="${owner}|${i}" style="padding:1px 8px">✕</button></td>
+      </tr>`).join('') || '<tr><td colspan="4" class="muted small">No players yet.</td></tr>';
+    return `<div class="card" style="margin-bottom:8px">
+      <h2 style="font-size:14px">${owner}</h2>
+      <table style="width:100%;border-collapse:collapse"><tbody>${rows}</tbody></table>
+      <div class="row" style="margin-top:6px">
+        <input type="text" placeholder="Player name" data-rb-player="${owner}" style="min-width:160px">
+        <input type="text" placeholder="Drafted (round or FA)" data-rb-drafted="${owner}" value="FA" style="width:150px">
+        <input type="text" placeholder="Keeper (round or NONE)" data-rb-keeper="${owner}" value="NONE" style="width:150px">
+        <button class="btn" type="button" data-rb-add="${owner}">+ Add player</button>
+      </div>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('[data-rb-remove]').forEach(b=>b.onclick=()=>{
+    const [owner,idx]=b.dataset.rbRemove.split('|');
+    ROSTER_BUILDER_STRUCT[owner].splice(+idx,1);
+    syncRosterBuilderToRaw(); renderRosterBuilder();
+  });
+  wrap.querySelectorAll('[data-rb-add]').forEach(b=>b.onclick=()=>{
+    const owner=b.dataset.rbAdd;
+    const player=wrap.querySelector(`[data-rb-player="${owner}"]`).value.trim();
+    if(!player)return;
+    const drafted=wrap.querySelector(`[data-rb-drafted="${owner}"]`).value.trim()||'FA';
+    const keeper=wrap.querySelector(`[data-rb-keeper="${owner}"]`).value.trim()||'NONE';
+    ROSTER_BUILDER_STRUCT[owner].push({player, drafted, keeper});
+    syncRosterBuilderToRaw(); renderRosterBuilder();
+  });
+}
 function collectLeagueForm(){
   const starters={};
   el('lgStartersRow').querySelectorAll('[data-starter]').forEach(inp=>{
@@ -1836,6 +1982,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   if(b.dataset.view==='mocks')renderMocks();
   if(b.dataset.view==='trades'){renderTrades();renderBackupHistory();}
   if(b.dataset.view==='leagues')renderLeaguesTab();
+  if(b.dataset.view==='commish')renderCommish();
 });
 el('autoKeepers').onclick=autoKeepers;
 el('clearKeepers').onclick=clearRivalKeepers;
@@ -1871,6 +2018,7 @@ el('importSleeperBtn').onclick=importFromSleeper;
 el('importMflBtn').onclick=importFromMfl;
 el('yahooConnectBtn').onclick=connectYahoo;
 el('yahooListBtn').onclick=listYahooLeagues;
+el('lgOpenRosterBuilderBtn').onclick=openRosterBuilder;
 el('lgOwners').oninput=()=>{
   const owners=el('lgOwners').value.split(',').map(s=>s.trim()).filter(Boolean);
   const existing=LEAGUES[editingLeagueId]||{};
@@ -1987,6 +2135,47 @@ async function restoreBackup(ts){
 
 // ---------- SETUP PERSISTENCE (cloud: /api/setup) ----------
 async function apiSetup(method,body){const r=await fetch('/api/setup?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method,headers:{'Content-Type':'application/json',...(typeof tokenHdr==='function'?tokenHdr():{})},body:body?JSON.stringify(body):undefined});if(!r.ok)throw new Error('HTTP '+r.status);const t=await r.text();return t?JSON.parse(t):null;}
+
+// ---------- COMMISH (membership: returning/dues/contact) ----------
+let COMMISH={};
+async function apiCommish(method,body){const r=await fetch('/api/commish?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method,headers:{'Content-Type':'application/json',...tokenHdr()},body:body?JSON.stringify(body):undefined});if(!r.ok)throw new Error('HTTP '+r.status);const t=await r.text();return t?JSON.parse(t):null;}
+function commishRowFor(owner){ return COMMISH[owner]=COMMISH[owner]||{returning:'unsure',duesOwed:0,duesPaid:0,contact:'',notes:''}; }
+function renderCommish(){
+  const tb=el('commishTable'); if(!tb)return;
+  tb.innerHTML=OWNERS.map(owner=>{
+    const r=commishRowFor(owner);
+    return `<tr>
+      <td>${owner===ME_OWNER?'★ ':''}${owner}</td>
+      <td style="text-align:center"><select data-cm-returning="${owner}">
+        <option value="yes" ${r.returning==='yes'?'selected':''}>Yes</option>
+        <option value="no" ${r.returning==='no'?'selected':''}>No</option>
+        <option value="unsure" ${r.returning==='unsure'?'selected':''}>Unsure</option>
+      </select></td>
+      <td style="text-align:center"><input type="number" min="0" step="1" data-cm-owed="${owner}" value="${r.duesOwed}" style="width:70px"></td>
+      <td style="text-align:center"><input type="number" min="0" step="1" data-cm-paid="${owner}" value="${r.duesPaid}" style="width:70px"></td>
+      <td><input type="text" data-cm-contact="${owner}" value="${r.contact}" placeholder="email/phone" style="width:100%"></td>
+      <td><input type="text" data-cm-notes="${owner}" value="${r.notes}" placeholder="" style="width:100%"></td>
+    </tr>`;
+  }).join('');
+  tb.querySelectorAll('[data-cm-returning]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmReturning).returning=inp.value; saveCommish();});
+  tb.querySelectorAll('[data-cm-owed]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmOwed).duesOwed=+inp.value||0; saveCommish();});
+  tb.querySelectorAll('[data-cm-paid]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmPaid).duesPaid=+inp.value||0; saveCommish();});
+  tb.querySelectorAll('[data-cm-contact]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmContact).contact=inp.value; saveCommish();});
+  tb.querySelectorAll('[data-cm-notes]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmNotes).notes=inp.value; saveCommish();});
+}
+let _commishSaveT=null;
+function saveCommish(){
+  if(GUEST_MODE)return;
+  if(_commishSaveT)clearTimeout(_commishSaveT);
+  _commishSaveT=setTimeout(async()=>{
+    try{ await apiCommish('PUT',COMMISH); const s=el('commishStatus'); if(s)s.textContent='☁ Saved '+new Date().toLocaleTimeString(); }
+    catch(e){ const s=el('commishStatus'); if(s)s.textContent='⚠ Not saved to cloud: '+e.message; }
+  },600);
+}
+async function loadCommish(){
+  try{ COMMISH=await apiCommish('GET')||{}; }catch(e){ COMMISH={}; }
+  renderCommish();
+}
 let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
@@ -2078,6 +2267,7 @@ function applyLeagueProfile(id){
     renderStratCards();
     renderMocks();
     if(el('leaguesList'))renderLeaguesTab();
+    loadCommish();
   }
   loadSetup();
 }

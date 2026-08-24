@@ -12,16 +12,24 @@ incomplete, not final.
 
 ## App shape
 
-Single-page app (`public/index.html`), seven tabs:
+Single-page app (`public/index.html`), eight tabs:
 
 ### Draft Room
 Live mock draft UI — best-available player pool, a roster viewer, a queue of
-targeted picks, a full draft board (dashed cells = keepers; clicking a team
-header on the board lets you set who's on the clock manually), and my picks
+targeted picks, a full draft board (dashed cells = keepers), and my picks
 & projected availability below the board. Supports snake, linear, and
 (structurally, not the draft room itself) auction league types — see
 "League profiles" below. Auction-type leagues show a placeholder here
 instead of the pool/board — the auction draft engine isn't built yet.
+
+The board is a genuine CSS grid (`grid-template-columns` set per league's
+team count, every header/cell a direct grid child in row-major order) so a
+row's height is shared across every column — a wrapped long name doesn't
+push just its own column out of alignment with its neighbors, which a
+per-column block-stacked layout couldn't guarantee. Column headers and
+traded-pick tags show the real owner name (`ownerLabel(slot)`, falling back
+to `T<slot>` only if a slot genuinely has no owner name), not a bare `T1`/
+`T2`/`→T4`.
 
 **Roster**: next to Best Available, a dropdown (defaulting to you) shows any
 owner's roster slotted into starters — one row per starting slot in
@@ -69,6 +77,27 @@ Player pool view (ADP/ECR/projection) and keeper list, plus config
 export/import (JSON) as an offline backup independent of the cloud Mocks
 feature. Also has a button to save the pasted player-pool CSV directly onto
 the active league's cloud profile (see "League profiles").
+
+**Keeper cost/value**: a dedicated table, every currently-kept player
+league-wide with owner, position, cost round, ADP round, and surplus value
+(cost round − ADP round; positive = a bargain, negative = an overpay),
+sorted best value first — the same `keepValue()` math Teams & Keepers shows
+inline per-team, surfaced as its own cross-league view. Only shown for
+classic round-cost keeper leagues (`leagueType==='keeper' &&
+keeperCostType==='round'`) — not meaningful for dynasty (no cost round),
+dollar-cost auction keepers, or redraft/guillotine/bestball (no keepers).
+
+### Commish
+Per-league membership tracking, separate from the fantasy-roster concerns
+of Teams & Keepers: one row per owner — returning next year (yes/no/
+unsure), dues owed and paid (in dollars), contact info, and free-text notes.
+Auto-saves to the cloud (`GET/PUT /api/commish`), scoped per league like
+everything else, with the same rolling 30-snapshot backup pattern as
+`/api/setup`/`/api/leagues` (`GET/POST /api/commish/history|restore`; its
+own KV entity, `commish:<league>`, kept separate from `/api/setup` on
+purpose so a keeper/trade backup or restore never touches membership data
+and vice versa) — the API exists but there's no restore panel in the
+Commish tab UI yet, unlike Trades'/Leagues'. Hidden entirely in guest mode.
 
 ### Leagues
 Create, edit, or delete league profiles — see "League profiles" below.
@@ -139,6 +168,12 @@ incoming draft's `picks[]`/board entirely and merged back in for display by
 `rosterOf()` reading the roster data directly. This matters for the two
 Sleeper-imported dynasty leagues and MFL-imported leagues like "NCAA Power 5
 Football" (dynasty) vs. "NFL Promotion & Relegation" (redraft).
+`guillotine` and `bestball` also exist as selectable values, currently
+treated identically to `redraft` (no keeper concept) — they're categorized
+so those leagues can exist and run ordinary mock drafts, but what should
+actually differentiate them (how players get ranked/valued for that format)
+needs the league-aware custom rankings/projections engine, which isn't
+built yet (see `FEEDBACK.md`).
 
 Profiles live in KV (`league:<id>`), fetched via `GET /api/leagues` on boot.
 The **Leagues** tab is full CRUD: create a new league, edit any field on an
