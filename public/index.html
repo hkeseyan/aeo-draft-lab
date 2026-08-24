@@ -151,7 +151,7 @@
       <div class="row">
         <button class="btn" id="autoKeepers">✨ Auto-assign each team's best 3 keepers (by value)</button>
         <button class="btn ghost" id="clearKeepers">Clear rival keepers</button>
-        <span class="muted small">Checked players are removed from the draft pool. <span id="teamsKeeperNote">Your 3 are locked.</span> “Value” = seed ADP round − keeper cost (needs real ADP to be exact).</span>
+        <span class="muted small">Checked players are removed from the draft pool. <span id="teamsKeeperNote">Your 3 are locked.</span> <span id="teamsKeeperValueNote">“Value” = seed ADP round − keeper cost (needs real ADP to be exact).</span></span>
       </div>
       <div class="small muted" style="margin-top:6px" id="keeperTally"></div>
     </div>
@@ -330,11 +330,16 @@
         <label class="small"><input type="checkbox" id="lgSuperflex"> Superflex</label>
       </div>
       <div class="row" style="margin-top:8px">
+        <label class="small">League type <select id="lgLeagueType">
+          <option value="keeper">Keeper (pick N, pay a draft-round cost)</option>
+          <option value="redraft">Redraft (no keepers)</option>
+          <option value="dynasty">Dynasty (whole roster kept by default, cut individually)</option>
+        </select></label>
         <label class="small">Scoring label <input type="text" id="lgScoring" style="min-width:120px"></label>
         <label class="small">Draft date <input type="text" id="lgDraftDate" style="width:110px"></label>
         <label class="small">Keeper deadline <input type="text" id="lgKeeperDeadline" style="width:110px"></label>
-        <label class="small">Max keepers <input type="number" id="lgMaxKeepers" min="0" max="10" style="width:65px"></label>
-        <label class="small">Keeper cost <select id="lgKeeperCostType"><option value="round">Round</option><option value="dollar">Dollar</option></select></label>
+        <label class="small" id="lgMaxKeepersRow">Max keepers <input type="number" id="lgMaxKeepers" min="0" max="10" style="width:65px"></label>
+        <label class="small" id="lgKeeperCostTypeRow">Keeper cost <select id="lgKeeperCostType"><option value="round">Round</option><option value="dollar">Dollar</option></select></label>
         <label class="small">My slot <input type="number" id="lgMySlot" min="1" max="32" style="width:65px"></label>
       </div>
       <div class="row" style="margin-top:8px">
@@ -961,10 +966,15 @@ function parseRosters(){
   ORIG_OWNER={}; KEEPCOST={};
   Object.keys(ROSTERS).forEach(o=>ROSTERS[o].forEach(r=>{ORIG_OWNER[r.player]=o; KEEPCOST[r.player]=r.keeper;}));
 }
-let assigned=new Set(); // "owner|player" rival keepers currently checked
+let assigned=new Set(); // "owner|player" rival keepers currently checked (leagueType 'keeper')
+let cutPlayers=new Set(); // "owner|player" removed from a dynasty roster, back in the pool (leagueType 'dynasty')
 let pickOwnerOverride={}; // overall pick# -> owning slot (pick trades)
 let playerTrades={};      // player name -> new owner (roster/keeper trades)
 let queued=new Set();     // player name -> targeted for an upcoming pick; auto-drops once drafted
+// Dynasty has no "cost round" concept like classic keepers — every rostered
+// player is assumed kept by default, so this isn't checkbox opt-IN like
+// `assigned`, it's opt-OUT via `cutPlayers`.
+function dynastyKeptRoster(owner){ return effRoster(owner).filter(r=>!cutPlayers.has(owner+'|'+r.player)); }
 function effOwner(pl){return playerTrades[pl]||ORIG_OWNER[pl];}
 function effRoster(owner){const out=[];Object.keys(ROSTERS).forEach(o=>ROSTERS[o].forEach(r=>{if(effOwner(r.player)===owner)out.push(r);}));return out;}
 function ownerOf(ov){return pickOwnerOverride[ov]||slotForOverall(ov).slot;}
@@ -989,6 +999,7 @@ function findPlayer(name){
 function initKeepers(){ rebuildKeepers(); }
 function rebuildKeepers(){
   KEEPERS=[];
+  if(LEAGUE.leagueType==='dynasty')return; // no cost-round concept — see dynastyKeptRoster()
   assigned.forEach(key=>{
     const i=key.indexOf('|'); const owner=key.slice(0,i), player=key.slice(i+1);
     const cost=KEEPCOST[player];
@@ -998,12 +1009,28 @@ function rebuildKeepers(){
 function applyAndReset(){ rebuildKeepers(); applyKeepers(); resetDraft(); renderTeams(); if(typeof renderTrades==="function")renderTrades(); if(typeof saveSetup==="function")saveSetup(); }
 function applyKeepers(){
   PLAYERS.forEach(p=>p.keeper=null);
+  if(LEAGUE.leagueType==='dynasty'){
+    OWNERS.forEach(owner=>{
+      dynastyKeptRoster(owner).forEach(r=>{const p=findPlayer(r.player); if(p)p.keeper={team:OWNER_SLOT[owner]||1, dynasty:true};});
+    });
+    return;
+  }
   KEEPERS.forEach(k=>{const p=findPlayer(k.name); if(p){p.keeper={team:k.team,round:k.round};}});
 }
 
 // ---------- DRAFT ENGINE ----------
 function resetDraft(){
   picks=[]; curPick=1; PLAYERS.forEach(p=>p.drafted=false);
+  if(LEAGUE.leagueType==='dynasty'){
+    // Kept dynasty rosters aren't part of the incoming draft's picks/board at
+    // all (there's no "cost round" to place them at) — they just stay off
+    // the pool. rosterOf() merges them back in for display separately.
+    OWNERS.forEach(owner=>{
+      dynastyKeptRoster(owner).forEach(r=>{const p=findPlayer(r.player); if(p)p.drafted=true;});
+    });
+    render();
+    return;
+  }
   // pre-place keepers at their team's pick in that round
   KEEPERS.forEach(k=>{
     const p=findPlayer(k.name); if(!p) return;
@@ -1024,7 +1051,15 @@ function makePick(playerId, ov){
   picks.push({overall:ov,round,slot,playerId,keeper:false});
   p.drafted=true;
 }
-function rosterOf(slot){return picks.filter(p=>ownerOf(p.overall)===slot).map(p=>PLAYERS.find(x=>x.id===p.playerId)).filter(Boolean);}
+function rosterOf(slot){
+  const fromPicks=picks.filter(p=>ownerOf(p.overall)===slot).map(p=>PLAYERS.find(x=>x.id===p.playerId)).filter(Boolean);
+  if(LEAGUE.leagueType==='dynasty'){
+    const owner=SLOT_OWNER[slot];
+    const kept=owner?dynastyKeptRoster(owner).map(r=>findPlayer(r.player)).filter(Boolean):[];
+    return kept.concat(fromPicks);
+  }
+  return fromPicks;
+}
 
 // ---------- OPPONENT MODEL (need-aware picks + per-owner tendencies) ----------
 // slot -> owner name (inverse of OWNER_SLOT). Rebuilt per league by applyLeagueProfile()
@@ -1255,8 +1290,44 @@ function renderKeeperList(){
 }
 
 // ---------- TEAMS & KEEPERS ----------
+function renderTeamsDynasty(){
+  const wrap=el('teamsWrap'); wrap.innerHTML='';
+  const tally=[];
+  OWNERS.forEach(owner=>{
+    const isMe=owner===ME_OWNER;
+    const roster=effRoster(owner)
+      .map(r=>({...r, pos:(findPlayer(r.player)||{}).pos||''}))
+      .sort((a,b)=>a.pos.localeCompare(b.pos));
+    const keptCount=roster.filter(r=>!cutPlayers.has(owner+'|'+r.player)).length;
+    tally.push(`${owner} ${keptCount}/${roster.length}`);
+    const c=document.createElement('div'); c.className='card';
+    const head=document.createElement('h2');
+    head.innerHTML=`${isMe?'★ ':''}${owner} <span class="muted">· slot ${OWNER_SLOT[owner]} · ${keptCount}/${roster.length} kept${isMe?' · you':''}</span>`;
+    c.appendChild(head);
+    roster.forEach(r=>{
+      const key=owner+'|'+r.player;
+      const kept=!cutPlayers.has(key);
+      const row=document.createElement('label'); row.className='mypick-row'; row.style.cursor='pointer';
+      const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=kept; cb.dataset.k=key;
+      const left=document.createElement('span');
+      left.innerHTML=` <span class="pos ${r.pos}">${r.pos||'?'}</span> ${r.player}`;
+      const right=document.createElement('span'); right.className='small muted';
+      right.textContent=kept?'kept':'cut → back in pool';
+      const wrapL=document.createElement('span'); wrapL.appendChild(cb); wrapL.appendChild(left);
+      row.appendChild(wrapL); row.appendChild(right); c.appendChild(row);
+    });
+    if(!roster.length){const n=document.createElement('div');n.className='small muted';n.textContent='No roster data imported for this owner.';c.appendChild(n);}
+    wrap.appendChild(c);
+  });
+  el('keeperTally').innerHTML='Kept per team (dynasty — uncheck to cut a player back to the pool) — '+tally.join('  ·  ');
+  wrap.querySelectorAll('input[data-k]').forEach(cb=>cb.onchange=()=>{
+    if(cb.checked)cutPlayers.delete(cb.dataset.k); else cutPlayers.add(cb.dataset.k);
+    applyAndReset();
+  });
+}
 function renderTeams(){
   const wrap=el('teamsWrap'); if(!wrap)return; wrap.innerHTML='';
+  if(LEAGUE.leagueType==='dynasty'){ renderTeamsDynasty(); return; }
   const tally=[];
   OWNERS.forEach(owner=>{
     const isMe=owner===ME_OWNER;
@@ -1295,6 +1366,7 @@ function renderTeams(){
   });
 }
 function autoKeepers(){
+  if(LEAGUE.leagueType!=='keeper')return; // no cost-round concept to auto-pick from in dynasty/redraft
   const max=LEAGUE.maxKeepers||0;
   OWNERS.forEach(owner=>{ if(owner===ME_OWNER)return;
     const elig=(ROSTERS[owner]||[]).filter(r=>r.keeper!=null)
@@ -1303,7 +1375,10 @@ function autoKeepers(){
   });
   applyAndReset();
 }
-function clearRivalKeepers(){ assigned.clear(); applyAndReset(); }
+function clearRivalKeepers(){
+  if(LEAGUE.leagueType==='dynasty'){ cutPlayers.clear(); } else { assigned.clear(); }
+  applyAndReset();
+}
 function renderTendencies(){
   const tb=el('tendTable'); if(!tb)return;
   const body=tb.querySelector('tbody'); body.innerHTML='';
@@ -1323,9 +1398,19 @@ function renderTendencies(){
     inp.value=v; TENDENCIES[inp.dataset.tendBias].bias[inp.dataset.pos]=v; saveSetup();});
 }
 function updateKeeperCopy(){
-  const label=(LEAGUE.maxKeepers!=null) ? `Your ${LEAGUE.maxKeepers} are locked.` : 'Keeper count not set for this league.';
+  let label;
+  if(LEAGUE.leagueType==='dynasty') label='Whole roster is kept by default — uncheck a player on Teams & Keepers to cut them.';
+  else if(LEAGUE.leagueType==='redraft') label='Redraft league — no keepers.';
+  else label=(LEAGUE.maxKeepers!=null) ? `Your ${LEAGUE.maxKeepers} are locked.` : 'Keeper count not set for this league.';
   const a=el('teamsKeeperNote'); if(a) a.textContent=label;
   const b=el('dataKeeperNote'); if(b) b.textContent=label;
+  const autoBtn=el('autoKeepers'), clearBtn=el('clearKeepers');
+  if(autoBtn)autoBtn.style.display=(LEAGUE.leagueType==='keeper')?'':'none';
+  if(clearBtn){
+    clearBtn.style.display=(LEAGUE.leagueType==='redraft')?'none':'';
+    clearBtn.textContent=(LEAGUE.leagueType==='dynasty')?'Un-cut everyone':'Clear rival keepers';
+  }
+  const valNote=el('teamsKeeperValueNote'); if(valNote)valNote.style.display=(LEAGUE.leagueType==='keeper')?'':'none';
 }
 
 // ---------- STRATEGY LAB ----------
@@ -1452,9 +1537,10 @@ function setStatus(s){el('saveStatus').textContent=s; setTimeout(()=>el('saveSta
 // Full backup, independent of the cloud KV store — includes keepers/trades/picks
 // so "Export config JSON" is a real point-in-time snapshot you can keep as a file.
 function getConfig(){return {league:CURRENT_LEAGUE_ID,PLAYERS,KEEPERS,picks,curPick,
-  assigned:[...assigned],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],seed:el('seedWarn').style.display};}
+  assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],seed:el('seedWarn').style.display};}
 function applyConfig(cfg){PLAYERS=cfg.PLAYERS;KEEPERS=cfg.KEEPERS;picks=cfg.picks;curPick=cfg.curPick;
   if(Array.isArray(cfg.assigned))assigned=new Set(cfg.assigned);
+  if(Array.isArray(cfg.cutPlayers))cutPlayers=new Set(cfg.cutPlayers);
   if(Array.isArray(cfg.queued))queued=new Set(cfg.queued);
   pickOwnerOverride=cfg.pickOwnerOverride||{}; playerTrades=cfg.playerTrades||{};
   if(cfg.tendencies)OWNERS.forEach(o=>{const t=cfg.tendencies[o]; if(t)TENDENCIES[o]={enabled:!!t.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},t.bias||{})};});
@@ -1490,6 +1576,8 @@ function loadLeagueIntoForm(id){
   el('lgName').value=p.name||'';
   el('lgTeams').value=p.teams||12;
   el('lgDraftType').value=p.draftType||'snake';
+  el('lgLeagueType').value=p.leagueType||'keeper';
+  updateLgKeeperFieldsVisibility();
   el('lgSuperflex').checked=!!p.superflex;
   el('lgScoring').value=p.scoringLabel||'';
   el('lgDraftDate').value=p.draftDateLabel||'';
@@ -1565,6 +1653,7 @@ function collectLeagueForm(){
     rounds: existing.rounds||16,
     mySlot: el('lgMySlot').value!==''? +el('lgMySlot').value : null,
     draftType: el('lgDraftType').value,
+    leagueType: el('lgLeagueType').value,
     superflex: el('lgSuperflex').checked,
     scoringLabel: el('lgScoring').value.trim()||'TBD',
     draftDateLabel: el('lgDraftDate').value.trim()||'TBD',
@@ -1603,12 +1692,19 @@ async function saveLeagueForm(){
 function newLeagueForm(){
   editingLeagueId=null;
   el('lgName').value='New League'; el('lgTeams').value=12; el('lgDraftType').value='snake';
+  el('lgLeagueType').value='keeper'; updateLgKeeperFieldsVisibility();
   el('lgSuperflex').checked=false; el('lgScoring').value='TBD'; el('lgDraftDate').value='TBD';
   el('lgKeeperDeadline').value='TBD'; el('lgMaxKeepers').value=''; el('lgKeeperCostType').value='round';
   el('lgMySlot').value=''; el('lgOwners').value=''; el('lgRostersRaw').value=''; el('lgPlayersCsv').value='';
   renderStartersInputs({QB:1,RB:2,WR:2,TE:1,FLEX:1,K:1,DST:1});
   renderOwnerSlotInputs([], {}, '');
   el('leaguesStatus').textContent='Unsaved — fill in and click Save league.';
+}
+function updateLgKeeperFieldsVisibility(){
+  const dynastyOrRedraft=el('lgLeagueType').value!=='keeper';
+  const show=dynastyOrRedraft?'none':'';
+  const r1=el('lgMaxKeepersRow'), r2=el('lgKeeperCostTypeRow');
+  if(r1)r1.style.display=show; if(r2)r2.style.display=show;
 }
 async function deleteSelectedLeague(){
   const id=el('leaguesList').value;
@@ -1696,7 +1792,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); el('view-'+b.dataset.view).classList.add('active');
   if(b.dataset.view==='lab')renderStratCards();
-  if(b.dataset.view==='teams'){renderTeams();renderTendencies();}
+  if(b.dataset.view==='teams'){updateKeeperCopy();renderTeams();renderTendencies();}
   if(b.dataset.view==='mocks')renderMocks();
   if(b.dataset.view==='trades'){renderTrades();renderBackupHistory();}
   if(b.dataset.view==='leagues')renderLeaguesTab();
@@ -1728,6 +1824,7 @@ el('importConfig').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=
 el('saveCsvToLeague').onclick=saveCsvToLeague;
 el('leaguesList').onchange=()=>loadLeagueIntoForm(el('leaguesList').value);
 el('newLeagueBtn').onclick=newLeagueForm;
+el('lgLeagueType').onchange=updateLgKeeperFieldsVisibility;
 el('deleteLeagueBtn').onclick=deleteSelectedLeague;
 el('saveLeagueBtn').onclick=saveLeagueForm;
 el('importSleeperBtn').onclick=importFromSleeper;
@@ -1853,10 +1950,11 @@ async function apiSetup(method,body){const r=await fetch('/api/setup?league='+en
 let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
-function saveSetup(){if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
+function saveSetup(){if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
 function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},v.bias||{})};}); }
-async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.pickOwnerOverride||s.tendencies||(Array.isArray(s.picks)&&s.picks.length))){
+async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||(Array.isArray(s.picks)&&s.picks.length))){
   if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
+  if(Array.isArray(s.cutPlayers))cutPlayers=new Set(s.cutPlayers);
   if(Array.isArray(s.queued))queued=new Set(s.queued);
   pickOwnerOverride=s.pickOwnerOverride||{}; playerTrades=s.playerTrades||{};
   applyTendencies(s.tendencies);
@@ -1865,6 +1963,9 @@ async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||
     picks=s.picks.slice(); curPick=s.curPick||1;
     PLAYERS.forEach(p=>p.drafted=false);
     picks.forEach(pk=>{const pl=PLAYERS.find(x=>x.id===pk.playerId); if(pl)pl.drafted=true;});
+    if(LEAGUE.leagueType==='dynasty')OWNERS.forEach(owner=>{
+      dynastyKeptRoster(owner).forEach(r=>{const p=findPlayer(r.player); if(p)p.drafted=true;});
+    });
     render();
   } else { resetDraft(); }
   if(el('teamsWrap')){renderTeams();renderTendencies();} renderTrades();
@@ -1894,7 +1995,7 @@ function applyLeagueProfile(id){
   LEAGUE={
     name:profile.name, teams:profile.teams||12, rounds:profile.rounds||16, mySlot:profile.mySlot,
     starters:profile.starters||{}, flexEligible:profile.flexEligible||['RB','WR','TE'], myKeepers:profile.myKeepers||[],
-    draftType:profile.draftType||'snake', superflex:!!profile.superflex,
+    draftType:profile.draftType||'snake', leagueType:profile.leagueType||'keeper', superflex:!!profile.superflex,
     maxKeepers:(profile.maxKeepers!=null?profile.maxKeepers:null), keeperCostType:profile.keeperCostType||'round',
     scoringLabel:profile.scoringLabel||'TBD', draftDateLabel:profile.draftDateLabel||'TBD', keeperDeadlineLabel:profile.keeperDeadlineLabel||'TBD',
   };
@@ -1909,7 +2010,7 @@ function applyLeagueProfile(id){
   parseRosters();
   rebuildSlotOwner(); rebuildTendencies(); fillRosterOwnerSelect();
 
-  assigned=new Set(); pickOwnerOverride={}; playerTrades={}; queued=new Set(); KEEPERS=[]; picks=[]; curPick=1;
+  assigned=new Set(); cutPlayers=new Set(); pickOwnerOverride={}; playerTrades={}; queued=new Set(); KEEPERS=[]; picks=[]; curPick=1;
 
   const w=el('seedWarn');
   if(PLAYERS_CSV && PLAYERS_CSV.indexOf('__PLAYERS')!==0 && PLAYERS_CSV.trim().length>20){

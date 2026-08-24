@@ -442,13 +442,30 @@ export default {
             ownerSlot[owner] = i + 1;
           });
 
+          // MFL's ~2600-player pool (real rosters plus deep/inactive names) has
+          // occasional real-name collisions — e.g. multiple distinct player IDs
+          // named "A.J. Brown". The app keys rosters by player NAME, not MFL id,
+          // so an undisambiguated collision would make one franchise silently
+          // "steal" another's player on the roster/keeper views. Disambiguate:
+          // the first occurrence of a name keeps it clean (best odds of being
+          // the one that actually matches the fantasy player pool), later
+          // occurrences get their MFL team appended.
           const rosterFranchises = (rostersData && rostersData.rosters && rostersData.rosters.franchise) || [];
           const rosterLines = [];
+          const seenNames = new Set();
           rosterFranchises.forEach((f) => {
             const owner = ownerById[f.id] || `Team ${f.id}`;
             const list = f.player ? (Array.isArray(f.player) ? f.player : [f.player]) : [];
             list.forEach((p) => {
-              rosterLines.push(`${owner}|${nameFor(p.id)}|FA|NONE`);
+              let name = nameFor(p.id);
+              if (seenNames.has(name)) {
+                const meta = players[p.id];
+                const team = meta && meta.team;
+                name = team ? `${name} (${team})` : `${name} #${p.id}`;
+              } else {
+                seenNames.add(name);
+              }
+              rosterLines.push(`${owner}|${name}|FA|NONE`);
             });
           });
 
