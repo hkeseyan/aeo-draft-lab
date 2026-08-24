@@ -15,12 +15,19 @@ incomplete, not final.
 Single-page app (`public/index.html`), seven tabs:
 
 ### Draft Room
-Live mock draft UI — best-available player pool, a queue of targeted picks,
-"on the clock" indicator, my picks & projected availability, my roster, and
-a full snake draft board (dashed cells = keepers; clicking a team header on
-the board lets you set who's on the clock manually). Auction-type leagues
-(see "League profiles" below) show a placeholder here instead — the auction
-draft engine isn't built yet.
+Live mock draft UI — best-available player pool, a roster viewer, a queue of
+targeted picks, a full draft board (dashed cells = keepers; clicking a team
+header on the board lets you set who's on the clock manually), and my picks
+& projected availability below the board. Supports snake, linear, and
+(structurally, not the draft room itself) auction league types — see
+"League profiles" below. Auction-type leagues show a placeholder here
+instead of the pool/board — the auction draft engine isn't built yet.
+
+**Roster**: next to Best Available, a dropdown (defaulting to you) shows any
+owner's roster slotted into starters — one row per starting slot in
+`LEAGUE.starters` order (exact positions, then FLEX, then SUPERFLEX if the
+league has one), with unfilled slots shown as "— empty —" so you can see how
+full a lineup is at a glance — then a bench list of whatever's left over.
 
 **Queue**: check "Q" next to any player in Best Available to add them to
 "My Queue" — a shortlist of upcoming targets, shown in ADP order with a
@@ -107,7 +114,10 @@ owner/slot editor, no code change or redeploy needed. See "League profiles".
 
 The app serves multiple leagues from one deployment. A league profile bundles
 everything that used to be hardcoded — team count, scoring label, draft type
-(snake/auction), superflex flag, starting lineup + flex eligibility, max
+(snake/linear/auction — linear keeps the same team order every round, no
+snaking; the draft engine only needs `overall()`/`slotForOverall()`/
+`posInRound()` to know the difference, so trades/board/Strategy Lab all work
+unchanged), superflex flag, starting lineup + flex eligibility, max
 keepers, keeper-cost type (round/dollar), draft/keeper dates, owners, draft
 order (`ownerSlot`), locked/known keepers, the roster data (`rostersRaw`,
 pipe-delimited `owner|player|drafted_round|keeper_round`), and the player

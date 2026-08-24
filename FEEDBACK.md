@@ -16,6 +16,39 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-08-24 — **Roster panel rework** (elaborates the 2026-08-24 "can't see
+  a rival's roster" entry above): dropdown to view any owner's roster
+  (defaults to mine); reposition so it's next to Best Available instead of
+  requiring a scroll — move "My picks & projected availability" down (below
+  the draft board is fine); slot players into starters-then-bench (not a
+  flat list) so you can see how full a starting lineup is at a glance.
+  *Done — "Roster" card promoted to the top of the right column with an
+  owner dropdown (defaults to you); starters shown slot-by-slot (empty ones
+  say "— empty —"), bench below; "My picks & projected availability" moved
+  to a new card below the draft board.*
+- 🆕 2026-08-24 — **Player pool size to ~200, later 250+ for some leagues** —
+  wants to see what happens with a bigger pool (current AEO CSV has 184,
+  draft is 192 slots). This needs sourcing more ranked players, not just a
+  code change — flagged to the user rather than fabricating ADP/ECR values
+  for extra players, since accuracy here matters for real draft prep.
+- 🆕 2026-08-24 — **League *type* beyond keeper/redraft: dynasty, guillotine,
+  bestball.** Dynasty: no keeper cost/value — every rostered player is
+  assumed kept by default, removable individually later (e.g. a roster-space
+  cut), rather than today's opt-in "choose up to N keepers" model. Applies
+  now to the two new Sleeper-imported leagues. Guillotine and bestball are
+  "maybe later," not scoped — explicitly deferred by the user. This is a new
+  concept distinct from `draftType` (snake/auction/linear) and needs a
+  design pass before building (see conversation — proposed as a `leagueType`
+  field, confirming with the user before implementing).
+- ✅ 2026-08-24 — **Linear draft type** — a third `draftType` alongside snake/
+  auction: same team order every round, no snaking. Trades must still work.
+  User notes dynasty drafts using this will have far fewer available players
+  (most already kept) and doesn't think that needs special handling.
+  *Done — `overall()`/`slotForOverall()`/`posInRound()` branch on
+  `draftType==='linear'` to skip the round-reversal; every other part of the
+  engine (trades, board, Strategy Lab) is built on those three functions, so
+  it inherited linear support automatically. Selectable in the Leagues tab.*
+
 - 🆕 2026-08-24 — **Player headshots** — next to drafted picks, possibly in
   Best Available too, for faster visual scanning. User explicitly deferred
   this themselves, anticipating it's a bigger lift — correctly: our player
