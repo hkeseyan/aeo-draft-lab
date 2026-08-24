@@ -307,6 +307,7 @@
       <div class="row">
         <input type="text" id="mflLeagueId" placeholder="MFL league ID" style="min-width:160px">
         <input type="text" id="mflYear" placeholder="Year" value="2026" style="min-width:80px">
+        <select id="mflDivisionSelect" style="display:none;min-width:200px"></select>
         <button class="btn ghost" id="importMflBtn">Import from MFL</button>
       </div>
       <div class="small muted" id="mflImportStatus" style="margin-top:6px"></div>
@@ -1766,20 +1767,38 @@ async function importFromSleeper(){
 async function importFromMfl(){
   const mid=el('mflLeagueId').value.trim(); if(!mid)return;
   const year=el('mflYear').value.trim()||'2026';
+  const divSel=el('mflDivisionSelect');
+  const division=(divSel.style.display!=='none' && divSel.value) ? divSel.value : '';
   // Same policy as importFromSleeper(): always targets a NEW league, never
   // whatever league the form happened to be showing — see that function's
   // comment for the incident this guards against.
   editingLeagueId=null;
   el('mflImportStatus').textContent='Importing…';
   try{
-    const r=await fetch('/api/import/mfl/'+encodeURIComponent(mid)+'?year='+encodeURIComponent(year));
+    let url='/api/import/mfl/'+encodeURIComponent(mid)+'?year='+encodeURIComponent(year);
+    if(division)url+='&division='+encodeURIComponent(division);
+    const r=await fetch(url);
     const data=await r.json();
     if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
+    if(data.needsDivision){
+      // Multiple independently-drafted divisions/conferences share this
+      // league umbrella (e.g. promotion/relegation, or a big multi-conference
+      // dynasty) — the same real player can legitimately be owned by one team
+      // in *each* division, so importing them all at once would collide
+      // under this app's name-keyed roster model. Ask which division to
+      // import as its own league profile, same as importing an ordinary
+      // single-division league.
+      divSel.innerHTML=data.divisions.map(d=>`<option value="${d.id}">${d.name} (${d.teams} teams)</option>`).join('');
+      divSel.style.display='';
+      el('mflImportStatus').textContent='This league has multiple divisions/conferences, each drafted independently — pick yours above, then click Import again.';
+      return;
+    }
     el('lgName').value=data.name||'';
     el('lgTeams').value=data.teams||12;
     el('lgOwners').value=(data.owners||[]).join(', ');
     renderOwnerSlotInputs(data.owners||[], data.ownerSlot||{}, (data.owners||[])[0]||'');
     el('lgRostersRaw').value=data.rostersRaw||'';
+    divSel.style.display='none';
     el('mflImportStatus').textContent='✓ Imported as a NEW league — review fields below (draft type, superflex, scoring, keeper rules, and keeper flags aren\'t set by this import) then Save to create it. This will not overwrite any existing league.';
   }catch(e){ el('mflImportStatus').textContent='⚠ Import failed: '+e.message; }
 }

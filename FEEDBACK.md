@@ -30,13 +30,33 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   CSS-hidden) so a right-click "Inspect" doesn't leak trades/keepers/other
   leagues either. A technically motivated friend could still hit the API
   directly from devtools — accepted, not in scope.
-- 🆕 2026-08-25 — **SEC-only view for NCAA Power 5 Football** — that league is
+- ✅ 2026-08-25 — **SEC-only view for NCAA Power 5 Football** — that league is
   5 conferences × 12 teams, unique rosters *within* a conference only (so a
   given player can be legitimately owned by up to 5 different teams
   league-wide, one per conference). User is in the SEC (Auburn) and this
   league is already post-draft, so it's in-season-management territory now,
   not draft prep. Explicitly optional ("if you can view specifically SEC
   then good, otherwise don't worry about it") — deferred, not started.
+  *Done 2026-08-25 — generalized beyond just this one league: user pointed
+  out "NFL Promotion & Relegation" has the identical shape (3 divisions ×
+  12 teams, English-football-style; promotion/relegation between seasons
+  isn't modeled, only the current season's division scoping matters). This
+  also explained a bug from the earlier MFL-import session: the "A.J. Brown
+  owned by 5 different franchises" case wasn't a name collision — verified
+  via MFL's raw data that all 5 rosters carry the identical MFL player id
+  (14104), one real A.J. Brown legitimately rostered once per
+  division/conference, since each runs its own independent draft. That
+  session's "fix" (renaming repeats to "Name (TEAM)") was actively wrong —
+  it fragmented one real player into 4 fake ghost copies. Replaced with
+  proper division scoping: `GET /api/import/mfl/:id` now detects multiple
+  divisions/conferences (MFL models both; friendlier conference names like
+  "SEC"/"ACC" are preferred over the more common generic "Division 1..5"
+  labels when a commissioner set them) and returns a division picker
+  instead of guessing; re-requesting with `&division=<id>` imports just
+  that division's 12 teams as its own ordinary league profile — no new
+  in-app "conference" concept needed. Re-imported both of the user's
+  leagues correctly scoped: NCAA Power 5 → SEC (Auburn's conference), NFL
+  Promotion & Relegation → League One (Arsenal's division).*
 - ✅ 2026-08-25 — **Roster panel doesn't sort by ECR within a position** — a
   worse-ECR keeper (e.g. a earlier-drafted keeper) was camping the exact
   starter slot ahead of a better-ECR player drafted later, who should have

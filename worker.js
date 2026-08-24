@@ -431,7 +431,50 @@ export default {
             return first ? `${first} ${last}` : p.name || `Player ${id}`;
           };
 
-          const franchises = (league.franchises && league.franchises.franchise) || [];
+          // Some MFL leagues (e.g. a promotion/relegation gimmick, or a
+          // multi-conference dynasty spanning many teams) run several
+          // independently-drafted divisions/conferences under one umbrella
+          // league — same shared NFL player pool, but a division's roster
+          // set is only unique *within* that division. The same real player
+          // can legitimately be owned by one team in every division (verified
+          // against real data: A.J. Brown, MFL id 14104, rostered by one
+          // franchise in each of 5 divisions in a real 60-franchise league).
+          // Importing all divisions at once as a single 60-team league would
+          // make every such shared player collide under the app's name-keyed
+          // roster model, so a divisioned league is imported one division at
+          // a time — same as importing an ordinary single-division league,
+          // just pre-filtered to that division's franchises.
+          // MFL leagues label their divisions two ways: a generic "divisions"
+          // list (often left at defaults like "Division 1") and, sometimes,
+          // a friendlier "conferences" list a commissioner actually renamed
+          // (e.g. "SEC", "ACC") — both keyed by the same id franchises carry
+          // in their own `division` field. Prefer the conference names when
+          // they exist.
+          const divisionDefs =
+            (league.conferences && league.conferences.conference && league.conferences.conference.length && league.conferences.conference) ||
+            (league.divisions && league.divisions.division) ||
+            [];
+          const franchisesAll = (league.franchises && league.franchises.franchise) || [];
+          const requestedDivision = url.searchParams.get("division");
+          if (divisionDefs.length > 1 && !requestedDivision) {
+            const counts = {};
+            franchisesAll.forEach((f) => {
+              counts[f.division] = (counts[f.division] || 0) + 1;
+            });
+            return J({
+              name: league.name || "Imported League",
+              needsDivision: true,
+              divisions: divisionDefs.map((d) => ({ id: d.id, name: d.name, teams: counts[d.id] || 0 })),
+              _note: "This league has multiple divisions/conferences, each independently drafted/managed. Pick one to import as its own league profile — re-request with ?division=<id>.",
+            });
+          }
+          const franchises = requestedDivision
+            ? franchisesAll.filter((f) => f.division === requestedDivision)
+            : franchisesAll;
+          const divisionName = requestedDivision
+            ? ((divisionDefs.find((d) => d.id === requestedDivision) || {}).name || requestedDivision)
+            : null;
+
           const ownerById = {};
           const owners = [];
           const ownerSlot = {};
@@ -442,35 +485,20 @@ export default {
             ownerSlot[owner] = i + 1;
           });
 
-          // MFL's ~2600-player pool (real rosters plus deep/inactive names) has
-          // occasional real-name collisions — e.g. multiple distinct player IDs
-          // named "A.J. Brown". The app keys rosters by player NAME, not MFL id,
-          // so an undisambiguated collision would make one franchise silently
-          // "steal" another's player on the roster/keeper views. Disambiguate:
-          // the first occurrence of a name keeps it clean (best odds of being
-          // the one that actually matches the fantasy player pool), later
-          // occurrences get their MFL team appended.
-          const rosterFranchises = (rostersData && rostersData.rosters && rostersData.rosters.franchise) || [];
+          const rosterFranchises = ((rostersData && rostersData.rosters && rostersData.rosters.franchise) || []).filter(
+            (f) => ownerById[f.id]
+          );
           const rosterLines = [];
-          const seenNames = new Set();
           rosterFranchises.forEach((f) => {
-            const owner = ownerById[f.id] || `Team ${f.id}`;
+            const owner = ownerById[f.id];
             const list = f.player ? (Array.isArray(f.player) ? f.player : [f.player]) : [];
             list.forEach((p) => {
-              let name = nameFor(p.id);
-              if (seenNames.has(name)) {
-                const meta = players[p.id];
-                const team = meta && meta.team;
-                name = team ? `${name} (${team})` : `${name} #${p.id}`;
-              } else {
-                seenNames.add(name);
-              }
-              rosterLines.push(`${owner}|${name}|FA|NONE`);
+              rosterLines.push(`${owner}|${nameFor(p.id)}|FA|NONE`);
             });
           });
 
           return J({
-            name: league.name || "Imported League",
+            name: divisionName ? `${league.name || "Imported League"} — ${divisionName}` : (league.name || "Imported League"),
             teams: franchises.length || 12,
             owners,
             ownerSlot,
@@ -478,6 +506,7 @@ export default {
             _source: "mfl",
             _mflLeagueId: mflId,
             _mflYear: year,
+            _mflDivision: requestedDivision || null,
             _note: "Structure only — review draft type, superflex, scoring, keeper rules, and dates before saving. MFL doesn't expose a keeper flag or draft round via this export, so every player comes back FA/NONE — set keepers on Teams & Keepers after saving.",
           });
         } catch (e) {

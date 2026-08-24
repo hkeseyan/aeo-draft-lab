@@ -171,11 +171,24 @@ year, defaults to the current one) to pull owners/rosters via MFL's public
 export API (no OAuth needed). MFL doesn't expose ADP/ECR/projections, a
 draft-type/superflex flag, or a keeper flag either, so imported rosters land
 as FA/NONE for you to set on Teams & Keepers after saving — same
-review-before-save policy as Sleeper import. MFL's player pool has occasional
-real-name collisions (two different players sharing a display name); the
-import disambiguates repeats by appending the colliding player's MFL team so
-the app's name-keyed roster model doesn't silently merge two different
-people.
+review-before-save policy as Sleeper import.
+
+**Divisioned/conference leagues**: some MFL leagues run several
+independently-drafted divisions or conferences under one umbrella (an
+English-football-style promotion/relegation league with Premier
+League/Championship/League One divisions; a big multi-conference dynasty
+with SEC/ACC/Big Ten-style conferences). Each division shares the same NFL
+player pool but only has unique rosters *within* itself — the same real
+player can legitimately be owned by one team in every division. Importing
+all divisions at once would collide under this app's name-keyed roster
+model, so when `GET /api/import/mfl/:id` detects more than one
+division/conference it returns a picker (`needsDivision`, a `divisions`
+list) instead of guessing; the Leagues tab shows a dropdown for it.
+Re-requesting with `&division=<id>` imports just that division's teams as
+an ordinary league profile, same as any non-divisioned league from there
+on — no separate in-app "conference" concept, no promotion/relegation
+movement between seasons modeled (that's a future season's problem, not
+this one's).
 
 ## Target feature set (Draft Wizard baseline)
 
