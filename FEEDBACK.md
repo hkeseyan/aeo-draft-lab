@@ -16,11 +16,19 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
-- 🆕 2026-08-24 — **MFL (MyFantasyLeague.com) import** — user has leagues
+- 🔧 2026-08-24 — **MFL (MyFantasyLeague.com) import** — user has leagues
   there, wants the same kind of import Sleeper already has. MFL is an old,
   long-running platform with a historically simple export API (often no
   OAuth needed for a commissioner-enabled public export) — worth checking
   before assuming it's as involved as Yahoo's OAuth flow.
+  *Researched 2026-08-24 — confirmed no OAuth needed: plain GET to
+  `https://api.myfantasyleague.com/<year>/export?TYPE=league&L=<leagueId>&JSON=1`
+  (and `TYPE=rosters`) returns JSON directly for a public league export;
+  verified the endpoint responds cleanly (clean JSON error for a bad ID,
+  not an auth wall). Same shape as the Sleeper import: paste a league ID,
+  pull owners/rosters into the League Manager form for review, never
+  auto-save. Not yet built — need a real MFL league ID + year from the user
+  to build against and test.*
 - 🆕 2026-08-24 — **Live draft assistance synced to an external platform**
   (Yahoo/Sleeper/MFL) — during an actual draft happening on one of those
   sites, refresh in this app to pull the live picks so far and use it as a
@@ -41,11 +49,16 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   owner dropdown (defaults to you); starters shown slot-by-slot (empty ones
   say "— empty —"), bench below; "My picks & projected availability" moved
   to a new card below the draft board.*
-- 🆕 2026-08-24 — **Player pool size to ~200, later 250+ for some leagues** —
+- ✅ 2026-08-24 — **Player pool size to ~200, later 250+ for some leagues** —
   wants to see what happens with a bigger pool (current AEO CSV has 184,
   draft is 192 slots). This needs sourcing more ranked players, not just a
   code change — flagged to the user rather than fabricating ADP/ECR values
   for extra players, since accuracy here matters for real draft prep.
+  *Done — see the 2026-08-24 "ADP/ECR data feels stale" entry below for the
+  full investigation; pool expanded 184 → 250 rows using a live FantasyPros
+  pull, which has real ADP-consensus depth to ~338 players so 250 has
+  headroom before hitting fabricated/synthetic data. 250+ for other leagues
+  is just a matter of pulling more rows the same way.*
 - 🆕 2026-08-24 — **League *type* beyond keeper/redraft: dynasty, guillotine,
   bestball.** Dynasty: no keeper cost/value — every rostered player is
   assumed kept by default, removable individually later (e.g. a roster-space
@@ -110,12 +123,26 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   "My picks & projected availability" so it's visible without scrolling —
   specifically so they can check the on-the-clock team's roster/needs while
   deciding a pick.
-- 🆕 2026-08-24 — **ADP/ECR data feels stale** — user has specific players in
+- ✅ 2026-08-24 — **ADP/ECR data feels stale** — user has specific players in
   mind whose ADP should have dropped and ECR should have changed due to
   recent injuries, but the app doesn't reflect it. CLAUDE.md says a Cowork
   scheduled task refreshes this every Friday — worth checking whether that
   task is actually running/succeeding, or whether the lag is upstream
   (FantasyPros itself), before assuming the pipeline is broken.
+  *Investigated 2026-08-24 — the "Cowork scheduled task" doesn't exist: no
+  such routine turned up in `RemoteTrigger`'s list (only a daily KV-backup
+  routine and unrelated other-repo check-ins). CLAUDE.md's claim was
+  aspirational, not real — will correct it there. Separately, `proj` had
+  never actually been populated in `players-2026.csv` (100% zero across all
+  184 rows) despite CLAUDE.md describing a projections blend; the *embedded*
+  copy in `index.html` did have real projections for 175/184 rows from an
+  earlier one-off pull (2026-08-03) that was never written back to the CSV
+  file — the two had quietly diverged. Fixed by pulling live from
+  fantasypros.com directly (ECR + blended FP/Yahoo ADP, confirmed their
+  half-PPR consensus rankings go 882 deep) and rebuilding both files at 250
+  rows; also recovered season-long FPTS projections for the 59 players
+  FantasyPros exposes without a login (full projections are paywalled).
+  Shipped as PR #4 on `hkeseyan/aeo-draft-lab`, pending merge/deploy.*
 - 🆕 2026-08-24 — **Custom/personal rankings** — wants the ability to enter
   their own player rankings instead of relying solely on ECR. User explicitly
   deferred this themselves ("we can keep it that way until we develop a
@@ -182,11 +209,13 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   rounds 1-3") that biases their sim picks. Toggle per owner.
   *Done — per-owner QB/RB/WR/TE bias with enable toggles on the Teams &
   Keepers tab; persisted in saved config.*
-- 🆕 2026-08-20 — **Player pool is smaller than the draft** — `players-2026.csv`
+- ✅ 2026-08-20 — **Player pool is smaller than the draft** — `players-2026.csv`
   has 184 players but the draft is 192 slots (12 × 16), so mocks run dry ~8
   picks early and the last round or two become forced scavenging. Either
   extend the CSV past 192 or shorten `LEAGUE.rounds`. Surfaced while testing
   the new opponent model.
+  *Done 2026-08-24 — pool extended to 250, see the "ADP/ECR data feels
+  stale" entry above.*
 - 🆕 2026-08-20 — **Post-draft analysis / draft grade** — after a mock: grade,
   projected standings/finish vs the other 11 rosters, positional ranks,
   strengths & weaknesses, and biggest steals/reaches vs ADP.
