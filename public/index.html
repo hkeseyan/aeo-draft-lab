@@ -941,6 +941,24 @@ const LEAGUES_DEFAULT = {
 let LEAGUES = {...LEAGUES_DEFAULT};
 </script>
 <script>
+// ---------- GUEST MODE (?guest=1) ----------
+// A read-only, single-league, Draft-Room-only view for sharing a link without
+// exposing other leagues or letting the viewer save/change anything. This is
+// a UI-level restriction only (hides tabs, no-ops the save call) — someone
+// technical enough to hit the API directly from devtools isn't blocked by
+// this, which is an accepted tradeoff for "just show a friend," not a
+// security boundary for a hostile viewer.
+const GUEST_MODE = new URLSearchParams(location.search).get('guest')==='1';
+function applyGuestModeUI(){
+  if(!GUEST_MODE)return;
+  document.querySelectorAll('nav button').forEach(b=>{ if(b.dataset.view!=='room')b.style.display='none'; });
+  const sel=el('leagueSelect'); if(sel)sel.style.display='none';
+  // Hiding the tab isn't enough — the other views' data still populates the DOM
+  // in the background and a right-click "Inspect" would see it. Strip those
+  // sections down to nothing rather than just hiding them.
+  document.querySelectorAll('main .view').forEach(sec=>{ if(sec.id!=='view-room')sec.remove(); });
+}
+
 // ---------- STATE ----------
 let PLAYERS=[]; // {id,name,pos,team,adp,ecr,proj,drafted:false, keeper:null}
 let KEEPERS=[]; // {name, team, round}
@@ -1255,7 +1273,9 @@ function renderMyPicks(){
 // if the league has one) so empty slots are visible, not just a flat player list.
 // Whatever's left after starters is the bench.
 function slotRosterPlayers(roster,starters){
-  const remaining=roster.slice();
+  // Best ECR first, so e.g. a keeper with a worse ECR than someone drafted
+  // later gets pushed to FLEX/bench instead of camping the exact-position slot.
+  const remaining=roster.slice().sort((a,b)=>(a.ecr||9999)-(b.ecr||9999));
   const take=(pred)=>{ const i=remaining.findIndex(pred); return i===-1?null:remaining.splice(i,1)[0]; };
   const slots=[];
   ['QB','RB','WR','TE','K','DST'].forEach(pos=>{
@@ -1286,7 +1306,8 @@ function renderRoster(){
   el('rosterView').innerHTML = (rows+benchRows) || '—';
 }
 function renderKeeperList(){
-  el('keeperList').innerHTML = KEEPERS.map(k=>`<span class="pill">${k.name} · T${k.team} · R${k.round}</span>`).join('');
+  const wrap=el('keeperList'); if(!wrap)return;
+  wrap.innerHTML = KEEPERS.map(k=>`<span class="pill">${k.name} · T${k.team} · R${k.round}</span>`).join('');
 }
 
 // ---------- TEAMS & KEEPERS ----------
@@ -1950,7 +1971,7 @@ async function apiSetup(method,body){const r=await fetch('/api/setup?league='+en
 let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
-function saveSetup(){if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
+function saveSetup(){if(GUEST_MODE)return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
 function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},v.bias||{})};}); }
 async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||(Array.isArray(s.picks)&&s.picks.length))){
   if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
@@ -2028,11 +2049,17 @@ function applyLeagueProfile(id){
 
   initKeepers(); applyKeepers(); resetDraft();
   renderHeader(); updateKeeperCopy();
-  fillTradeSelects(); renderTrades(); renderBackupHistory();
-  if(el('teamsWrap')){renderTeams();renderTendencies();}
-  renderStratCards();
-  renderMocks();
-  if(el('leaguesList'))renderLeaguesTab();
+  if(!GUEST_MODE){
+    // Guest mode already stripped these views' DOM sections entirely (see
+    // applyGuestModeUI) — skip populating them too, both to avoid touching
+    // elements that no longer exist and so nothing sensitive is ever computed
+    // into memory/DOM for a guest session in the first place.
+    fillTradeSelects(); renderTrades(); renderBackupHistory();
+    if(el('teamsWrap')){renderTeams();renderTendencies();}
+    renderStratCards();
+    renderMocks();
+    if(el('leaguesList'))renderLeaguesTab();
+  }
   loadSetup();
 }
 function switchLeague(id){
@@ -2067,6 +2094,8 @@ async function fetchCloudLeagues(){
 async function boot(){
   LEAGUES=await fetchCloudLeagues();
   fillLeagueSelect();
+  applyGuestModeUI();
+  if(GUEST_MODE){ applyLeagueProfile('aeo-keepers'); return; }
   const params=new URLSearchParams(location.search);
   const urlLeague=params.get('league');
   let saved=null; try{saved=localStorage.getItem('league');}catch(e){}

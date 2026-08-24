@@ -16,6 +16,36 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-08-25 — **Guest/demo mode for the Draft Room** — user wants to show
+  a friend the app without exposing other leagues' data, real keepers/trades
+  beyond the Draft Room, or letting them save/change anything (trades,
+  keepers, mocks). Wants a separate URL or a "guest login." Scoping the
+  robustness (hide-the-UI only vs. also blocking the API itself from guest
+  writes) with the user before building — see conversation.
+  *Done — `?guest=1` locks the app to AEO-Keepers, Draft Room only. User
+  chose UI-only enforcement (not a real auth/API lockdown) as the right
+  tradeoff for "just show a friend." `saveSetup()` no-ops in guest mode so
+  no pick/undo/queue action ever reaches the cloud; the other views'
+  `<section>`s are removed from the DOM entirely at boot (not just
+  CSS-hidden) so a right-click "Inspect" doesn't leak trades/keepers/other
+  leagues either. A technically motivated friend could still hit the API
+  directly from devtools — accepted, not in scope.
+- 🆕 2026-08-25 — **SEC-only view for NCAA Power 5 Football** — that league is
+  5 conferences × 12 teams, unique rosters *within* a conference only (so a
+  given player can be legitimately owned by up to 5 different teams
+  league-wide, one per conference). User is in the SEC (Auburn) and this
+  league is already post-draft, so it's in-season-management territory now,
+  not draft prep. Explicitly optional ("if you can view specifically SEC
+  then good, otherwise don't worry about it") — deferred, not started.
+- ✅ 2026-08-25 — **Roster panel doesn't sort by ECR within a position** — a
+  worse-ECR keeper (e.g. a earlier-drafted keeper) was camping the exact
+  starter slot ahead of a better-ECR player drafted later, who should have
+  bumped the keeper to FLEX instead. Example: Quinshon Judkins (keeper)
+  showing as RB1 ahead of James Cook and Josh Jacobs despite both having
+  better ECR.
+  *Done — `slotRosterPlayers()` sorts the roster by ECR (best first) before
+  filling exact-position slots, so better-ECR players win the exact slot and
+  push worse-ECR ones down to FLEX/bench.*
 - ✅ 2026-08-24 — **MFL (MyFantasyLeague.com) import** — user has leagues
   there, wants the same kind of import Sleeper already has. MFL is an old,
   long-running platform with a historically simple export API (often no
