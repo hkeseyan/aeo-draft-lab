@@ -16,6 +16,30 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🆕 2026-08-25 — **Multiple people logging in with separate save files** —
+  user's friend is now testing the app (via the guest link) and this came up
+  as a "maybe later" idea: real multi-user accounts, each with their own
+  save data, rather than one shared setup per league. Explicitly low
+  priority ("not that important"). Would need real auth (the app currently
+  has none beyond the optional `AUTH_TOKEN` env var that gates the whole
+  API, not per-user) — a bigger lift than guest mode's UI-only trick. Not
+  started.
+- ✅ 2026-08-25 — **AEO-Keepers draft order was wrong: Edward/Aren slots
+  swapped** — user's friend (testing via the guest link) caught that Edward
+  should be slot 9 and Aren slot 8, not the reverse. Real keepers and pick
+  trades already existed for both, so the fix had to touch more than just
+  `ownerSlot` — a pick trade recorded as "overall #53 belongs to slot 9"
+  meant slot *9* at the time (Aren, under the wrong order), and after
+  swapping the slots that same stored `9` would silently point at Edward
+  instead. *Done — swapped `ownerSlot.Edward`/`ownerSlot.Aren` on the league
+  profile, then remapped every `pickOwnerOverride` value and every
+  `picks[].slot` field that was `8` or `9` (swapping them) so trades and the
+  6 pre-placed keeper picks still point at the right person under the
+  corrected order. Applied directly via the API (pure data fix, no code
+  change, nothing to deploy) — verified counts unchanged (34 keepers, 20
+  pick-trade entries, 33 picks) and both `/api/leagues/aeo-keepers` and
+  `/api/setup` auto-backed-up the pre-fix state first, so it's a one-click
+  restore away if anything looks wrong.*
 - ✅ 2026-08-25 — **Guest/demo mode for the Draft Room** — user wants to show
   a friend the app without exposing other leagues' data, real keepers/trades
   beyond the Draft Room, or letting them save/change anything (trades,
