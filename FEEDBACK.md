@@ -16,6 +16,21 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🆕 2026-08-24 — **MFL (MyFantasyLeague.com) import** — user has leagues
+  there, wants the same kind of import Sleeper already has. MFL is an old,
+  long-running platform with a historically simple export API (often no
+  OAuth needed for a commissioner-enabled public export) — worth checking
+  before assuming it's as involved as Yahoo's OAuth flow.
+- 🆕 2026-08-24 — **Live draft assistance synced to an external platform**
+  (Yahoo/Sleeper/MFL) — during an actual draft happening on one of those
+  sites, refresh in this app to pull the live picks so far and use it as a
+  real-time companion (not just a one-time structure import). User
+  explicitly deprioritized this ("can probably make do without it") —
+  curious whether it's possible, not asking for it now.
+- 🆕 2026-08-24 — **ESPN / FanTracks import** — no current leagues on either
+  platform; might join one in the next week or two. Explicitly deferred,
+  lowest priority of the platform-import requests.
+
 - ✅ 2026-08-24 — **Roster panel rework** (elaborates the 2026-08-24 "can't see
   a rival's roster" entry above): dropdown to view any owner's roster
   (defaults to mine); reposition so it's next to Best Available instead of
