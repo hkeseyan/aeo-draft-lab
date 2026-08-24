@@ -149,6 +149,13 @@ Sleeper doesn't expose ADP/ECR/projections or a reliable draft-type/superflex
 flag, so those aren't guessed — only owners/rosters get pre-filled, and
 nothing saves until you review the form and click Save, same as manual entry.
 
+**MFL import**: same idea, for MyFantasyLeague.com — paste a league ID (and
+year, defaults to the current one) to pull owners/rosters via MFL's public
+export API (no OAuth needed). MFL doesn't expose ADP/ECR/projections, a
+draft-type/superflex flag, or a keeper flag either, so imported rosters land
+as FA/NONE for you to set on Teams & Keepers after saving — same
+review-before-save policy as Sleeper import.
+
 ## Target feature set (Draft Wizard baseline)
 
 FantasyPros' **Draft Wizard** is the agreed working baseline for where this

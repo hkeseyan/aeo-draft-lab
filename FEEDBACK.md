@@ -16,19 +16,22 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
-- 🔧 2026-08-24 — **MFL (MyFantasyLeague.com) import** — user has leagues
+- ✅ 2026-08-24 — **MFL (MyFantasyLeague.com) import** — user has leagues
   there, wants the same kind of import Sleeper already has. MFL is an old,
   long-running platform with a historically simple export API (often no
   OAuth needed for a commissioner-enabled public export) — worth checking
   before assuming it's as involved as Yahoo's OAuth flow.
-  *Researched 2026-08-24 — confirmed no OAuth needed: plain GET to
-  `https://api.myfantasyleague.com/<year>/export?TYPE=league&L=<leagueId>&JSON=1`
-  (and `TYPE=rosters`) returns JSON directly for a public league export;
-  verified the endpoint responds cleanly (clean JSON error for a bad ID,
-  not an auth wall). Same shape as the Sleeper import: paste a league ID,
-  pull owners/rosters into the League Manager form for review, never
-  auto-save. Not yet built — need a real MFL league ID + year from the user
-  to build against and test.*
+  *Done 2026-08-24 — `GET /api/import/mfl/:leagueId?year=` (mirrors the
+  Sleeper route exactly: structure-only, review-before-save, never
+  auto-saves). Tested live against the user's two leagues: league 42578
+  ("NCAA Power 5 Football", 60 franchises, 1404 rostered players — college
+  team names as owners) and league 49263 ("NFL Promotion & Relegation", 36
+  franchises, no rosters yet — pre-draft). MFL's player export uses
+  numeric IDs ("Last, First" names) cached 24h in KV like Sleeper's
+  dictionary. MFL doesn't expose a keeper flag or draft round via this
+  export, so every player comes back FA/NONE — set keepers on Teams &
+  Keepers after saving, same limitation Sleeper import already has. New UI
+  card on the Leagues tab, right below the Sleeper one.*
 - 🆕 2026-08-24 — **Live draft assistance synced to an external platform**
   (Yahoo/Sleeper/MFL) — during an actual draft happening on one of those
   sites, refresh in this app to pull the live picks so far and use it as a
