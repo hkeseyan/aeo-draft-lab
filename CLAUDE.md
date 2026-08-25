@@ -42,6 +42,23 @@ Deploys as a single **Cloudflare Worker** to
   (superseded by `worker.js`). Left in place for reference only; unused by
   the current deploy. Don't touch it.
 
+## Network access for data refreshes
+
+Pulling live ADP/ECR (FantasyPros, Yahoo, etc.) requires this session's
+environment **Network Access set to Full**, not the Trusted default —
+Trusted is a default-deny egress policy that blocks essentially all outbound
+web traffic, including fantasypros.com. Check with the user before assuming
+it's set; if a fetch to a normal web page fails with `EGRESS_BLOCKED` or the
+proxy returns 403, that's the cause, not a bug to route around.
+
+With Full access, `curl` (not the `WebFetch` tool — it checks a separate,
+stale policy) can reach FantasyPros. Their ADP page is a client-rendered SPA
+with no reachable data export, but
+`fantasypros.com/nfl/rankings/half-point-ppr-cheatsheets.php` embeds a
+server-rendered `ecrData` JSON blob (ECR, tier, team, position for ~900
+players) — that's the known-working path. See `SPECS.md` → Player data for
+what was pulled 2026-08-25 and the ADP gap that's still open.
+
 ## API (implemented in worker.js)
 
 - `GET /api/setup` — health/config check, returns `{}`.

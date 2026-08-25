@@ -98,8 +98,8 @@ entries in `FEEDBACK.md`.
 |---|---|---|
 | **Mock Draft Simulator** | Fast mocks vs simulated opponents, no waiting between picks | ✅ Have it — Draft Room |
 | **Keeper support** | Enter keepers per team with the round each costs; mocks account for them | ✅ Have it, and ours is more specific (real rosters + locked keepers) |
-| **Opponent pick logic** | Weighs rankings + team needs + positional scarcity; Basic vs Advanced modes | ⚠️ Partial — ours picks randomly within an ADP noise window; no roster-need or scarcity awareness |
-| **Draft Intel** | Analyzes leaguemates' past drafts for tendencies; toggle per team into mocks | ❌ Missing — but high value here since it's the same 12 owners yearly |
+| **Opponent pick logic** | Weighs rankings + team needs + positional scarcity; Basic vs Advanced modes | ✅ Have it — rivals score on ADP + roster need, with a hard veto on depth-capped positions (see Opponent model, above) |
+| **Draft Intel** | Analyzes leaguemates' past drafts for tendencies; toggle per team into mocks | ✅ Have it, hand-set instead of mined — per-owner QB/RB/WR/TE bias with an enable toggle (Teams & Keepers tab) |
 | **Player queue** | Shortlist of targets, surfaced when you're on the clock | ❌ Missing |
 | **Tiers** | Tier breaks in rankings + "players left in tier" counter that reddens | ❌ Missing (CSV already carries a `tier` column, unused) |
 | **Draft Analyzer** | Post-draft grade, projected standings, positional ranks, strengths/weaknesses, steals & reaches | ❌ Missing |
@@ -125,6 +125,31 @@ finish), not in the overall layout.
   leagues are a separate roadmap item (multi-league selector), not part of
   matching Draft Wizard here.
 - Accounts, subscriptions, tiers of access — personal tool.
+
+## Player data
+
+`players-2026.csv` (embedded into `public/index.html` as `PLAYERS_CSV`) is
+250 players as of 2026-08-25:
+
+- **Rows 1-184** (original): blended FantasyPros ECR + FantasyPros/Yahoo ADP,
+  pulled 2026-08-03.
+- **Rows 185-250** (added 2026-08-25): real, live FantasyPros consensus ECR
+  and tier — 112 experts, dated the same day — pulled directly via `curl`
+  once this session's environment Network Access was switched from Trusted
+  to Full (Trusted's default-deny egress policy blocks fantasypros.com
+  entirely; the ADP page itself is a client-rendered SPA with no reachable
+  export, but `/nfl/rankings/half-point-ppr-cheatsheets.php` embeds a
+  server-rendered `ecrData` JSON blob with ECR/tier/team/position for ~900
+  players — that's the reusable path for future refreshes).
+  **Caveat**: no live ADP feed was reached for this range (Yahoo's ADP page
+  requires a signed-in session), so `adp` and `fp_adp` mirror `ecr` for
+  these rows rather than an independently-sourced market ADP — expect the
+  pool/value column (Δ = adp − ecr) to read 0 for anything below rank ~184
+  until real ADP is merged in for that range.
+
+Refreshing this data (whether extending further or re-pulling the whole
+file closer to the draft) needs Full network access on the session's
+environment — see `CLAUDE.md` for that setting.
 
 ## Deployment
 

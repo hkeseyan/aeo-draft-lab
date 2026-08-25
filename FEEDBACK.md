@@ -46,11 +46,14 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   rounds 1-3") that biases their sim picks. Toggle per owner.
   *Done — per-owner QB/RB/WR/TE bias with enable toggles on the Teams &
   Keepers tab; persisted in saved config.*
-- 🆕 2026-08-20 — **Player pool is smaller than the draft** — `players-2026.csv`
+- ✅ 2026-08-25 — **Player pool is smaller than the draft** — `players-2026.csv`
   has 184 players but the draft is 192 slots (12 × 16), so mocks run dry ~8
   picks early and the last round or two become forced scavenging. Either
   extend the CSV past 192 or shorten `LEAGUE.rounds`. Surfaced while testing
   the new opponent model.
+  *Done — extended to 250 players using live FantasyPros consensus ECR/tier
+  data (112 experts, dated 2026-08-25). See SPECS.md → Player data for the
+  ADP caveat on the newly added rows and how this became fetchable at all.*
 - 🆕 2026-08-20 — **Post-draft analysis / draft grade** — after a mock: grade,
   projected standings/finish vs the other 11 rosters, positional ranks,
   strengths & weaknesses, and biggest steals/reaches vs ADP.
