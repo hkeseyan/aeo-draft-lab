@@ -16,6 +16,25 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-08-26 — **Incident: production briefly reverted to pre-multi-league
+  code.** A separate Claude Code session (this file's earlier entries), unaware
+  of the weekend's multi-league work already merged to `main`, kept pushing to
+  its own stale feature branch. Cloudflare Workers Build has **no
+  environment/branch gating** — confirmed it deploys the single production
+  Worker on a push to *any* branch, PR or no PR, merged or not. That session's
+  last push (after its own PR had already closed) was simply the most recent
+  deploy trigger, so it silently overwrote the live site with pre-multi-league
+  code — no league selector, no owner names on the draft board. User caught it
+  by noticing mobile looked older than what they'd verified over the weekend.
+  *Fixed same day: synced to `origin/main` and pushed it fresh to force a
+  correct rebuild; verified live (`ownerLabel`/`leagueSelect` present in the
+  served HTML, `/api/setup` returned the real in-progress draft state
+  untouched — KV data was never at risk, only the deployed code).* **Root
+  cause still open**: the Cloudflare dashboard needs the Workers Build
+  integration restricted to deploy only from `main` (Claude has no dashboard
+  access to do this). Until then, added a hard rule to `CLAUDE.md` — sync with
+  `origin/main` before any push, treat every push as a live deploy regardless
+  of branch/PR state.
 - 🔧 2026-08-25 — **Roadmap/priority order, as of today.** User wants friends
   actively using the app now for feedback. Stated order: (1) this push —
   board row/header fixes, keeper cost/value view, friendlier roster entry
