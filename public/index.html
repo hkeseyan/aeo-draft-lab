@@ -395,10 +395,15 @@
       <div class="small muted" id="mflImportStatus" style="margin-top:6px"></div>
     </div>
     <div class="card">
-      <h2>Connect Yahoo (in progress)</h2>
-      <p class="small muted">OAuth handshake works; the roster-import mapping isn't built yet. "List my leagues" is a diagnostic to see what Yahoo returns.</p>
+      <h2>Import from Yahoo</h2>
+      <p class="small muted">Paste a league id — the number in <code>football.fantasysports.yahoo.com/f1/<b>123456</b></code> — or a full league key like <code>nfl.l.123456</code> for a past season. A <b>public</b> league needs no Yahoo sign-in: the Worker signs the request with the app's own credentials. Connect an account below only if the league is private.</p>
       <div class="row">
-        <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account</button>
+        <input type="text" id="yahooLeagueId" placeholder="123456 or nfl.l.123456" style="min-width:180px">
+        <button class="btn" id="importYahooBtn">Import from Yahoo</button>
+      </div>
+      <div class="small muted" id="yahooImportStatus" style="margin-top:6px"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account (private leagues)</button>
         <button class="btn ghost" id="yahooListBtn">List my leagues</button>
       </div>
       <div class="small muted" id="yahooStatus" style="margin-top:6px"></div>
@@ -2053,6 +2058,31 @@ async function importFromSleeper(){
     el('sleeperImportStatus').textContent='✓ Imported as a NEW league — review fields below (draft type, superflex, scoring, keeper rules aren\'t set by this import) then Save to create it. This will not overwrite any existing league.';
   }catch(e){ el('sleeperImportStatus').textContent='⚠ Import failed: '+e.message; }
 }
+async function importFromYahoo(){
+  const id=el('yahooLeagueId').value.trim(); if(!id)return;
+  // Same policy as importFromSleeper()/importFromMfl(): always a NEW league,
+  // never whatever the form happened to be showing.
+  editingLeagueId=null;
+  el('yahooImportStatus').textContent='Importing…';
+  try{
+    const r=await fetch('/api/import/yahoo/'+encodeURIComponent(id));
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
+    el('lgName').value=data.name||'';
+    el('lgTeams').value=data.teams||12;
+    el('lgOwners').value=(data.owners||[]).join(', ');
+    renderOwnerSlotInputs(data.owners||[], data.ownerSlot||{}, (data.owners||[])[0]||'');
+    el('lgRostersRaw').value=data.rostersRaw||'';
+    if(data.draftType&&el('lgDraftType'))el('lgDraftType').value=data.draftType;
+    if(data.leagueType&&el('lgLeagueType')){el('lgLeagueType').value=data.leagueType; updateLgKeeperFieldsVisibility();}
+    if(data.scoringLabel&&el('lgScoring'))el('lgScoring').value=data.scoringLabel;
+    if(el('lgSuperflex'))el('lgSuperflex').checked=!!data.superflex;
+    if(data.starters&&Object.keys(data.starters).length)renderStartersInputs(data.starters);
+    const rounds=(data.rostersRaw||'').split('\n').filter(Boolean).length;
+    el('yahooImportStatus').textContent='✓ Imported '+(data.owners||[]).length+' teams / '+rounds+' rostered players as a NEW league via '+(data._authMode||'the API')+
+      '. Review the fields below — draft rounds came through where Yahoo had them, but keeper COST is left blank because that rule is yours, not Yahoo\'s — then Save.';
+  }catch(e){ el('yahooImportStatus').textContent='⚠ Import failed: '+e.message; }
+}
 async function importFromMfl(){
   const mid=el('mflLeagueId').value.trim(); if(!mid)return;
   const year=el('mflYear').value.trim()||'2026';
@@ -2618,6 +2648,7 @@ el('deleteLeagueBtn').onclick=deleteSelectedLeague;
 el('saveLeagueBtn').onclick=saveLeagueForm;
 el('importSleeperBtn').onclick=importFromSleeper;
 el('importMflBtn').onclick=importFromMfl;
+el('importYahooBtn').onclick=importFromYahoo;
 el('yahooConnectBtn').onclick=connectYahoo;
 el('yahooListBtn').onclick=listYahooLeagues;
 el('lgOpenRosterBuilderBtn').onclick=openRosterBuilder;

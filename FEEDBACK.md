@@ -38,8 +38,22 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   (verified against `/game/nfl`, `/game/nfl/game_weeks` and a `/players`
   lookup). YFPY's README claims no credentials are needed for public leagues,
   but its code still requires consumer key/secret — treat that README line as
-  stale. Waiting on league IDs to test the HTML fallback and to confirm the
-  leagues are genuinely public.*
+  stale.*
+  *Built 2026-08-26 — `GET /api/import/yahoo/:leagueKey` (bare id or full
+  league key), pulling settings + teams + rosters + draft results, same
+  review-before-save policy as Sleeper/MFL, plus an "Import from Yahoo" card on
+  the Leagues tab. It recovers the real draft round per player, which neither
+  the Sleeper nor MFL import can. Uses the stored bearer token when a Yahoo
+  account is connected (so private leagues work too), otherwise the app
+  signature. Verification: signature is byte-identical to the `oauth-signature`
+  npm package; Yahoo accepts the request shape (a deliberately fake consumer key
+  moves the error from `unable_to_determine_oauth_type` to
+  `consumer_key_unknown`, proving the signature parsed and OAuth1 is still live);
+  and the response parsing runs against the `yahoo-fantasy` package's real
+  recorded Yahoo payloads — which caught a genuine bug, since Yahoo reports
+  `draft_type: "live"` for auctions and flags them only in `is_auction_draft`.
+  Still needed to finish: the `YAHOO_CLIENT_ID`/`YAHOO_CLIENT_SECRET` secrets
+  (`npx wrangler secret put`) and the league ids, for a real end-to-end run.*
 
 - ✅ 2026-08-26 — **Custom rankings (v1, ahead of the full projections
   engine).** User wants their own player rankings in the app now — "it

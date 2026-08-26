@@ -18,6 +18,11 @@
 //   POST    /api/leagues/:id/restore  -> roll back a league profile to a snapshot {ts}
 //   GET     /api/import/sleeper/:sleeperLeagueId -> best-effort structure import
 //   GET     /api/import/mfl/:mflLeagueId          -> best-effort structure import (?year=)
+//   GET     /api/import/yahoo/:leagueKey          -> best-effort structure import
+//                                     (public leagues need only the app's
+//                                     YAHOO_CLIENT_ID/SECRET — 2-legged OAuth1,
+//                                     no user sign-in; uses the stored user
+//                                     token instead when one exists)
 //   GET/POST /api/mocks            -> list / save mock drafts
 //   GET/DELETE /api/mocks/:id      -> load / delete a mock
 //   GET     /api/auth/state        -> {enabled, user} — is auth on, who am I
@@ -227,6 +232,90 @@ async function getYahooAccessToken(env, kv, url) {
   await kv.put(YAHOO_AUTH_KEY, JSON.stringify(updated));
   return updated.access_token;
 }
+
+// ---- Yahoo public-league access (2-legged OAuth 1.0a) --------------------
+// Yahoo's Fantasy API refuses every unauthenticated request with
+// oauth_problem="unable_to_determine_oauth_type", but a *public* league does
+// not need a signed-in user — only an app signature. That's 2-legged OAuth 1.0a:
+// the request carries oauth_consumer_key and an HMAC-SHA1 signature made with
+// the consumer secret alone, no oauth_token and no consent screen. So public
+// leagues are readable with just YAHOO_CLIENT_ID/YAHOO_CLIENT_SECRET, without
+// waiting on Yahoo to approve user-level Fantasy API access.
+//
+// When a user HAS connected their Yahoo account (see /auth/yahoo/*), the stored
+// bearer token is used instead — same routes, but private leagues work too.
+const pct = (s) =>
+  encodeURIComponent(String(s)).replace(/[!*'()]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+
+async function hmacSha1B64(key, message) {
+  const k = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(key), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]
+  );
+  return b64(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message)));
+}
+
+// Builds the fully-signed GET url. Params go in the query string (not an
+// Authorization header) — both are legal, and it keeps the fetch call trivial.
+async function yahooOauth1Url(env, baseUrl) {
+  const params = {
+    format: "json",
+    oauth_consumer_key: env.YAHOO_CLIENT_ID,
+    oauth_nonce: randomB64(12).replace(/[^A-Za-z0-9]/g, ""),
+    oauth_signature_method: "HMAC-SHA1",
+    oauth_timestamp: String(Math.floor(Date.now() / 1000)),
+    oauth_version: "1.0",
+  };
+  const normalized = Object.keys(params).sort().map((k) => `${pct(k)}=${pct(params[k])}`).join("&");
+  const base = `GET&${pct(baseUrl)}&${pct(normalized)}`;
+  // 2-legged: the token secret half of the signing key is empty, but the "&" stays.
+  const signature = await hmacSha1B64(`${pct(env.YAHOO_CLIENT_SECRET)}&`, base);
+  return `${baseUrl}?${normalized}&oauth_signature=${pct(signature)}`;
+}
+
+// One GET against the Fantasy API, bearer-token first and app-signature second.
+async function yahooApiGet(env, kv, url, endpointPath) {
+  const baseUrl = `https://fantasysports.yahooapis.com/fantasy/v2${endpointPath}`;
+  let token = null;
+  try { token = await getYahooAccessToken(env, kv, url); } catch { token = null; }
+  const r = token
+    ? await fetch(`${baseUrl}?format=json`, { headers: { Authorization: `Bearer ${token}` } })
+    : await fetch(await yahooOauth1Url(env, baseUrl));
+  const text = await r.text();
+  if (!r.ok) {
+    const hint = /oauth/i.test(text) ? " (Yahoo rejected the app signature — check YAHOO_CLIENT_ID/SECRET, and that the league is public)" : "";
+    throw new Error(`Yahoo returned ${r.status} for ${endpointPath}${hint}: ${text.slice(0, 300)}`);
+  }
+  try { return JSON.parse(text); } catch { throw new Error(`Yahoo returned non-JSON for ${endpointPath}: ${text.slice(0, 200)}`); }
+}
+
+// Yahoo's JSON is XML wearing a JSON hat: collections are objects keyed
+// "0","1",... alongside a `count`, and one entity is an array of small fragment
+// objects (sometimes nested a level deeper). These two put it back into
+// ordinary JS so the mapping below reads like the Sleeper/MFL importers.
+function yList(obj) {
+  if (!obj || typeof obj !== "object") return [];
+  // Only the numeric keys are collection entries. A roster node, for instance,
+  // sits alongside coverage_type/date/is_editable siblings that are metadata,
+  // and `count` is never an entry either.
+  return Object.keys(obj)
+    .filter((k) => /^\d+$/.test(k))
+    .sort((a, b) => Number(a) - Number(b))
+    .map((k) => obj[k])
+    .filter(Boolean);
+}
+function yFlat(node, out) {
+  out = out || {};
+  if (Array.isArray(node)) node.forEach((n) => yFlat(n, out));
+  else if (node && typeof node === "object") Object.assign(out, node);
+  return out;
+}
+
+// Yahoo roster slot names -> ours. BN/IR aren't starters, so they're dropped.
+const YAHOO_SLOT_MAP = {
+  QB: "QB", RB: "RB", WR: "WR", TE: "TE", K: "K", DEF: "DST",
+  "W/R": "FLEX", "W/T": "FLEX", "R/W": "FLEX", "W/R/T": "FLEX", "R/W/T": "FLEX",
+  "Q/W/R/T": "SUPERFLEX", "QB/W/R/T": "SUPERFLEX",
+};
 
 export default {
   async fetch(request, env) {
@@ -883,6 +972,117 @@ export default {
           });
         } catch (e) {
           return J({ error: "MFL import failed: " + e.message }, 502);
+        }
+      }
+
+      // ---- /api/import/yahoo/:leagueKey : best-effort structure import ----
+      // Same policy as the Sleeper and MFL importers: structure only, returned
+      // for review in the League Manager form, never written anywhere itself.
+      // Unlike those two this one can also recover the real draft round per
+      // player (Yahoo exposes draft results), which is the number a keeper cost
+      // rule is derived from — the cost itself isn't guessed, since the rule is
+      // per-league.
+      //
+      // Accepts a bare league id ("123456", assumed to be this season's NFL) or
+      // a full league key ("nfl.l.123456", or an older season's "449.l.123456").
+      if (path.startsWith("/api/import/yahoo/")) {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        if (!env.YAHOO_CLIENT_ID || !env.YAHOO_CLIENT_SECRET) {
+          return J({
+            error: "Yahoo app credentials aren't configured on the Worker. Set them with: npx wrangler secret put YAHOO_CLIENT_ID (and YAHOO_CLIENT_SECRET). A public league needs only these — no Yahoo sign-in.",
+          }, 400);
+        }
+        const rawId = decodeURIComponent(path.split("/").pop());
+        if (!/^[A-Za-z0-9._-]{1,40}$/.test(rawId)) return J({ error: "bad league id" }, 400);
+        const leagueKey = /^\d+$/.test(rawId) ? `nfl.l.${rawId}` : rawId;
+        const debug = url.searchParams.get("debug") === "1";
+        try {
+          const [settingsRaw, rostersRawResp, draftRaw] = await Promise.all([
+            yahooApiGet(env, kv, url, `/league/${leagueKey}/settings`),
+            yahooApiGet(env, kv, url, `/league/${leagueKey}/teams/roster`),
+            yahooApiGet(env, kv, url, `/league/${leagueKey}/draftresults`).catch(() => null),
+          ]);
+
+          const leagueNode = settingsRaw && settingsRaw.fantasy_content && settingsRaw.fantasy_content.league;
+          if (!leagueNode) return J({ error: "Yahoo didn't return a league — check the id, and that the league is public." }, 404);
+          const meta = yFlat(Array.isArray(leagueNode) ? leagueNode[0] : leagueNode);
+          const settings = yFlat((Array.isArray(leagueNode) ? leagueNode[1] : {}) || {}).settings || {};
+          const set = yFlat(settings);
+
+          // Starting lineup, from Yahoo's roster_positions.
+          const starters = {};
+          yList(set.roster_positions || {}).forEach((rp) => {
+            const p = yFlat(rp).roster_position || yFlat(rp);
+            const slot = YAHOO_SLOT_MAP[p.position];
+            if (!slot) return; // BN / IR / anything we don't model
+            starters[slot] = (starters[slot] || 0) + (Number(p.count) || 1);
+          });
+
+          // Teams + rosters come back together from /teams/roster.
+          const teamsNode = yFlat(
+            (Array.isArray(rostersRawResp.fantasy_content.league) ? rostersRawResp.fantasy_content.league[1] : {}) || {}
+          ).teams || {};
+          const owners = [];
+          const ownerSlot = {};
+          const ownerByTeamKey = {};
+          const rosterLines = [];
+          const playerRound = {}; // "teamKey|playerKey" -> draft round
+          const playerKeyRound = {};
+
+          yList(draftRaw && draftRaw.fantasy_content && draftRaw.fantasy_content.league
+            ? yFlat(draftRaw.fantasy_content.league[1] || {}).draft_results || {}
+            : {}).forEach((dr) => {
+            const d = yFlat(dr).draft_result || yFlat(dr);
+            if (d && d.player_key) playerKeyRound[d.player_key] = Number(d.round) || null;
+          });
+
+          yList(teamsNode).forEach((entry, i) => {
+            const team = (yFlat(entry).team) || [];
+            const tMeta = yFlat(Array.isArray(team) ? team[0] : team);
+            const owner = (tMeta.name && String(tMeta.name)) || `Team ${i + 1}`;
+            if (!owners.includes(owner)) owners.push(owner);
+            ownerSlot[owner] = i + 1;
+            ownerByTeamKey[tMeta.team_key] = owner;
+            const rosterWrap = yFlat(Array.isArray(team) ? team.slice(1) : {}).roster || {};
+            const playersNode = yFlat(yList(rosterWrap)).players || yFlat(rosterWrap).players || {};
+            yList(playersNode).forEach((pe) => {
+              const pl = yFlat(pe).player || [];
+              const pMeta = yFlat(Array.isArray(pl) ? pl[0] : pl);
+              const name = (pMeta.name && (pMeta.name.full || pMeta.name.ascii_full)) || pMeta.player_key;
+              if (!name) return;
+              const round = playerKeyRound[pMeta.player_key];
+              rosterLines.push(`${owner}|${name}|${round != null ? round : "FA"}|NONE`);
+            });
+          });
+
+          // Yahoo reports draft_type as live/offline/autopick and flags auctions
+          // separately — "live" alone doesn't tell you it was an auction.
+          const isAuction = String(set.is_auction_draft) === "1" || /auction/i.test(String(set.draft_type || ""));
+          const scoringLabels = { head: "Head-to-head", point: "Points", points: "Points", roto: "Rotisserie" };
+
+          const out = {
+            name: meta.name || "Imported League",
+            teams: Number(meta.num_teams) || owners.length || 12,
+            owners,
+            ownerSlot,
+            rostersRaw: rosterLines.join("\n"),
+            starters,
+            draftType: isAuction ? "auction" : "snake",
+            leagueType: Number(set.is_keeper_league) === 1 ? "keeper" : "redraft",
+            keeperCostType: isAuction ? "dollar" : "round",
+            scoringLabel: scoringLabels[String(meta.scoring_type || set.scoring_type)] || "TBD",
+            superflex: !!starters.SUPERFLEX,
+            _source: "yahoo",
+            _yahooLeagueKey: leagueKey,
+            _yahooSeason: meta.season || null,
+            _authMode: (await kv.get(YAHOO_AUTH_KEY)) ? "user-token" : "app-signature (2-legged OAuth1)",
+            _note:
+              "Structure only — review draft type, scoring, keeper rules and dates before saving. Draft rounds came through where Yahoo had draft results (field 3 of each roster line); keeper COST is left as NONE because the cost rule is per-league (e.g. 'one round earlier than last year') and isn't Yahoo's to tell us.",
+          };
+          if (debug) out._raw = { settings: settingsRaw, rosters: rostersRawResp, draft: draftRaw };
+          return J(out);
+        } catch (e) {
+          return J({ error: "Yahoo import failed: " + e.message }, 502);
         }
       }
 

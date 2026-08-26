@@ -148,11 +148,12 @@ current than this list.
    analysis; ESPN/FanTracks import; Yahoo Fantasy import (needs the user to
    register an OAuth app first — see conversation history, not recorded here
    since it involves credentials; also blocked on Yahoo's manual Fantasy
-   Sports API access review as of 2026-08-23). Probed 2026-08-26 whether
-   public Yahoo league data can be read without OAuth as a fallback — it
-   can't, as far as could be tested; the planned fallback is a paste-based
-   import instead. See `SPECS.md` → "Yahoo import: where it stands, and the
-   fallback".
+   Sports API access review as of 2026-08-23). **Superseded 2026-08-26**: the pending review
+   is not the gate for public leagues. Yahoo reads them with 2-legged OAuth
+   1.0a — app consumer key + HMAC-SHA1 signature, no user sign-in — so
+   `GET /api/import/yahoo/:leagueKey` is built and needs only the
+   `YAHOO_CLIENT_ID`/`YAHOO_CLIENT_SECRET` secrets. See `SPECS.md` →
+   "Yahoo import".
 
 ## Conventions
 - Keep `public/index.html` self-contained (data embedded) — no external JS/CSS

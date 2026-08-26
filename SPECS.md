@@ -380,37 +380,81 @@ a real auth boundary — someone hitting the API directly from devtools isn't
 blocked — which is an accepted tradeoff for "show a friend," not a security
 posture for a hostile viewer.
 
-## Yahoo import: where it stands, and the fallback
+## Yahoo import
 
-Yahoo Fantasy API access is still pending a manual review by Yahoo (blocked
-since 2026-08-23) and may not arrive before the Sept 8 draft. The OAuth
-scaffolding is already built and waiting (`/auth/yahoo/start|callback`,
-`/api/yahoo/status`, `/api/yahoo/leagues`) — it needs only the approval plus the
-`YAHOO_CLIENT_ID`/`YAHOO_CLIENT_SECRET` secrets.
+Yahoo user-level Fantasy API access is still pending Yahoo's manual review
+(blocked since 2026-08-23) — but that review turned out **not** to be the gate
+for what we actually need. A *public* league needs no signed-in user at all.
 
-Checked 2026-08-26 whether public league data could be read without OAuth, as a
-fallback. It can't, on the evidence available:
+### How it works
 
-- `fantasysports.yahooapis.com/fantasy/v2/league/nfl.l.<id>` returns **401**
-  unauthenticated. Every Fantasy API endpoint is OAuth-gated, public league or
-  not.
-- `football.fantasysports.yahoo.com/f1/<id>` redirects to the Yahoo **login
-  wall** for a real league id. Ids that don't redirect turn out to serve a
-  "There was a problem" error page, not league content — so there's no evidence
-  an unauthenticated public-league view exists to scrape. (Not a *proof* of
-  absence: no genuinely public league id was available to test against. If one
-  turns up, re-probe before assuming.)
+Yahoo's Fantasy API refuses every unauthenticated request with
+`oauth_problem="unable_to_determine_oauth_type"`, which is what made this look
+impossible at first. What it wants isn't a *user* — it's an *app signature*.
+Public resources are readable with **2-legged OAuth 1.0a**: the request carries
+`oauth_consumer_key` plus an HMAC-SHA1 signature computed from the consumer
+secret alone, with no `oauth_token` and no consent screen. (This is what the
+`yahoo-fantasy` npm package means by "public queries" — see its
+`YahooFantasy.mjs` `api()`, which switches to exactly this when no user token is
+set. YFPY's README claim that public leagues need no credentials at all is
+stale; its own code still requires a consumer key and secret.)
 
-So the fallback that doesn't depend on Yahoo at all is **paste-based import**:
-the user is signed into Yahoo in their own browser, where the Draft Results and
-Teams pages are right there. The app already accepts rosters as
-`owner|player|drafted|keeper` lines (Leagues tab raw textarea + the roster
-builder form), and the name matcher is forgiving enough to take copied text. The
-concrete next step, if Yahoo says no, is a small paste-parser on the Leagues tab
-that turns copied Draft Results / Teams text into those lines — same
-review-before-save policy as the Sleeper and MFL importers, no new API surface,
-no dependency on Yahoo's approval. Not built yet; scoped and ready to build on a
-word.
+So the requirement collapses to: **the Worker needs `YAHOO_CLIENT_ID` and
+`YAHOO_CLIENT_SECRET`, and the league needs to be public.** Nothing else.
+
+`GET /api/import/yahoo/:leagueKey` implements it, with the same
+structure-only, review-before-save, never-auto-writes policy as the Sleeper and
+MFL importers. It accepts a bare league id (`123456`, taken as this season's
+NFL) or a full league key (`nfl.l.123456`, or an older season's
+`449.l.123456`). It pulls `/settings`, `/teams/roster` and `/draftresults`, and
+maps:
+
+- league name, team count, season
+- starting lineup from Yahoo's `roster_positions` (`DEF`→`DST`, `W/R/T`→`FLEX`,
+  `Q/W/R/T`→`SUPERFLEX`; `BN`/`IR` dropped)
+- draft type — note that `draft_type` reports live/offline/autopick and Yahoo
+  flags auctions *separately* in `is_auction_draft`, so the string alone lies
+- keeper vs redraft from `is_keeper_league`, scoring type, superflex
+- owners, slots, and every rostered player
+- **the real draft round per player**, from draft results — something neither
+  the Sleeper nor MFL import can recover. Keeper *cost* is still left blank:
+  the cost rule ("one round earlier than last year", etc.) is the league's, not
+  Yahoo's, so guessing it would be inventing data.
+
+When a Yahoo account *has* been connected through `/auth/yahoo/*`, the stored
+bearer token is used instead of the app signature — same route, but private
+leagues work too. The response reports which mode it used in `_authMode`.
+
+### What's verified, and what isn't
+
+Verified 2026-08-26:
+
+- The OAuth 1.0a signing produces a signature **byte-identical** to the
+  `oauth-signature` npm package (the same library `yahoo-fantasy` uses) for the
+  same inputs, and its percent-encoding is RFC 3986 (escapes `!*'()`, leaves `~`).
+- Yahoo **accepts the request shape**: signing with a deliberately fake consumer
+  key moves the error from `unable_to_determine_oauth_type` to
+  `consumer_key_unknown`, which means the signature, parameter set and encoding
+  all parsed. OAuth 1.0a is therefore still live on this API.
+- The response parsing runs correctly against **real recorded Yahoo payloads**
+  (the `yahoo-fantasy` package's test fixtures): league meta, settings,
+  `roster_positions`, the teams collection, a team's roster, and draft results.
+  Yahoo's JSON is XML-shaped — collections are objects keyed `"0"`,`"1"`,… beside
+  a `count`, and one entity is an array of small fragment objects — so `yList()`
+  takes only numeric keys (a roster node sits next to `coverage_type`/`date`
+  siblings that are not entries) and `yFlat()` deep-merges fragments.
+
+Not yet verified: a real end-to-end import. That needs real app credentials
+(`npx wrangler secret put YAHOO_CLIENT_ID` / `YAHOO_CLIENT_SECRET`) and a league
+id, neither of which was available when this was built.
+
+### If the league turns out not to be public
+
+Fallback, in order: (1) connect a Yahoo account via `/auth/yahoo/start` — the
+bearer-token path is already wired and covers private leagues; (2) failing that,
+a paste-based import, since the app already eats
+`owner|player|drafted|keeper` lines and the name matcher is forgiving. Scraping
+the league web pages is not a route: they redirect to Yahoo's login wall.
 
 ## Deployment
 
