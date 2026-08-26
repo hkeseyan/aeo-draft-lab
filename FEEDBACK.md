@@ -15,6 +15,50 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 ## Entries
 
 <!-- Newest first. One line per item: date, status, short description. -->
+- 🔧 2026-08-26 — **Session handoff — read this first.** Ending this session
+  here to save usage; a fresh session should start from this entry rather
+  than re-deriving context.
+
+  **PR open, not merged**: [PR #11](https://github.com/hkeseyan/aeo-draft-lab/pull/11)
+  on branch `claude/fantasy-app-next-features-dxslx6`, head `a4fb671`, CI
+  green, no review comments, mergeable. Bundles this session's work: accounts,
+  custom rankings, draft-day tools (tiers/scarcity/rewind/analysis), Commish
+  v2+v3 (restore panel, dues rollup, "known by"/prospective-replacements),
+  the Yahoo importer, the `BOOTSTRAP_SECRET` security fix, and the guest-mode
+  fix below. Not merged because nobody's asked for that yet — pick up by
+  checking its current state (`gh pr view 11` or the GitHub UI) before
+  assuming anything below is still accurate, since production auto-deploys
+  from this branch via Cloudflare Workers Build independent of the merge.
+
+  **⚠️ One real action item outstanding, needs the user (`kyos`) specifically**:
+  sign in on the Account tab, then click **"Reset draft (keep keepers)"** in
+  the Draft Room. Confirmed still un-done as of this entry (`/api/setup` still
+  shows 184 picks, curPick 187). Why it matters: the player-pool fix earlier
+  this session (184→250 rows) reindexed player ids, and 164 of the 184 stuck
+  picks now point to the *wrong player* if loaded while signed out. Guests via
+  `?guest=1` are unaffected (they never load stored picks at all, see below) —
+  this only corrupts the signed-out/owner view until reset. No further Claude
+  action needed here; this is purely a "someone with the password clicks a
+  button" step. See the two entries below for the full incident writeup.
+
+  **Yahoo importer — built, verified as far as possible without credentials,
+  never run end-to-end.** `GET /api/import/yahoo/:leagueKey` is live and its
+  OAuth1 signing was verified byte-for-byte against a reference library, but
+  nobody's supplied (a) real league IDs or (b) `YAHOO_CLIENT_ID`/
+  `YAHOO_CLIENT_SECRET` (`npx wrangler secret put ...`) yet. Still waiting on
+  the user for both — see the 2026-08-26 "Get the Yahoo leagues in properly"
+  entry below for the full research writeup.
+
+  **Recurring check-in stopped on purpose.** This session had been
+  self-scheduling an hourly wake-up (via `send_later`) to re-poll PR #11's CI/
+  review state — that's now deleted (was `trig_01W5aa8BxWgLngKYtE1EYy5c`) to
+  stop burning usage on a session that's ending anyway. This does **not** lose
+  PR monitoring: the GitHub webhook subscription (`subscribe_pr_activity`) is
+  separate infrastructure and stays active regardless — real CI failures and
+  review comments on PR #11 will still wake *this* persistent session
+  (`session_015MqhZ6WuoDPo7Ez93esFoA`) when they happen, at zero standing
+  cost. A fresh session picking this up that wants to actively drive the PR
+  to merge should re-arm a check-in itself rather than assuming one exists.
 - 🔧 2026-08-26 — **"Site cached to an older draft" + player pool still
   running dry before the draft finishes** — user reported both while browsing
   production signed out.
