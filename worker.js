@@ -26,7 +26,8 @@
 //   GET/POST /api/mocks            -> list / save mock drafts
 //   GET/DELETE /api/mocks/:id      -> load / delete a mock
 //   GET     /api/auth/state        -> {enabled, user} — is auth on, who am I
-//   POST    /api/auth/bootstrap    -> create the very first (admin) account
+//   POST    /api/auth/bootstrap    -> claim the very first (admin) account;
+//                                     requires the BOOTSTRAP_SECRET env var
 //   POST    /api/auth/login|logout -> session cookie in / out
 //   POST    /api/auth/password     -> change your own password
 //   GET/POST /api/auth/users       -> admin: list / create-or-reset an account
@@ -125,6 +126,14 @@ async function hashPassword(password, saltB64, iterations = PBKDF2_ITERATIONS) {
     256
   );
   return b64(bits);
+}
+
+// Compares two secrets of any length without leaking how far they matched:
+// hashing first makes the compared values fixed-length, so length alone tells
+// an attacker nothing either.
+async function secretsMatch(a, b) {
+  const digest = async (v) => b64(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)));
+  return digestsEqual(await digest(a), await digest(b));
 }
 
 // Compares two base64 digests without leaking how far they matched.
@@ -373,16 +382,38 @@ export default {
       };
 
       if (path === "/api/auth/state") {
-        return J({ enabled: authEnabled, user: publicUser(me) });
+        // bootstrapReady only matters (and is only reported) before the first
+        // account exists, so the setup screen can say whether it can proceed.
+        return J({
+          enabled: authEnabled,
+          user: publicUser(me),
+          ...(authEnabled ? {} : { bootstrapReady: !!env.BOOTSTRAP_SECRET }),
+        });
       }
 
-      // First account ever: whoever creates it becomes the admin. Refused once
-      // any account exists, so this can't be used to mint a second admin.
+      // First account ever: it becomes the admin. Refused once any account
+      // exists, so this can't mint a second admin.
+      //
+      // Claiming it requires the BOOTSTRAP_SECRET, because "first to POST wins"
+      // is not proof of anything: this Worker is public, its URL is deliberately
+      // shared (the ?guest=1 link), and admin carries write access to every
+      // league plus read access to the commissioner's contact and dues data.
+      // Without this, whoever found the URL first — not the owner — could claim
+      // it and lock the owner out permanently. Fails closed: no secret set, no
+      // bootstrap.
       if (path === "/api/auth/bootstrap") {
         if (request.method !== "POST") return J({ error: "method" }, 405);
         if (authEnabled) return J({ error: "an account already exists — sign in instead" }, 409);
+        if (!env.BOOTSTRAP_SECRET) {
+          return J({
+            error: "Account setup is locked. Set a one-time setup key on the Worker first: npx wrangler secret put BOOTSTRAP_SECRET — then enter that key here to claim the admin account.",
+          }, 403);
+        }
         const b = await body();
         if (!b) return J({ error: "bad json" }, 400);
+        if (!(await secretsMatch(String(b.bootstrapSecret || ""), env.BOOTSTRAP_SECRET))) {
+          return J({ error: "wrong setup key" }, 403);
+        }
         const name = String(b.username || "").trim();
         if (!USERNAME_RE.test(name)) return J({ error: "username must be 2-32 chars: letters, numbers, . _ -" }, 400);
         if (String(b.password || "").length < 4) return J({ error: "password must be at least 4 characters" }, 400);

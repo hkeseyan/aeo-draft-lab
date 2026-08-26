@@ -11,3 +11,7 @@ node_modules/
 # the zero-byte file directly (`find .git -iname "Icon*" -type f -size 0 -delete`).
 Icon?
 Icon
+
+# Local-only Worker secrets for `wrangler dev` — never commit.
+.dev.vars
+.dev.vars.*

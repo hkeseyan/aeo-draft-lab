@@ -333,8 +333,19 @@ finish), not in the overall layout.
 Optional per-user auth, so the league can be shared with friends without handing
 them the owner's board. **With no account created the app behaves exactly as it
 did before this existed** — one shared save file, no sign-in, guest link
-unchanged. Creating the first account (Account tab) turns auth on and makes that
+unchanged. Claiming the first account (Account tab) turns auth on and makes that
 user the admin; the admin creates accounts for everyone else.
+
+**Claiming that first account requires a one-time setup key** — the
+`BOOTSTRAP_SECRET` Worker secret (`npx wrangler secret put BOOTSTRAP_SECRET`),
+entered on the Account tab. Without it `POST /api/auth/bootstrap` refuses
+outright: this Worker is public, its URL is deliberately shared (the guest
+link), and admin carries write access to every league plus read access to the
+commissioner's contact and dues data. "First to POST wins" would hand all of
+that to whoever found the URL first and lock the real owner out permanently,
+since only an admin can mint accounts once auth is on. It fails closed — no
+secret, no bootstrap — and `/api/auth/state` reports `bootstrapReady` before any
+account exists so the setup screen can say which state it's in.
 
 What splits when accounts exist:
 

@@ -15,6 +15,25 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 ## Entries
 
 <!-- Newest first. One line per item: date, status, short description. -->
+- ✅ 2026-08-26 — **Security review of this session's auth work (self-initiated)**
+  — ran a security pass over the accounts code before it merges, since a
+  mistake in session/password handling is the costliest kind of bug in that
+  diff. Found one real HIGH: `POST /api/auth/bootstrap` was reachable by any
+  unauthenticated caller, so whoever POSTed first became admin — write access
+  to every league plus read access to the commissioner's contact/dues data, and
+  the ability to lock the real owner out permanently. Not theoretical: the app
+  is public at a shared URL, and production auth flipped to enabled at ~07:35Z
+  without a confirmed owner action.
+  *Fixed — claiming the first account now requires the `BOOTSTRAP_SECRET`
+  Worker secret, compared in constant time after hashing, and fails closed when
+  unset. Verified locally: no key set → locked; wrong key → refused; right key →
+  owner claims admin; second claim refused even with the right key. Also added
+  `.dev.vars` to `.gitignore` so a local secrets file can never be committed.
+  Deliberately not filed as findings: unescaped owner/player names in
+  `innerHTML` (pre-existing pattern on `main`, worth a repo-wide pass), path-only
+  SSRF in the Yahoo route (host/protocol are fixed literals), login timing
+  username enumeration, and the 4-char password floor (the user's explicit
+  call).*
 - ✅ 2026-08-26 — **Password minimum is too strict** — user wants 4 characters
   minimum and no other requirements. This is a fantasy-football tool shared
   with a dozen friends, not a bank.

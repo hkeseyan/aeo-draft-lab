@@ -2174,15 +2174,19 @@ function renderAccount(){
   const box=el('acctBox'); if(!box)return;
   if(!AUTH.enabled){
     box.innerHTML=`<p class="small muted">No accounts exist yet, so the app is in single-user mode: one shared save file, no sign-in, and the guest link works as before.</p>
-      <p class="small muted">Creating the first account turns sign-in on and makes you the admin. After that, keepers/trades/league settings need an admin session (so sign in on your other devices too), and your rankings, queue, tendency read and in-progress draft become private to your account.</p>
+      <p class="small muted">Claiming the first account turns sign-in on and makes you the admin. After that, keepers/trades/league settings need an admin session (so sign in on your other devices too), and your rankings, queue, tendency read and in-progress draft become private to your account.</p>
+      ${AUTH.bootstrapReady
+        ? '<p class="small muted">Enter the setup key you set on the Worker to prove this deployment is yours.</p>'
+        : '<p class="small val-bad">Setup is locked until a one-time setup key exists on the Worker. From the repo, run <code>npx wrangler secret put BOOTSTRAP_SECRET</code>, then reload this page and enter that key below. This is what stops whoever else has the app\'s URL from claiming admin before you do.</p>'}
       <div class="row">
         <input type="text" id="acctBootUser" placeholder="username" style="min-width:140px">
-        <input type="password" id="acctBootPass" placeholder="password (4+ chars)" style="min-width:180px">
-        <button class="btn" id="acctBootBtn">Create the first account</button>
+        <input type="password" id="acctBootPass" placeholder="password (4+ chars)" style="min-width:160px">
+        <input type="password" id="acctBootKey" placeholder="setup key" style="min-width:150px">
+        <button class="btn" id="acctBootBtn" ${AUTH.bootstrapReady?'':'disabled'}>Claim the admin account</button>
       </div>`;
     el('acctBootBtn').onclick=async()=>{
-      acctStatus('Creating…');
-      try{ await apiAuth('/bootstrap','POST',{username:el('acctBootUser').value.trim(),password:el('acctBootPass').value});
+      acctStatus('Claiming…');
+      try{ await apiAuth('/bootstrap','POST',{username:el('acctBootUser').value.trim(),password:el('acctBootPass').value,bootstrapSecret:el('acctBootKey').value});
         location.reload();
       }catch(e){ acctStatus('⚠ '+e.message); }
     };
