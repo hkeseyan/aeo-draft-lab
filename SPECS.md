@@ -46,7 +46,60 @@ one-click draft action. A queued player disappears from the queue once
 they're drafted (by you or a rival) and reappears automatically on undo,
 since the queue is a live filter over the pool's `drafted` flag rather than
 a one-time removal — nothing to manually re-add after backing up a pick.
-Persists via `/api/setup` alongside keepers/trades/tendencies.
+Persists via `/api/setup` alongside keepers/trades/tendencies (per account —
+see "Accounts" below — once any account exists).
+
+**Order and tiers**: Best Available is ADP-ordered by default. With custom
+rankings switched on (see "My rankings") it's ordered by *your* board instead,
+with a "My" rank column, and players you haven't ranked fall below the ones you
+have, in ECR order — so a partial board (just your top 40, say) behaves
+sensibly. Either way the list is broken up by tier, with a "N left" counter on
+each break that turns amber at 4 and red at 2 or fewer. The count is over the
+whole remaining pool, not just the visible rows. A tier break is drawn only the
+first time a *deeper* tier appears going down the board: tier numbers aren't
+monotonic in ADP order, and drawing every transition filled the board with
+separators bouncing between the same two tiers. Breaks are suppressed while a
+position filter or search is active, where they'd be meaningless.
+
+**Scarcity cues**: a line under the draft controls answers what you actually
+want to know on the clock — how many of each position have gone since your last
+pick ("the run"), how many players are left in the top remaining tier at QB/RB/
+WR/TE (red at 2 or fewer), and how many picks until your turn comes round again
+after this one.
+
+**Rewind**: `undo()` still steps back one pick; clicking any made pick on the
+draft board (or entering a number in "rewind to pick") drops everything from
+that pick onward and re-drafts from there, which is the "what if I'd taken the
+RB instead" branch that a single-step undo can't reach. Keepers are pre-placed
+rather than drafted, so they always survive a rewind.
+
+**Draft analysis**: a card below the board grades every roster on its projected
+starting-lineup points — the one number here that isn't a matter of taste, since
+bench depth doesn't score. It reports your grade, projected finish and starting
+lineup, a league table with each team's best and worst pick, and the biggest
+steals and reaches league-wide. Value is measured against ADP (the market), not
+against your own rankings, so a "steal" means the room let him fall. If the pool
+has no projections loaded, it says so rather than presenting a table of zeroes
+as grades.
+
+### My rankings
+Your own board on top of the market, per account and per league
+(`GET/PUT /api/rankings`, KV `rankings:<user>:<league>`, with the same rolling
+backup history as everything else — 20 snapshots, restorable from the tab).
+Build it by seeding from ECR or ADP and rearranging (▲/▼, ⤒, or type a
+destination number), or by pasting a ranked list of names, one per line —
+matched forgivingly (case, punctuation, suffixes, and as a last resort every
+non-alphanumeric character ignored), with anything unmatched reported rather
+than silently dropped. Tiers are yours to set per player, with an "auto-tier by
+gaps" button that picks the threshold from the data — the ~11 biggest ADP gaps
+in your order become the boundaries, giving about a dozen tiers rather than the
+3-or-80 a fixed threshold produces depending on the pool.
+
+Turning rankings *on* only changes what you see: `available()` stays ADP-ordered
+because that's what the opponent model runs on, so rivals keep drafting off the
+market and the sim stays honest. ECR/ADP/projections are never overwritten.
+This is deliberately the small version of the league-aware projections engine
+still in design — a hand-built board, not a model.
 
 ### Teams & Keepers
 Rival roster view and keeper assignment/modeling across the league, plus
@@ -96,8 +149,14 @@ everything else, with the same rolling 30-snapshot backup pattern as
 `/api/setup`/`/api/leagues` (`GET/POST /api/commish/history|restore`; its
 own KV entity, `commish:<league>`, kept separate from `/api/setup` on
 purpose so a keeper/trade backup or restore never touches membership data
-and vice versa) — the API exists but there's no restore panel in the
-Commish tab UI yet, unlike Trades'/Leagues'. Hidden entirely in guest mode.
+and vice versa), now with the restore panel in the tab to match Trades' and
+Leagues'. A rollup line answers the two questions the tab exists for — how many
+are in/out/unsure, how much of the dues pot is collected, what's outstanding,
+and how many owners have no contact details on file — with a per-owner
+"outstanding" column and a "Copy contact list" button (clipboard, falling back
+to a CSV download). Hidden entirely in guest mode, and admin-only once accounts
+exist: unlike keepers and trades, dues and contact details aren't facts about
+the draft, so members can't read them either.
 
 ### Leagues
 Create, edit, or delete league profiles — see "League profiles" below.
@@ -269,6 +328,44 @@ finish), not in the overall layout.
   room itself isn't built yet; it shows a placeholder.
 - Accounts, subscriptions, tiers of access — personal tool.
 
+## Accounts
+
+Optional per-user auth, so the league can be shared with friends without handing
+them the owner's board. **With no account created the app behaves exactly as it
+did before this existed** — one shared save file, no sign-in, guest link
+unchanged. Creating the first account (Account tab) turns auth on and makes that
+user the admin; the admin creates accounts for everyone else.
+
+What splits when accounts exist:
+
+- **Shared, league-wide** — league profiles, keepers, trades. Facts about the
+  league, so everyone sees the same board setup. Readable by anyone (the guest
+  link depends on that); writable only by an admin.
+- **Private, per account** — custom rankings, queue, per-owner tendency read,
+  and the in-progress draft (`private:<user>:<league>`, `rankings:<user>:<league>`).
+  Nobody else can load them, the admin included. Two people can run their own
+  boards at the same time without colliding.
+- **Mocks** — saved with `by: <user>`; you see your own, an admin sees all
+  (including pre-accounts ones, which have no owner recorded).
+- **Commissioner data** — admin only, read and write.
+
+Mechanics: PBKDF2-SHA256 password hashing (100k iterations, per-user salt),
+opaque session tokens in KV behind an `HttpOnly; Secure; SameSite=Lax` cookie
+with a 30-day TTL. Changing a password or resetting someone's signs their other
+devices out; deleting an account deletes its private data with it. No email, no
+reset flow — an admin resets a password from the Account tab. This is a real
+server-side boundary, unlike guest mode's UI-level one; the separate
+`AUTH_TOKEN` env var remains an unrelated blunt gate over the whole API.
+
+Members get the app minus the commissioner's half of it: Leagues, Data and
+Commish tabs are removed from the DOM (not merely hidden), keeper checkboxes and
+trade edits are read-only, and the shared-setup restore panel is gone — but
+their tendency read, queue, rankings and draft are fully theirs to edit.
+
+Migration is automatic and one-way: on an admin's first sign-in for a league,
+whatever queue/tendencies/in-progress draft the pre-accounts shared record held
+is adopted as that admin's private state. Members never inherit it.
+
 ## Guest mode
 
 `?guest=1` on the app URL gives a read-only, single-league, Draft-Room-only
@@ -282,6 +379,38 @@ the cloud or touches the real setup data. This is a UI-level restriction, not
 a real auth boundary — someone hitting the API directly from devtools isn't
 blocked — which is an accepted tradeoff for "show a friend," not a security
 posture for a hostile viewer.
+
+## Yahoo import: where it stands, and the fallback
+
+Yahoo Fantasy API access is still pending a manual review by Yahoo (blocked
+since 2026-08-23) and may not arrive before the Sept 8 draft. The OAuth
+scaffolding is already built and waiting (`/auth/yahoo/start|callback`,
+`/api/yahoo/status`, `/api/yahoo/leagues`) — it needs only the approval plus the
+`YAHOO_CLIENT_ID`/`YAHOO_CLIENT_SECRET` secrets.
+
+Checked 2026-08-26 whether public league data could be read without OAuth, as a
+fallback. It can't, on the evidence available:
+
+- `fantasysports.yahooapis.com/fantasy/v2/league/nfl.l.<id>` returns **401**
+  unauthenticated. Every Fantasy API endpoint is OAuth-gated, public league or
+  not.
+- `football.fantasysports.yahoo.com/f1/<id>` redirects to the Yahoo **login
+  wall** for a real league id. Ids that don't redirect turn out to serve a
+  "There was a problem" error page, not league content — so there's no evidence
+  an unauthenticated public-league view exists to scrape. (Not a *proof* of
+  absence: no genuinely public league id was available to test against. If one
+  turns up, re-probe before assuming.)
+
+So the fallback that doesn't depend on Yahoo at all is **paste-based import**:
+the user is signed into Yahoo in their own browser, where the Draft Results and
+Teams pages are right there. The app already accepts rosters as
+`owner|player|drafted|keeper` lines (Leagues tab raw textarea + the roster
+builder form), and the name matcher is forgiving enough to take copied text. The
+concrete next step, if Yahoo says no, is a small paste-parser on the Leagues tab
+that turns copied Draft Results / Teams text into those lines — same
+review-before-save policy as the Sleeper and MFL importers, no new API surface,
+no dependency on Yahoo's approval. Not built yet; scoped and ready to build on a
+word.
 
 ## Deployment
 
