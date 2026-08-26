@@ -67,6 +67,12 @@
   .dcol{}
   body.hide-delta .dcol{display:none}
   .tradetag{font-size:9px;color:var(--warn);border:1px solid var(--warn);border-radius:8px;padding:0 4px;margin-left:3px}
+  .tierrow td{background:#0e1626;border-top:2px solid var(--line);font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:3px 6px}
+  .cues{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+  .cues b{color:var(--ink)}
+  .gradechip{display:inline-block;min-width:26px;text-align:center;font-weight:700;border-radius:6px;padding:0 5px;border:1px solid var(--line)}
+  .rewind{cursor:pointer;color:var(--muted);text-decoration:none;margin-left:6px}
+  .cell.done{cursor:pointer}
   .cell.traded{border-color:var(--warn)}
   .tradebox{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
 </style>
@@ -104,6 +110,7 @@
           <span id="noiseVal" class="muted">±2</span>
         </label>
       </div>
+      <div class="cues small muted" id="clockCues"></div>
     </div>
     <div class="grid2">
       <div>
@@ -146,6 +153,14 @@
     <div class="card">
       <h2>My picks & projected availability</h2>
       <div id="myPicks"></div>
+    </div>
+    <div class="card">
+      <h2>Draft analysis <span class="muted small">(grades, positional ranks, steals & reaches — works mid-draft too)</span></h2>
+      <div class="row" style="margin-bottom:8px">
+        <button class="btn ghost" id="gradeDraft">Grade the draft as it stands</button>
+        <span class="muted small">Value is ECR-based, so it works even where projections are missing.</span>
+      </div>
+      <div id="draftAnalysis" class="small muted">Not run yet.</div>
     </div>
   </section>
 
@@ -1204,6 +1219,16 @@ function undo(){
   picks=picks.filter(p=>p!==last); const pl=PLAYERS.find(x=>x.id===last.playerId); if(pl)pl.drafted=false;
   curPick=nextOpenPick(Math.min(curPick,last.overall)); render(); saveSetup();
 }
+// Rewind to any earlier point: drops every non-keeper pick from `ov` onward and
+// puts the clock back there, so you can re-run a mock down a different branch
+// without resetting the whole draft. Keepers are pre-placed, never rewound.
+function rewindTo(ov){
+  const doomed=picks.filter(p=>!p.keeper&&p.overall>=ov);
+  if(!doomed.length)return;
+  doomed.forEach(p=>{const pl=PLAYERS.find(x=>x.id===p.playerId); if(pl)pl.drafted=false;});
+  picks=picks.filter(p=>p.keeper||p.overall<ov);
+  curPick=nextOpenPick(ov); render(); saveSetup();
+}
 
 // ---------- ROSTER NEED ----------
 function myRoster(){return picks.filter(p=>ownerOf(p.overall)===mySlot).map(p=>PLAYERS.find(x=>x.id===p.playerId)).filter(Boolean);}
@@ -1212,7 +1237,7 @@ function myRoster(){return picks.filter(p=>ownerOf(p.overall)===mySlot).map(p=>P
 const el=id=>document.getElementById(id);
 function render(){
   if(LEAGUE.draftType==='auction'){ renderAuctionPlaceholder(); return; }
-  renderPool();renderBoard();renderMyPicks();renderRoster();renderOnClock();renderKeeperList();renderQueue();
+  renderPool();renderBoard();renderMyPicks();renderRoster();renderOnClock();renderCues();renderKeeperList();renderQueue();
 }
 function renderAuctionPlaceholder(){
   const msg='Auction drafting isn\'t built yet for this league. Teams, Trades, Mocks, and Data still work.';
@@ -1231,6 +1256,48 @@ function renderOnClock(){
   const owner=ownerOf(ov); const mine=owner===mySlot?' — YOUR PICK':'';
   el('onClock').innerHTML=`On the clock: <b>Pick ${ov}</b> (${label(round,slot)}, team ${owner})${mine}`;
 }
+// Every one of my picks that hasn't happened yet, in draft order (the first
+// entry is the pick on the clock when it's my turn).
+function myUpcomingPicks(){
+  const out=[]; for(let ov=nextOpenPick(curPick);ov<=totalPicks;ov++){ if(!pickTakenAt(ov)&&ownerOf(ov)===mySlot)out.push(ov); }
+  return out;
+}
+function renderCues(){
+  const box=el('clockCues'); if(!box)return;
+  const parts=[];
+  // Run detection: what's come off the board since my most recent pick.
+  const mineDone=picks.filter(p=>!p.keeper&&ownerOf(p.overall)===mySlot).map(p=>p.overall).sort((a,b)=>a-b);
+  const from=mineDone.length?mineDone[mineDone.length-1]:0;
+  const since=picks.filter(p=>!p.keeper&&p.overall>from);
+  if(since.length){
+    const c={}; since.forEach(p=>{const pl=PLAYERS.find(x=>x.id===p.playerId); if(pl)c[pl.pos]=(c[pl.pos]||0)+1;});
+    const run=Object.entries(c).sort((a,b)=>b[1]-a[1]).map(([pos,n])=>`<span class="pos ${pos}">${pos}</span> ${n}`).join(' · ');
+    parts.push(`<span>${from?'Since your last pick':'So far'} (${since.length}): ${run}</span>`);
+  }
+  // Scarcity: how thin the top remaining tier is at each position.
+  const scar=[];
+  ['QB','RB','WR','TE'].forEach(pos=>{
+    const left=available().filter(p=>p.pos===pos);
+    if(!left.length)return;
+    // Best *tier* still on the board at this position, not the best ADP — a
+    // tier-2 guy who's slipped down the ADP board is still a tier-2 guy.
+    const t=Math.min.apply(null,left.map(p=>p.tier||99)); if(t===99)return;
+    const n=left.filter(p=>p.tier===t).length;
+    scar.push(`<span class="pos ${pos}">${pos}</span> <span class="${n<=3?'val-bad':''}">${n}</span> in T${t}`);
+  });
+  if(scar.length)parts.push(`<span>Top tier left: ${scar.join(' · ')}</span>`);
+  // Who probably won't survive until my pick after this one.
+  const up=myUpcomingPicks();
+  const target=(up[0]===nextOpenPick(curPick))?up[1]:up[0];
+  if(target){
+    const risk=available().filter(p=>p.adp<target);
+    if(risk.length){
+      const names=risk.slice(0,3).map(p=>`${queued.has(p.name)?'★':''}${p.name}`).join(', ');
+      parts.push(`<span><b>${risk.length}</b> likely gone before your #${target}: ${names}${risk.length>3?'…':''}</span>`);
+    }
+  }
+  box.innerHTML=parts.join('') || '<span>Draft complete.</span>';
+}
 function valClass(d){return d>=8?'val-good':(d<=-8?'val-bad':'');}
 function renderPool(){
   if(LEAGUE.draftType==='auction')return; // placeholder shown by render(); search/filter inputs shouldn't clobber it
@@ -1241,7 +1308,23 @@ function renderPool(){
   if(q)rows=rows.filter(p=>p.name.toLowerCase().includes(q));
   el('poolCount').textContent=`(${available().length} left)`;
   const tb=el('poolTable').querySelector('tbody'); tb.innerHTML='';
+  // Tier counts are computed over the *filtered* rows on purpose: with the
+  // position filter on, "4 left in tier 3" reads as "4 RBs left in tier 3",
+  // which is the scarcity question you actually ask on the clock.
+  const tierLeft={}; rows.forEach(p=>{ if(p.tier)tierLeft[p.tier]=(tierLeft[p.tier]||0)+1; });
+  // Only break when we cross into a *deeper* tier: the pool is ADP-sorted while
+  // tiers come from ECR, so the two disagree often enough that reacting to every
+  // change would litter the list with headers. A stray better-tier player who
+  // fell down the ADP board just renders inline under the tier he fell into.
+  let shownTier=0;
   rows.slice(0,220).forEach(p=>{
+    if(p.tier && p.tier>shownTier){
+      shownTier=p.tier;
+      const n=tierLeft[p.tier];
+      const trT=document.createElement('tr'); trT.className='tierrow';
+      trT.innerHTML=`<td colspan="9">Tier ${p.tier}<span class="${n<=3?'val-bad':'muted'}"> · ${n} left${pos!=='ALL'?' at '+pos:''}</span></td>`;
+      tb.appendChild(trT);
+    }
     const d=Math.round((p.adp-p.ecr)*10)/10; // + = falls later than ranked = value
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><input type="checkbox" class="qcheck" data-q="${p.name.replace(/"/g,'&quot;')}" ${queued.has(p.name)?'checked':''}></td>
@@ -1298,6 +1381,11 @@ function renderBoard(){
       c.className='cell'+(own===mySlot?' me':'')+(pk&&pk.keeper?' keeper':'')+(ov===ovNext?' now':'')+(traded?' traded':'');
       if(pk){const pl=PLAYERS.find(x=>x.id===pk.playerId);
         c.innerHTML=`<div class="pk">${label(r,s)} ${pk.keeper?'· K':''}${tt}</div><b>${pl?pl.name:''}</b> <span class="pos ${pl?pl.pos:''}">${pl?pl.pos:''}</span>`;
+        if(!pk.keeper){
+          c.classList.add('done');
+          c.title='Rewind the draft to this pick';
+          c.onclick=()=>{ if(confirm(`Rewind to pick #${ov} (${label(r,s)})? This undoes that pick and everything after it.`))rewindTo(ov); };
+        }
       } else {c.innerHTML=`<div class="pk">${label(r,s)} · #${ov}${tt}</div>`;}
       g.appendChild(c);
     }
@@ -1311,7 +1399,8 @@ function renderMyPicks(){
     const div=document.createElement('div'); div.className='mypick-row';
     let right;
     if(pk){const pl=PLAYERS.find(x=>x.id===pk.playerId);
-      right=`<b>${pl?pl.name:''}</b> <span class="pos ${pl?pl.pos:''}">${pl?pl.pos:''}</span> ${pk.keeper?'<span class="kchip">keeper</span>':''}`;
+      const rw=pk.keeper?'':`<a href="#" class="rewind" data-rw="${ov}" title="Rewind the draft to this pick">↩</a>`;
+      right=`<b>${pl?pl.name:''}</b> <span class="pos ${pl?pl.pos:''}">${pl?pl.pos:''}</span> ${pk.keeper?'<span class="kchip">keeper</span>':''}${rw}`;
     } else {
       const pr=available().filter(p=>p.adp>=ov-6).slice(0,3).map(p=>`${p.name} <span class="muted">(${p.pos}${p.posRank||''}, adp ${p.adp})</span>`).join(', ')||'—';
       right=`<span class="muted">likely: ${pr}</span>`;
@@ -1320,6 +1409,67 @@ function renderMyPicks(){
     div.innerHTML=`<span class="muted small">${label(round,slot)} · #${ov}${acq}</span><span class="small" style="text-align:right">${right}</span>`;
     box.appendChild(div);
   });
+  box.querySelectorAll('[data-rw]').forEach(a=>a.onclick=(e)=>{
+    e.preventDefault(); const ov=+a.dataset.rw;
+    if(confirm(`Rewind to pick #${ov}? This undoes that pick and everything after it.`))rewindTo(ov);
+  });
+}
+// ---------- DRAFT ANALYSIS ----------
+// Draft value is deliberately ECR-based rather than projection-based: `proj` is
+// only populated for the players FantasyPros exposes without a login, so grading
+// on it would score half the board as zero. The curve is steep at the top and
+// flattens out, so a stud is worth more than two mid-round starters.
+function valuePoints(p){ if(!p)return 0; const ecr=p.ecr||p.adp||250; return Math.round(12000/(1+ecr/25))/100; }
+function gradeFor(z){
+  if(z>=1.5)return ['A+','var(--accent2)']; if(z>=1.0)return ['A','var(--accent2)'];
+  if(z>=0.5)return ['B+','var(--accent)']; if(z>=0)return ['B','var(--accent)'];
+  if(z>=-0.5)return ['C+','var(--muted)']; if(z>=-1.0)return ['C','var(--muted)'];
+  if(z>=-1.5)return ['D','var(--warn)']; return ['F','var(--bad)'];
+}
+function renderDraftAnalysis(){
+  const box=el('draftAnalysis'); if(!box)return;
+  if(LEAGUE.draftType==='auction'){ box.innerHTML='Auction drafts aren\u2019t modeled yet.'; return; }
+  if(!picks.filter(p=>!p.keeper).length){ box.innerHTML='No picks made yet \u2014 run a mock (or make a pick) first.'; return; }
+  const teams=[];
+  for(let s=1;s<=LEAGUE.teams;s++){
+    const roster=rosterOf(s);
+    const {starterSlots,bench}=slotRosterPlayers(roster, LEAGUE.starters||{});
+    const starterPts=starterSlots.reduce((a,x)=>a+valuePoints(x.player),0);
+    const benchPts=bench.reduce((a,x)=>a+valuePoints(x),0)*0.3; // depth counts, but far less than starters
+    const byPos={QB:0,RB:0,WR:0,TE:0};
+    roster.forEach(pl=>{ if(byPos[pl.pos]!=null)byPos[pl.pos]+=valuePoints(pl); });
+    teams.push({slot:s, owner:ownerLabel(s), total:starterPts+benchPts, starterPts, byPos,
+      filled:starterSlots.filter(x=>x.player).length, slots:starterSlots.length});
+  }
+  const mean=teams.reduce((a,t)=>a+t.total,0)/teams.length;
+  const sd=Math.sqrt(teams.reduce((a,t)=>a+(t.total-mean)**2,0)/teams.length)||1;
+  const posRank={};
+  ['QB','RB','WR','TE'].forEach(pos=>{
+    teams.slice().sort((a,b)=>b.byPos[pos]-a.byPos[pos]).forEach((t,i)=>{ (posRank[t.slot]=posRank[t.slot]||{})[pos]=i+1; });
+  });
+  const ranked=teams.slice().sort((a,b)=>b.total-a.total);
+  const rows=ranked.map((t,i)=>{
+    const [g,col]=gradeFor((t.total-mean)/sd);
+    const pr=['QB','RB','WR','TE'].map(pos=>`<span class="pos ${pos}">${pos}</span>${posRank[t.slot][pos]}`).join(' ');
+    return `<tr${t.slot===mySlot?' style="background:var(--me)"':''}><td>${i+1}</td><td>${t.slot===mySlot?'\u2605 ':''}${t.owner}</td>
+      <td><span class="gradechip" style="color:${col};border-color:${col}">${g}</span></td>
+      <td>${t.total.toFixed(1)}</td><td class="muted small">${t.filled}/${t.slots}</td><td class="small">${pr}</td></tr>`;
+  }).join('');
+  // Steals & reaches: where a player actually went vs. where ADP said they'd go.
+  // K/DST are excluded: everyone waits on them by convention, so they "fall"
+  // 20+ spots past ADP every draft and would crowd out the real steals.
+  const deltas=picks.filter(p=>!p.keeper).map(p=>{
+    const pl=PLAYERS.find(x=>x.id===p.playerId); if(!pl||pl.pos==='K'||pl.pos==='DST')return null;
+    return {name:pl.name, pos:pl.pos, ov:p.overall, owner:ownerLabel(ownerOf(p.overall)), d:Math.round(pl.adp-p.overall)};
+  }).filter(Boolean);
+  const fmt=list=>list.length?list.map(x=>`<div class="mypick-row"><span class="small"><span class="pos ${x.pos}">${x.pos}</span> ${x.name} <span class="muted">\u2014 ${x.owner} at #${x.ov}</span></span><span class="small ${x.d>0?'val-good':'val-bad'}">${x.d>0?'+':''}${x.d}</span></div>`).join(''):'<span class="muted small">\u2014</span>';
+  const steals=deltas.slice().sort((a,b)=>b.d-a.d).slice(0,5);
+  const reaches=deltas.slice().sort((a,b)=>a.d-b.d).slice(0,5);
+  box.innerHTML=`<div class="scroll"><table><thead><tr><th>#</th><th>Team</th><th>Grade</th><th>Value</th><th>Starters</th><th>Pos ranks</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="grid2" style="margin-top:12px">
+      <div><div class="small muted" style="margin-bottom:4px">Biggest steals (fell past ADP · K/DST excluded)</div>${fmt(steals)}</div>
+      <div><div class="small muted" style="margin-bottom:4px">Biggest reaches (went early)</div>${fmt(reaches)}</div>
+    </div>`;
 }
 // Fills starters slot-by-slot (exact positions first, then FLEX, then SUPERFLEX
 // if the league has one) so empty slots are visible, not just a flat player list.
@@ -1598,7 +1748,7 @@ function parsePlayers(txt){
     const c=lines[i].split(',').map(x=>x.trim());
     if(c.length<2)continue;
     arr.push({id:i, name:c[0], pos:(c[1]||'').toUpperCase(), team:c[2]||'',
-      adp:+c[3]||(i), ecr:+c[4]||(+c[3]||i), proj:+c[5]||0, drafted:false, keeper:null});
+      adp:+c[3]||(i), ecr:+c[4]||(+c[3]||i), proj:+c[5]||0, tier:+c[6]||0, drafted:false, keeper:null});
   }
   return arr;
 }
@@ -1607,7 +1757,7 @@ function loadPlayersCSV(txt){
   if(loadPlayersData(txt)){ applyKeepers(); resetDraft(); setStatus('Loaded '+PLAYERS.length+' players.'); }
 }
 function exportText(txt,name){const b=new Blob([txt],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();}
-function poolToCSV(){return 'name,pos,team,adp,ecr,proj\n'+PLAYERS.map(p=>[p.name,p.pos,p.team,p.adp,p.ecr,p.proj].join(',')).join('\n');}
+function poolToCSV(){return 'name,pos,team,adp,ecr,proj,tier\n'+PLAYERS.map(p=>[p.name,p.pos,p.team,p.adp,p.ecr,p.proj,p.tier||''].join(',')).join('\n');}
 function loadKeepersCSV(txt){
   const lines=txt.trim().split(/\r?\n/).filter(l=>l.trim());
   lines.forEach(l=>{const c=l.split(',').map(x=>x.trim()); if(c.length>=3){
@@ -1999,6 +2149,7 @@ el('undo').onclick=undo;
 el('resetDraft').onclick=()=>{resetDraft();saveSetup();};
 el('posFilter').onchange=renderPool; el('search').oninput=renderPool;
 el('rosterOwnerSelect').onchange=renderRoster;
+el('gradeDraft').onclick=renderDraftAnalysis;
 el('noise').oninput=()=>{el('noiseVal').textContent='±'+el('noise').value;};
 el('runLab').onclick=runLab;
 el('loadPlayers').onclick=()=>loadPlayersCSV(el('importPlayers').value);

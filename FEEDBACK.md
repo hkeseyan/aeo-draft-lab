@@ -16,6 +16,16 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-08-26 — **Draft-room decision support push** (user: "ready for next
+  features"). Picked the four unambiguous 🆕 backlog items that make the room
+  more useful on the clock rather than starting a roadmap item that needs the
+  user in the loop: tiers, run/scarcity cues, rewind-to-any-pick, and draft
+  grading — each marked ✅ on its own entry below, all folded into
+  `SPECS.md` → "Draft Room". The two big roadmap items (league-aware
+  rankings engine, live draft sync) are untouched on purpose — the user
+  asked to design the first one together over phone/Remote Control, and the
+  second is the next scheduled block.
+
 - 🔧 2026-08-25 — **Roadmap/priority order, as of today.** User wants friends
   actively using the app now for feedback. Stated order: (1) this push —
   board row/header fixes, keeper cost/value view, friendlier roster entry
@@ -251,12 +261,17 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   reads `→<Owner Name>` instead of `→T4`. Not restructuring where traded
   picks physically appear on the board — that idea was already shelved by
   the user pending this fix, and this fix was enough.*
-- 🆕 2026-08-24 — **Can't see a rival's roster without scrolling, and can only
+- ✅ 2026-08-24 — **Can't see a rival's roster without scrolling, and can only
   see "my" roster** — wants a dropdown to pull up any owner's roster (not
   just mine), and wants the roster panel repositioned/prioritized ahead of
   "My picks & projected availability" so it's visible without scrolling —
   specifically so they can check the on-the-clock team's roster/needs while
   deciding a pick.
+  *Done — shipped in the roster-panel rework: an owner dropdown next to Best
+  Available (defaults to you) showing any team's roster slotted into starters
+  + bench, sitting in the top grid above the board and above "My picks", so
+  it's the first thing on screen rather than a scroll away. Marked ✅ here on
+  2026-08-26 — the entry was left 🆕 by the session that built it.*
 - ✅ 2026-08-24 — **ADP/ECR data feels stale** — user has specific players in
   mind whose ADP should have dropped and ECR should have changed due to
   recent injuries, but the app doesn't reflect it. CLAUDE.md says a Cowork
@@ -345,10 +360,17 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   once that player is drafted (by anyone) and reappear automatically on
   undo, since it's a display filter over the live pool, not a one-time
   removal. Persists via /api/setup like keepers/trades/tendencies.*
-- 🆕 2026-08-20 — **Tiers** — group players into tiers with a visible break
+- ✅ 2026-08-20 — **Tiers** — group players into tiers with a visible break
   in the pool list, plus a "N left in this tier" counter that turns red as a
   tier empties. Currently `players-2026.csv` has a `tier` column that the app
   parses but never displays.
+  *Done 2026-08-26 — the CSV's `tier` column was in fact being dropped at
+  parse time (`parsePlayers()` stopped at `proj`) and dropped again on export,
+  so it's now kept in both. Best Available shows a `Tier 3 · 7 left` break row,
+  red at ≤3 left, counted over the currently filtered rows so with the RB
+  filter on it reads "7 left at RB". Breaks only fire when crossing into a
+  deeper tier — the pool is ADP-sorted and tiers come from ECR, so honoring
+  every tier change produced 94 header rows in a 220-row list.*
 - ✅ 2026-08-20 — **Smarter rival pick logic** — today rivals pick randomly
   within an ADP noise window. Draft Wizard weighs roster needs + positional
   scarcity per team, and offers Basic vs Advanced modes. Wants: rivals
@@ -368,16 +390,38 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   the new opponent model.
   *Done 2026-08-24 — pool extended to 250, see the "ADP/ECR data feels
   stale" entry above.*
-- 🆕 2026-08-20 — **Post-draft analysis / draft grade** — after a mock: grade,
+- ✅ 2026-08-20 — **Post-draft analysis / draft grade** — after a mock: grade,
   projected standings/finish vs the other 11 rosters, positional ranks,
   strengths & weaknesses, and biggest steals/reaches vs ADP.
-- 🆕 2026-08-20 — **Pick-value & scarcity cues on the clock** — show runs
+  *Done 2026-08-26 — "Draft analysis" card at the bottom of the Draft Room,
+  run on demand (works mid-draft too, not just after): all 12 teams ranked by
+  roster value with an A+…F grade, starter slots filled, per-position ranks,
+  your row highlighted; plus top-5 steals and top-5 reaches vs ADP. Value is
+  ECR-based rather than projection-based on purpose — `proj` only exists for
+  the players FantasyPros exposes without a login, so grading on it would
+  score half the board as zero. Grades are z-scores against that draft's own
+  12-team field, so they describe this draft, not an absolute standard.
+  K/DST are excluded from steals/reaches (everyone waits on them, so they
+  "fall" 20+ spots every draft and would crowd out the real ones). Not
+  building the "projected standings/finish" half — that needs a season
+  simulation; roster-value ranking answers the same question here.*
+- ✅ 2026-08-20 — **Pick-value & scarcity cues on the clock** — show runs
   ("4 RBs gone since your last pick"), positional scarcity warnings, and
   who's likely gone before your next pick (already partly present as
   "projected availability" — wants to be more prominent).
-- 🆕 2026-08-20 — **Redo / rewind to any point** — Draft Wizard can restart a
+  *Done 2026-08-26 — a cue strip directly under the draft controls (top of
+  the Draft Room, above the fold): positional counts of everything taken
+  since your last pick, the top tier still on the board at each of
+  QB/RB/WR/TE with its count reddening at ≤3, and how many players are
+  likely gone before the pick *after* the one on the clock with the first
+  three named (★ = queued). Updates on every pick, undo, and rewind.*
+- ✅ 2026-08-20 — **Redo / rewind to any point** — Draft Wizard can restart a
   mock from any earlier pick to test a different branch. Today there's only a
   single-step `undo()`.
+  *Done 2026-08-26 — click any non-keeper cell on the draft board (or the `↩`
+  on a filled "My picks" row) to rewind to that pick after a confirm: it and
+  everything after it are undone and the clock goes back there. Keepers are
+  pre-placed and never rewound. Single-step undo still there.*
 - ✅ 2026-08-20 — **Keeper cost/value view** — a dedicated read on each
   keeper: cost round vs ADP round, surplus value, and which rival keepers are
   bargains. The math exists (`keepValue`) but isn't surfaced as its own view.

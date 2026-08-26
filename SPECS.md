@@ -48,6 +48,52 @@ since the queue is a live filter over the pool's `drafted` flag rather than
 a one-time removal — nothing to manually re-add after backing up a pick.
 Persists via `/api/setup` alongside keepers/trades/tendencies.
 
+**Tiers**: Best Available shows a tier separator row (`Tier 3 · 7 left`) from
+the players CSV's `tier` column, and the count turns red at 3 or fewer left.
+Counts are computed over the *filtered* rows, so with the position filter on
+"RB" the break reads "7 left at RB" — the scarcity question you actually ask
+on the clock. Breaks only fire when crossing into a deeper tier: the pool is
+ADP-sorted while tiers come from ECR, so reacting to every tier change would
+litter the list with headers; a better-tier player who's slipped down the ADP
+board just renders inline under the tier he fell into. `parsePlayers()` now
+keeps `tier`, and `poolToCSV()` exports it, so a load/export round-trip
+doesn't silently drop the column.
+
+**Runs & scarcity cues**: a strip under the draft controls (`#clockCues`)
+answers "what's happened since I last picked, and what won't survive to my
+next pick" — (1) positional counts of everything drafted since your most
+recent pick ("Since your last pick (9): RB 4 · WR 3 · QB 1"), (2) the top
+tier still on the board at each of QB/RB/WR/TE with its remaining count,
+reddening at 3 or fewer (best remaining *tier*, not best ADP — a tier-2
+player who's slipped down the ADP board is still tier 2), and (3) how many
+available players have an ADP ahead of your pick *after* the one on the
+clock, with the first three named (★ marks queued players). Re-rendered with
+every pick, undo, and rewind.
+
+**Rewind to any pick**: clicking any non-keeper cell on the board — or the
+`↩` on a filled row of "My picks" — rewinds the draft to that pick after a
+confirm, dropping it and everything after it and putting the clock back
+there (`rewindTo(ov)`). Keepers are pre-placed and never rewound. This is
+the branch-testing tool: re-run a mock down a different path from round 3
+without resetting the whole draft. Single-step `undo()` still exists.
+
+**Draft analysis**: a card at the bottom of the Draft Room, run on demand via
+"Grade the draft as it stands" — works mid-draft, not just at the end. It
+ranks all 12 teams by roster value with a letter grade, starter slots filled,
+and per-position ranks (QB/RB/WR/TE), highlighting your row; then lists the
+five biggest steals and five biggest reaches by `ADP − overall pick`.
+
+Value is ECR-based, not projection-based: `proj` is only populated for the
+players FantasyPros exposes without a login, so grading on it would score
+half the board as zero. The curve (`valuePoints`) is steep at the top and
+flattens out, so one stud outweighs two mid-round starters. Team value =
+starters + 30% of the bench (depth counts, but far less). Grades are relative
+to that draft's own field: a z-score against the 12-team mean/σ mapped to
+A+ … F, so grades describe *this* draft rather than an absolute standard.
+Steals/reaches exclude K and DST — everyone waits on them by convention, so
+they "fall" 20+ spots past ADP in every draft and would crowd out the real
+ones. Auction leagues show a placeholder here like the rest of the room.
+
 ### Teams & Keepers
 Rival roster view and keeper assignment/modeling across the league, plus
 the owner-tendency controls (see Opponent model below).
@@ -239,12 +285,12 @@ entries in `FEEDBACK.md`.
 |---|---|---|
 | **Mock Draft Simulator** | Fast mocks vs simulated opponents, no waiting between picks | ✅ Have it — Draft Room |
 | **Keeper support** | Enter keepers per team with the round each costs; mocks account for them | ✅ Have it, and ours is more specific (real rosters + locked keepers) |
-| **Opponent pick logic** | Weighs rankings + team needs + positional scarcity; Basic vs Advanced modes | ⚠️ Partial — ours picks randomly within an ADP noise window; no roster-need or scarcity awareness |
-| **Draft Intel** | Analyzes leaguemates' past drafts for tendencies; toggle per team into mocks | ❌ Missing — but high value here since it's the same 12 owners yearly |
-| **Player queue** | Shortlist of targets, surfaced when you're on the clock | ❌ Missing |
-| **Tiers** | Tier breaks in rankings + "players left in tier" counter that reddens | ❌ Missing (CSV already carries a `tier` column, unused) |
-| **Draft Analyzer** | Post-draft grade, projected standings, positional ranks, strengths/weaknesses, steals & reaches | ❌ Missing |
-| **Redo / restart from any pick** | Branch a mock from an earlier point to test alternatives | ⚠️ Partial — single-step `undo()` only |
+| **Opponent pick logic** | Weighs rankings + team needs + positional scarcity; Basic vs Advanced modes | ✅ Have it — need-aware scoring with hard depth-cap vetoes (see "Opponent model") |
+| **Draft Intel** | Analyzes leaguemates' past drafts for tendencies; toggle per team into mocks | ✅ Have it — hand-set per-owner tendencies, toggled per owner (same 12 guys yearly, so no mining needed) |
+| **Player queue** | Shortlist of targets, surfaced when you're on the clock | ✅ Have it — "Q" column + My Queue |
+| **Tiers** | Tier breaks in rankings + "players left in tier" counter that reddens | ✅ Have it — filter-aware tier breaks in Best Available |
+| **Draft Analyzer** | Post-draft grade, projected standings, positional ranks, strengths/weaknesses, steals & reaches | ✅ Have it — Draft analysis card (grades, positional ranks, steals/reaches). No projected standings — we grade roster value, not simulate a season |
+| **Redo / restart from any pick** | Branch a mock from an earlier point to test alternatives | ✅ Have it — `rewindTo()` from any board cell or my-picks row |
 | **Cheat Sheet Creator** | Import/blend rankings from any source, drag-drop reorder, custom tiers | ⚠️ Partial — Data tab imports a CSV; no reordering or blending UI |
 | **Strategy comparison** | — (not a distinct DW tool) | ✅ Ours already exceeds this — Strategy Lab compares draft paths over N sims |
 
@@ -256,7 +302,10 @@ alongside, the board underneath, and always-visible "what should I do right
 now" guidance. Our Draft Room is already shaped this way — the gap is mostly
 in the *decision support* (tiers, queue, scarcity/run signals, need-aware
 opponents) and the *after-action review* (grade, steals/reaches, projected
-finish), not in the overall layout.
+finish), not in the overall layout. As of 2026-08-26 that gap is mostly
+closed — tiers, queue, run/scarcity cues, need-aware opponents, rewind, and
+draft grading all ship; what's left of it is a simulated projected finish,
+which we deliberately don't do (we grade roster value instead).
 
 ### Deliberately out of scope
 
