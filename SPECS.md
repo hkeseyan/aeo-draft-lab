@@ -406,6 +406,17 @@ a real auth boundary — someone hitting the API directly from devtools isn't
 blocked — which is an accepted tradeoff for "show a friend," not a security
 posture for a hostile viewer.
 
+**The board a guest starts from**: real keepers and real pick/player trades
+load normally — those are league facts, and the point of the link is to show
+a realistic starting position. But `loadSetup()` never loads the owner's real
+`picks`/`curPick`/`queued`/`tendencies` into a guest's board — it always calls
+`resetDraft()` instead, which places only the pre-existing keepers. Guests get
+a blank draft to run themselves, never the owner's actual draft-in-progress,
+queue, or opponent-model tuning — all of which are exactly what the owner
+doesn't want tipped off to a friend at the same table. (Before this, guest
+mode inherited whatever `loadSetup()` fetched, same as any signed-out visitor
+— so a live draft-in-progress leaked in full to anyone with the link.)
+
 ## Yahoo import
 
 Yahoo user-level Fantasy API access is still pending Yahoo's manual review

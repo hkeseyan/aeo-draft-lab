@@ -15,6 +15,63 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 ## Entries
 
 <!-- Newest first. One line per item: date, status, short description. -->
+- 🔧 2026-08-26 — **"Site cached to an older draft" + player pool still
+  running dry before the draft finishes** — user reported both while browsing
+  production signed out.
+  *Root-caused, mostly fixed:*
+  1. *Player pool: confirmed — the cloud `league:aeo-keepers` profile still
+     held the old 184-player CSV (185 lines incl. header) from before the
+     2026-08-24 250-player expansion; the 250-row CSV only ever made it into
+     the repo and the hardcoded fallback, never pushed to the cloud copy that
+     the app actually uses once it exists. **Fixed live** — read the current
+     profile via `wrangler kv`, backed it up into `leagueHistory:aeo-keepers`
+     exactly as the app's own `PUT /api/leagues/:id` would, then wrote back
+     the real 250-row `players-2026.csv`. Verified via `/api/leagues` (251
+     lines now) and via `/api/leagues/aeo-keepers/history` (backup restorable
+     through the normal UI). `/api/setup` (keepers/trades/tendencies)
+     untouched.
+  2. *"Cached to an older draft": two causes, confirmed.* First — this
+     morning's accounts work means a signed-out visitor with auth enabled
+     gets **zero** persistence (neither shared nor private), so every
+     reset/redraft only lived in that browser tab; reload pulled the same
+     stale `/api/setup` copy back down. Second, and worse: the player-pool
+     fix above **reassigns player ids**, since `parsePlayers()` keys a
+     player's id to its CSV row index — comparing the old and new 184-row
+     prefixes found **164 of 184 positions now point to a different
+     player**. The pool fix alone would have made the stuck draft (184
+     picks, stalled at curPick 187 — the exact point the old pool ran dry)
+     render as a board of wrong players.
+     **Not fully resolved** — I could back up and reset `setup:main`'s
+     `picks`/`curPick` the same way I fixed the league profile (keeping
+     keepers/trades/tendencies/queue, all name-keyed and unaffected by the
+     reindex), but Claude Code's own safety layer declined to let me write
+     directly to live in-progress draft state via infrastructure access,
+     correctly treating that as a bigger deal than a static player list.
+     **User action needed**: sign in as `kyos`, then click "Reset draft (keep
+     keepers)" in the Draft Room — same fix, through the sanctioned path, with
+     the server's own automatic backup. Until then, loading the app signed
+     out (not `?guest=1`) shows the corrupted board; guest links are safe
+     regardless, see the entry below.*
+- ✅ 2026-08-26 — **Guest mode should show real keepers/trades but never the
+  owner's real draft** — user is sharing `?guest=1` with friends specifically
+  to keep them in the Draft Room only; wants them to start from a blank board
+  seeded with the real keepers/trades (so it's a realistic mock), able to
+  draft and change their own picks freely, but never see the owner's actual
+  in-progress picks, queue, or opponent-model tendencies — the exact things
+  that would tip off which players the owner favors.
+  *Done — `loadSetup()` previously loaded the real `picks`/`queued`/
+  `tendencies` for ANY signed-out visitor, guest link included, since
+  "not signed in" and "guest" were treated as the same case. They're now
+  distinct: `GUEST_MODE` always calls `resetDraft()` (keepers pre-placed,
+  nothing else) regardless of what the cloud has, while keepers and pick/
+  player trades still load normally (they're league facts, and load
+  unconditionally earlier in the function). `saveSetup()` was already a
+  no-op for guests, so their own drafting stays local and never touches the
+  cloud either direction. Verified against realistic in-progress data in the
+  jsdom harness: with 2 real keepers, 1 real pick trade, 3 real draft picks,
+  a real queue, and real tendencies all present in `/api/setup`, a guest
+  session shows exactly the 2 keepers and the 1 trade, and zero of the 3
+  picks/queue entries/tendency reads. See SPECS.md → "Guest mode".*
 - ✅ 2026-08-26 — **Commish: track "who knows them" for friend-of-a-friend
   managers** — offseason task, tracking returning/departing owners; when a
   slot opens and a replacement is a friend of a friend rather than someone the

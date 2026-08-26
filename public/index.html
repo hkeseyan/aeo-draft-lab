@@ -2974,8 +2974,17 @@ async function loadSetup(){
     // queued/tendencies/picks in the shared record are what a pre-accounts save
     // looked like. They're still the source of truth with no accounts, and the
     // admin's own state to adopt on first sign-in — but a member must never see
-    // them, so they're skipped outright there.
-    if(!isSignedIn()||canEditShared()){
+    // them, so they're skipped outright there. A guest link is a third case,
+    // distinct from "no accounts yet": it's deliberately shown to people the
+    // owner doesn't want seeing their real draft-in-progress (which players
+    // they've queued, their opponent-model tendencies, picks already made) —
+    // real keepers/trades are still league facts guests should see, but the
+    // board itself always starts from resetDraft() so their session begins
+    // blank and is theirs alone to draft and undo locally (saveSetup() already
+    // no-ops for guests, so nothing they do here can leak back either).
+    if(GUEST_MODE){
+      resetDraft();
+    } else if(!isSignedIn()||canEditShared()){
       if(Array.isArray(s.queued))queued=new Set(s.queued);
       applyTendencies(s.tendencies);
       if(Array.isArray(s.picks)&&s.picks.length){
