@@ -158,6 +158,21 @@ to a CSV download). Hidden entirely in guest mode, and admin-only once accounts
 exist: unlike keepers and trades, dues and contact details aren't facts about
 the draft, so members can't read them either.
 
+Each owner row also has a **"Known by"** field — free text, e.g. "Dirty's
+coworker" — for tracking who in the league actually knows that person
+personally. Most useful once the league isn't the same 12 people who've known
+each other for years: a vouch from an existing owner is worth recording
+separately from whether someone's dues are paid.
+
+A second card, **Prospective replacements**, tracks people being considered
+for an open slot who aren't one of the confirmed owners yet — name, known by,
+contact, status (considering/invited/confirmed/declined), and notes. Kept as
+its own list (`COMMISH.__prospects`, an array) rather than owner rows, since
+these people usually aren't in `OWNERS` at all — most never will be, since
+most "prospects" don't pan out. Saved in the same `/api/commish` blob as the
+owner rows, so it gets the same backup history for free; no new endpoint was
+needed since that route already accepts an arbitrary JSON object.
+
 ### Leagues
 Create, edit, or delete league profiles — see "League profiles" below.
 

@@ -15,6 +15,23 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 ## Entries
 
 <!-- Newest first. One line per item: date, status, short description. -->
+- ✅ 2026-08-26 — **Commish: track "who knows them" for friend-of-a-friend
+  managers** — offseason task, tracking returning/departing owners; when a
+  slot opens and a replacement is a friend of a friend rather than someone the
+  whole league already knows, the user wants to record who vouches for /
+  knows that person, plus track prospective replacements separately from the
+  confirmed 12 owners.
+  *Done — a "Known by" field added to each owner row (who in the league
+  personally knows them), plus a new **Prospective replacements** card:
+  name/known-by/contact/status(considering-invited-confirmed-declined)/notes
+  for candidates who aren't a confirmed owner yet. Both save through the
+  existing `/api/commish` blob — that route already takes an arbitrary JSON
+  object, so no worker.js change was needed, and prospects inherit the same
+  30-snapshot backup history as everything else on the tab. Verified across
+  all five account-role scenarios (add/edit/remove a prospect, "known by"
+  column renders for admin, whole tab stays absent for member/guest/signed-out
+  same as before) and round-tripped through a local Worker's real
+  `/api/commish` endpoint.*
 - ✅ 2026-08-26 — **Security review of this session's auth work (self-initiated)**
   — ran a security pass over the accounts code before it merges, since a
   mistake in session/password handling is the costliest kind of bug in that

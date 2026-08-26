@@ -480,6 +480,7 @@
             <th>Dues paid ($)</th>
             <th>Outstanding</th>
             <th style="text-align:left">Contact</th>
+            <th style="text-align:left">Known by <span title="who in the league actually knows this person — useful once it's not just the same 12 people every year">ⓘ</span></th>
             <th style="text-align:left">Notes</th>
           </tr></thead>
           <tbody id="commishTable"></tbody>
@@ -493,6 +494,28 @@
       <details style="margin-top:8px"><summary class="small muted">Backup history (roll back if dues or contacts got overwritten)</summary>
         <div class="scroll" style="margin-top:8px"><table id="commishBackupTable"><thead><tr><th>When</th><th></th></tr></thead><tbody></tbody></table></div>
       </details>
+    </div>
+    <div class="card">
+      <h2>Prospective replacements</h2>
+      <p class="small muted">Candidates for an opening — not one of the confirmed owners yet. The point of "known by" here: a friend-of-a-friend the commish has never met is a different level of vetting than someone an existing owner vouches for personally.</p>
+      <div class="scroll">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr class="small muted">
+            <th style="text-align:left">Name</th>
+            <th style="text-align:left">Known by</th>
+            <th style="text-align:left">Contact</th>
+            <th>Status</th>
+            <th style="text-align:left">Notes</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="prospectTable"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input type="text" id="prospectName" placeholder="name" style="min-width:120px">
+        <input type="text" id="prospectKnownBy" placeholder="known by (who vouches for them)" style="min-width:180px">
+        <button class="btn" id="prospectAdd">Add prospect</button>
+      </div>
     </div>
   </section>
 
@@ -2629,6 +2652,8 @@ el('rankPasteApply').onclick=()=>applyPastedRankings(el('rankPaste').value);
 el('rankExport').onclick=()=>exportText(RANKINGS.order.map((n,i)=>`${i+1}. ${n}${RANKINGS.tiers[n]?' (tier '+RANKINGS.tiers[n]+')':''}`).join('\n'),'my-rankings.txt');
 el('acctCreateUser').onclick=createAccount;
 el('commishCopy').onclick=copyCommishContacts;
+el('prospectAdd').onclick=addProspect;
+el('prospectName').onkeydown=e=>{ if(e.key==='Enter')addProspect(); };
 el('simToMe').onclick=simToMe;
 el('advance1').onclick=advanceOne;
 el('undo').onclick=undo;
@@ -2777,7 +2802,7 @@ async function apiSetup(method,body){const r=await fetch('/api/setup?league='+en
 // ---------- COMMISH (membership: returning/dues/contact) ----------
 let COMMISH={};
 async function apiCommish(method,body){const r=await fetch('/api/commish?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method,headers:{'Content-Type':'application/json',...tokenHdr()},body:body?JSON.stringify(body):undefined});if(!r.ok)throw new Error('HTTP '+r.status);const t=await r.text();return t?JSON.parse(t):null;}
-function commishRowFor(owner){ return COMMISH[owner]=COMMISH[owner]||{returning:'unsure',duesOwed:0,duesPaid:0,contact:'',notes:''}; }
+function commishRowFor(owner){ return COMMISH[owner]=COMMISH[owner]||{returning:'unsure',duesOwed:0,duesPaid:0,contact:'',notes:'',knownBy:''}; }
 function renderCommish(){
   const tb=el('commishTable'); if(!tb)return;
   tb.innerHTML=OWNERS.map(owner=>{
@@ -2793,6 +2818,7 @@ function renderCommish(){
       <td style="text-align:center"><input type="number" min="0" step="1" data-cm-paid="${owner}" value="${r.duesPaid}" style="width:70px"></td>
       <td style="text-align:center" class="small ${(r.duesOwed-r.duesPaid)>0?'val-bad':((r.duesOwed>0)?'val-good':'muted')}">${(r.duesOwed-r.duesPaid)>0?('$'+(r.duesOwed-r.duesPaid)):(r.duesOwed>0?'paid':'—')}</td>
       <td><input type="text" data-cm-contact="${owner}" value="${r.contact}" placeholder="email/phone" style="width:100%"></td>
+      <td><input type="text" data-cm-knownby="${owner}" value="${r.knownBy||''}" placeholder="e.g. Dirty's coworker" style="width:100%"></td>
       <td><input type="text" data-cm-notes="${owner}" value="${r.notes}" placeholder="" style="width:100%"></td>
     </tr>`;
   }).join('');
@@ -2800,8 +2826,54 @@ function renderCommish(){
   tb.querySelectorAll('[data-cm-owed]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmOwed).duesOwed=+inp.value||0; saveCommish();});
   tb.querySelectorAll('[data-cm-paid]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmPaid).duesPaid=+inp.value||0; saveCommish();});
   tb.querySelectorAll('[data-cm-contact]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmContact).contact=inp.value; saveCommish();});
+  tb.querySelectorAll('[data-cm-knownby]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmKnownby).knownBy=inp.value; saveCommish();});
   tb.querySelectorAll('[data-cm-notes]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmNotes).notes=inp.value; saveCommish();});
   renderCommishSummary();
+  renderProspects();
+}
+// ---------- Prospective replacements (not-yet-owners being considered for an
+// open slot) — kept apart from the OWNERS-keyed rows above since these
+// people aren't in OWNERS at all yet, sometimes never will be. Stored as an
+// array under a key that can't collide with an owner name.
+function prospectsList(){ return COMMISH.__prospects=COMMISH.__prospects||[]; }
+function prospectFor(id){ return prospectsList().find(p=>p.id===id); }
+function renderProspects(){
+  const tb=el('prospectTable'); if(!tb)return;
+  const list=prospectsList();
+  tb.innerHTML = list.length ? list.map(p=>`<tr>
+      <td>${p.name}</td>
+      <td><input type="text" data-pr-knownby="${p.id}" value="${p.knownBy||''}" placeholder="who vouches for them" style="width:100%"></td>
+      <td><input type="text" data-pr-contact="${p.id}" value="${p.contact||''}" placeholder="email/phone" style="width:100%"></td>
+      <td style="text-align:center"><select data-pr-status="${p.id}">
+        <option value="considering" ${p.status==='considering'?'selected':''}>Considering</option>
+        <option value="invited" ${p.status==='invited'?'selected':''}>Invited</option>
+        <option value="confirmed" ${p.status==='confirmed'?'selected':''}>Confirmed</option>
+        <option value="declined" ${p.status==='declined'?'selected':''}>Declined</option>
+      </select></td>
+      <td><input type="text" data-pr-notes="${p.id}" value="${p.notes||''}" style="width:100%"></td>
+      <td><a href="#" data-pr-rm="${p.id}">✕</a></td>
+    </tr>`).join('')
+    : '<tr><td colspan="6" class="muted small">No prospects yet — add someone being considered for an open slot below.</td></tr>';
+  tb.querySelectorAll('[data-pr-knownby]').forEach(inp=>inp.onchange=()=>{const p=prospectFor(inp.dataset.prKnownby); if(p){p.knownBy=inp.value; saveCommish();}});
+  tb.querySelectorAll('[data-pr-contact]').forEach(inp=>inp.onchange=()=>{const p=prospectFor(inp.dataset.prContact); if(p){p.contact=inp.value; saveCommish();}});
+  tb.querySelectorAll('[data-pr-status]').forEach(inp=>inp.onchange=()=>{const p=prospectFor(inp.dataset.prStatus); if(p){p.status=inp.value; saveCommish();}});
+  tb.querySelectorAll('[data-pr-notes]').forEach(inp=>inp.onchange=()=>{const p=prospectFor(inp.dataset.prNotes); if(p){p.notes=inp.value; saveCommish();}});
+  tb.querySelectorAll('[data-pr-rm]').forEach(a=>a.onclick=e=>{
+    e.preventDefault();
+    const list=prospectsList(); const i=list.findIndex(p=>p.id===a.dataset.prRm); if(i===-1)return;
+    if(!confirm('Remove '+list[i].name+' from prospects?'))return;
+    list.splice(i,1); renderProspects(); saveCommish();
+  });
+}
+function addProspect(){
+  const nameInp=el('prospectName'), knownByInp=el('prospectKnownBy');
+  const name=nameInp.value.trim(); if(!name)return;
+  prospectsList().push({
+    id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    name, knownBy: knownByInp.value.trim(), contact:'', status:'considering', notes:'',
+  });
+  nameInp.value=''; knownByInp.value='';
+  renderProspects(); saveCommish();
 }
 // The two questions a commissioner actually opens this tab to answer: is the
 // league full, and who still owes.
