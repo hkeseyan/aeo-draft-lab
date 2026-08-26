@@ -15,6 +15,31 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 ## Entries
 
 <!-- Newest first. One line per item: date, status, short description. -->
+- ✅ 2026-08-26 — **Password minimum is too strict** — user wants 4 characters
+  minimum and no other requirements. This is a fantasy-football tool shared
+  with a dozen friends, not a bank.
+  *Done — the 8-character floor is now 4, in all three places that enforce it
+  (first account, admin-created/reset account, self-service change) and in the
+  three UI placeholders. Verified against a local Worker: 3 chars refused, 4
+  chars accepted for bootstrap, login, password change and member creation.*
+- 🔧 2026-08-26 — **Get the Yahoo leagues in properly — settings, teams and
+  rosters** — user's Yahoo leagues are public-facing and they want them
+  imported the way Sleeper/MFL already are, without waiting on the pending
+  Yahoo API access review. Asked to figure out how it's possible given the
+  API's state, and offered to supply league IDs.
+  *Research 2026-08-26: Yahoo's docs say public leagues can be queried without
+  authenticating a *user*, and the `yahoo-fantasy` npm package (v5.3.0,
+  `YahooFantasy.mjs` `api()`) shows exactly how — when no user token is
+  present it signs the request with **2-legged OAuth 1.0a**: `oauth_consumer_key`
+  + HMAC-SHA1 signature from the app's consumer secret, no `oauth_token`, no
+  user consent. So the gate isn't a user login or the pending Fantasy API
+  review — it's just having app credentials. Raw unauthenticated GETs return
+  401 `unable_to_determine_oauth_type`, confirming *some* OAuth is required
+  (verified against `/game/nfl`, `/game/nfl/game_weeks` and a `/players`
+  lookup). YFPY's README claims no credentials are needed for public leagues,
+  but its code still requires consumer key/secret — treat that README line as
+  stale. Waiting on league IDs to test the HTML fallback and to confirm the
+  leagues are genuinely public.*
 
 - ✅ 2026-08-26 — **Custom rankings (v1, ahead of the full projections
   engine).** User wants their own player rankings in the app now — "it

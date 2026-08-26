@@ -296,7 +296,7 @@ export default {
         if (!b) return J({ error: "bad json" }, 400);
         const name = String(b.username || "").trim();
         if (!USERNAME_RE.test(name)) return J({ error: "username must be 2-32 chars: letters, numbers, . _ -" }, 400);
-        if (String(b.password || "").length < 8) return J({ error: "password must be at least 8 characters" }, 400);
+        if (String(b.password || "").length < 4) return J({ error: "password must be at least 4 characters" }, 400);
         await createUser(kv, name, String(b.password), "admin");
         const tok = randomToken();
         await kv.put(sessionKey(tok), JSON.stringify({ u: name, created: Date.now() }), { expirationTtl: SESSION_TTL });
@@ -330,7 +330,7 @@ export default {
         if (!me) return J({ error: "sign in required" }, 401);
         const b = await body();
         if (!b) return J({ error: "bad json" }, 400);
-        if (String(b.next || "").length < 8) return J({ error: "new password must be at least 8 characters" }, 400);
+        if (String(b.next || "").length < 4) return J({ error: "new password must be at least 4 characters" }, 400);
         const rec = await kv.get(userKey(me.name), { type: "json" });
         const hash = await hashPassword(String(b.current || ""), rec.salt, rec.iterations || PBKDF2_ITERATIONS);
         if (!digestsEqual(hash, rec.hash)) return J({ error: "current password is wrong" }, 401);
@@ -356,7 +356,7 @@ export default {
           if (!b) return J({ error: "bad json" }, 400);
           const name = String(b.username || "").trim();
           if (!USERNAME_RE.test(name)) return J({ error: "username must be 2-32 chars: letters, numbers, . _ -" }, 400);
-          if (String(b.password || "").length < 8) return J({ error: "password must be at least 8 characters" }, 400);
+          if (String(b.password || "").length < 4) return J({ error: "password must be at least 4 characters" }, 400);
           const role = b.role === "admin" ? "admin" : "member";
           const existing = await kv.get(userKey(name), { type: "json" });
           if (existing && !b.reset) return J({ error: "that username already exists" }, 409);

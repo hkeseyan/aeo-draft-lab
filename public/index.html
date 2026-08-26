@@ -504,7 +504,7 @@
       <div id="acctUsers" class="small"></div>
       <div class="row" style="margin-top:10px">
         <input type="text" id="acctNewUser" placeholder="username" style="min-width:140px">
-        <input type="password" id="acctNewPass" placeholder="temporary password (8+ chars)" style="min-width:180px">
+        <input type="password" id="acctNewPass" placeholder="temporary password (4+ chars)" style="min-width:180px">
         <select id="acctNewRole"><option value="member">member</option><option value="admin">admin</option></select>
         <button class="btn" id="acctCreateUser">Create account</button>
       </div>
@@ -2147,7 +2147,7 @@ function renderAccount(){
       <p class="small muted">Creating the first account turns sign-in on and makes you the admin. After that, keepers/trades/league settings need an admin session (so sign in on your other devices too), and your rankings, queue, tendency read and in-progress draft become private to your account.</p>
       <div class="row">
         <input type="text" id="acctBootUser" placeholder="username" style="min-width:140px">
-        <input type="password" id="acctBootPass" placeholder="password (8+ chars)" style="min-width:180px">
+        <input type="password" id="acctBootPass" placeholder="password (4+ chars)" style="min-width:180px">
         <button class="btn" id="acctBootBtn">Create the first account</button>
       </div>`;
     el('acctBootBtn').onclick=async()=>{
@@ -2178,7 +2178,7 @@ function renderAccount(){
     <div class="row"><button class="btn ghost" id="acctLogoutBtn">Sign out</button></div>
     <div class="row" style="margin-top:10px">
       <input type="password" id="acctCurPass" placeholder="current password" style="min-width:150px">
-      <input type="password" id="acctNextPass" placeholder="new password (8+ chars)" style="min-width:170px">
+      <input type="password" id="acctNextPass" placeholder="new password (4+ chars)" style="min-width:170px">
       <button class="btn ghost" id="acctPassBtn">Change password</button>
     </div>`;
   el('acctLogoutBtn').onclick=async()=>{ try{await apiAuth('/logout','POST');}catch(e){} location.reload(); };
