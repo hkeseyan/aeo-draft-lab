@@ -15,6 +15,269 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 ## Entries
 
 <!-- Newest first. One line per item: date, status, short description. -->
+- 🔧 2026-08-26 — **Session handoff — read this first.** Ending this session
+  here to save usage; a fresh session should start from this entry rather
+  than re-deriving context.
+
+  **PR open, not merged**: [PR #11](https://github.com/hkeseyan/aeo-draft-lab/pull/11)
+  on branch `claude/fantasy-app-next-features-dxslx6`, head `a4fb671`, CI
+  green, no review comments, mergeable. Bundles this session's work: accounts,
+  custom rankings, draft-day tools (tiers/scarcity/rewind/analysis), Commish
+  v2+v3 (restore panel, dues rollup, "known by"/prospective-replacements),
+  the Yahoo importer, the `BOOTSTRAP_SECRET` security fix, and the guest-mode
+  fix below. Not merged because nobody's asked for that yet — pick up by
+  checking its current state (`gh pr view 11` or the GitHub UI) before
+  assuming anything below is still accurate, since production auto-deploys
+  from this branch via Cloudflare Workers Build independent of the merge.
+
+  **⚠️ One real action item outstanding, needs the user (`kyos`) specifically**:
+  sign in on the Account tab, then click **"Reset draft (keep keepers)"** in
+  the Draft Room. Confirmed still un-done as of this entry (`/api/setup` still
+  shows 184 picks, curPick 187). Why it matters: the player-pool fix earlier
+  this session (184→250 rows) reindexed player ids, and 164 of the 184 stuck
+  picks now point to the *wrong player* if loaded while signed out. Guests via
+  `?guest=1` are unaffected (they never load stored picks at all, see below) —
+  this only corrupts the signed-out/owner view until reset. No further Claude
+  action needed here; this is purely a "someone with the password clicks a
+  button" step. See the two entries below for the full incident writeup.
+
+  **Yahoo importer — built, verified as far as possible without credentials,
+  never run end-to-end.** `GET /api/import/yahoo/:leagueKey` is live and its
+  OAuth1 signing was verified byte-for-byte against a reference library, but
+  nobody's supplied (a) real league IDs or (b) `YAHOO_CLIENT_ID`/
+  `YAHOO_CLIENT_SECRET` (`npx wrangler secret put ...`) yet. Still waiting on
+  the user for both — see the 2026-08-26 "Get the Yahoo leagues in properly"
+  entry below for the full research writeup.
+
+  **Recurring check-in stopped on purpose.** This session had been
+  self-scheduling an hourly wake-up (via `send_later`) to re-poll PR #11's CI/
+  review state — that's now deleted (was `trig_01W5aa8BxWgLngKYtE1EYy5c`) to
+  stop burning usage on a session that's ending anyway. This does **not** lose
+  PR monitoring: the GitHub webhook subscription (`subscribe_pr_activity`) is
+  separate infrastructure and stays active regardless — real CI failures and
+  review comments on PR #11 will still wake *this* persistent session
+  (`session_015MqhZ6WuoDPo7Ez93esFoA`) when they happen, at zero standing
+  cost. A fresh session picking this up that wants to actively drive the PR
+  to merge should re-arm a check-in itself rather than assuming one exists.
+- 🔧 2026-08-26 — **"Site cached to an older draft" + player pool still
+  running dry before the draft finishes** — user reported both while browsing
+  production signed out.
+  *Root-caused, mostly fixed:*
+  1. *Player pool: confirmed — the cloud `league:aeo-keepers` profile still
+     held the old 184-player CSV (185 lines incl. header) from before the
+     2026-08-24 250-player expansion; the 250-row CSV only ever made it into
+     the repo and the hardcoded fallback, never pushed to the cloud copy that
+     the app actually uses once it exists. **Fixed live** — read the current
+     profile via `wrangler kv`, backed it up into `leagueHistory:aeo-keepers`
+     exactly as the app's own `PUT /api/leagues/:id` would, then wrote back
+     the real 250-row `players-2026.csv`. Verified via `/api/leagues` (251
+     lines now) and via `/api/leagues/aeo-keepers/history` (backup restorable
+     through the normal UI). `/api/setup` (keepers/trades/tendencies)
+     untouched.
+  2. *"Cached to an older draft": two causes, confirmed.* First — this
+     morning's accounts work means a signed-out visitor with auth enabled
+     gets **zero** persistence (neither shared nor private), so every
+     reset/redraft only lived in that browser tab; reload pulled the same
+     stale `/api/setup` copy back down. Second, and worse: the player-pool
+     fix above **reassigns player ids**, since `parsePlayers()` keys a
+     player's id to its CSV row index — comparing the old and new 184-row
+     prefixes found **164 of 184 positions now point to a different
+     player**. The pool fix alone would have made the stuck draft (184
+     picks, stalled at curPick 187 — the exact point the old pool ran dry)
+     render as a board of wrong players.
+     **Not fully resolved** — I could back up and reset `setup:main`'s
+     `picks`/`curPick` the same way I fixed the league profile (keeping
+     keepers/trades/tendencies/queue, all name-keyed and unaffected by the
+     reindex), but Claude Code's own safety layer declined to let me write
+     directly to live in-progress draft state via infrastructure access,
+     correctly treating that as a bigger deal than a static player list.
+     **User action needed**: sign in as `kyos`, then click "Reset draft (keep
+     keepers)" in the Draft Room — same fix, through the sanctioned path, with
+     the server's own automatic backup. Until then, loading the app signed
+     out (not `?guest=1`) shows the corrupted board; guest links are safe
+     regardless, see the entry below.*
+- ✅ 2026-08-26 — **Guest mode should show real keepers/trades but never the
+  owner's real draft** — user is sharing `?guest=1` with friends specifically
+  to keep them in the Draft Room only; wants them to start from a blank board
+  seeded with the real keepers/trades (so it's a realistic mock), able to
+  draft and change their own picks freely, but never see the owner's actual
+  in-progress picks, queue, or opponent-model tendencies — the exact things
+  that would tip off which players the owner favors.
+  *Done — `loadSetup()` previously loaded the real `picks`/`queued`/
+  `tendencies` for ANY signed-out visitor, guest link included, since
+  "not signed in" and "guest" were treated as the same case. They're now
+  distinct: `GUEST_MODE` always calls `resetDraft()` (keepers pre-placed,
+  nothing else) regardless of what the cloud has, while keepers and pick/
+  player trades still load normally (they're league facts, and load
+  unconditionally earlier in the function). `saveSetup()` was already a
+  no-op for guests, so their own drafting stays local and never touches the
+  cloud either direction. Verified against realistic in-progress data in the
+  jsdom harness: with 2 real keepers, 1 real pick trade, 3 real draft picks,
+  a real queue, and real tendencies all present in `/api/setup`, a guest
+  session shows exactly the 2 keepers and the 1 trade, and zero of the 3
+  picks/queue entries/tendency reads. See SPECS.md → "Guest mode".*
+- ✅ 2026-08-26 — **Commish: track "who knows them" for friend-of-a-friend
+  managers** — offseason task, tracking returning/departing owners; when a
+  slot opens and a replacement is a friend of a friend rather than someone the
+  whole league already knows, the user wants to record who vouches for /
+  knows that person, plus track prospective replacements separately from the
+  confirmed 12 owners.
+  *Done — a "Known by" field added to each owner row (who in the league
+  personally knows them), plus a new **Prospective replacements** card:
+  name/known-by/contact/status(considering-invited-confirmed-declined)/notes
+  for candidates who aren't a confirmed owner yet. Both save through the
+  existing `/api/commish` blob — that route already takes an arbitrary JSON
+  object, so no worker.js change was needed, and prospects inherit the same
+  30-snapshot backup history as everything else on the tab. Verified across
+  all five account-role scenarios (add/edit/remove a prospect, "known by"
+  column renders for admin, whole tab stays absent for member/guest/signed-out
+  same as before) and round-tripped through a local Worker's real
+  `/api/commish` endpoint.*
+- ✅ 2026-08-26 — **Security review of this session's auth work (self-initiated)**
+  — ran a security pass over the accounts code before it merges, since a
+  mistake in session/password handling is the costliest kind of bug in that
+  diff. Found one real HIGH: `POST /api/auth/bootstrap` was reachable by any
+  unauthenticated caller, so whoever POSTed first became admin — write access
+  to every league plus read access to the commissioner's contact/dues data, and
+  the ability to lock the real owner out permanently. Not theoretical: the app
+  is public at a shared URL, and production auth flipped to enabled at ~07:35Z
+  without a confirmed owner action.
+  *Fixed — claiming the first account now requires the `BOOTSTRAP_SECRET`
+  Worker secret, compared in constant time after hashing, and fails closed when
+  unset. Verified locally: no key set → locked; wrong key → refused; right key →
+  owner claims admin; second claim refused even with the right key. Also added
+  `.dev.vars` to `.gitignore` so a local secrets file can never be committed.
+  Deliberately not filed as findings: unescaped owner/player names in
+  `innerHTML` (pre-existing pattern on `main`, worth a repo-wide pass), path-only
+  SSRF in the Yahoo route (host/protocol are fixed literals), login timing
+  username enumeration, and the 4-char password floor (the user's explicit
+  call).*
+- ✅ 2026-08-26 — **Password minimum is too strict** — user wants 4 characters
+  minimum and no other requirements. This is a fantasy-football tool shared
+  with a dozen friends, not a bank.
+  *Done — the 8-character floor is now 4, in all three places that enforce it
+  (first account, admin-created/reset account, self-service change) and in the
+  three UI placeholders. Verified against a local Worker: 3 chars refused, 4
+  chars accepted for bootstrap, login, password change and member creation.*
+- 🔧 2026-08-26 — **Get the Yahoo leagues in properly — settings, teams and
+  rosters** — user's Yahoo leagues are public-facing and they want them
+  imported the way Sleeper/MFL already are, without waiting on the pending
+  Yahoo API access review. Asked to figure out how it's possible given the
+  API's state, and offered to supply league IDs.
+  *Research 2026-08-26: Yahoo's docs say public leagues can be queried without
+  authenticating a *user*, and the `yahoo-fantasy` npm package (v5.3.0,
+  `YahooFantasy.mjs` `api()`) shows exactly how — when no user token is
+  present it signs the request with **2-legged OAuth 1.0a**: `oauth_consumer_key`
+  + HMAC-SHA1 signature from the app's consumer secret, no `oauth_token`, no
+  user consent. So the gate isn't a user login or the pending Fantasy API
+  review — it's just having app credentials. Raw unauthenticated GETs return
+  401 `unable_to_determine_oauth_type`, confirming *some* OAuth is required
+  (verified against `/game/nfl`, `/game/nfl/game_weeks` and a `/players`
+  lookup). YFPY's README claims no credentials are needed for public leagues,
+  but its code still requires consumer key/secret — treat that README line as
+  stale.*
+  *Built 2026-08-26 — `GET /api/import/yahoo/:leagueKey` (bare id or full
+  league key), pulling settings + teams + rosters + draft results, same
+  review-before-save policy as Sleeper/MFL, plus an "Import from Yahoo" card on
+  the Leagues tab. It recovers the real draft round per player, which neither
+  the Sleeper nor MFL import can. Uses the stored bearer token when a Yahoo
+  account is connected (so private leagues work too), otherwise the app
+  signature. Verification: signature is byte-identical to the `oauth-signature`
+  npm package; Yahoo accepts the request shape (a deliberately fake consumer key
+  moves the error from `unable_to_determine_oauth_type` to
+  `consumer_key_unknown`, proving the signature parsed and OAuth1 is still live);
+  and the response parsing runs against the `yahoo-fantasy` package's real
+  recorded Yahoo payloads — which caught a genuine bug, since Yahoo reports
+  `draft_type: "live"` for auctions and flags them only in `is_auction_draft`.
+  Still needed to finish: the `YAHOO_CLIENT_ID`/`YAHOO_CLIENT_SECRET` secrets
+  (`npx wrangler secret put`) and the league ids, for a real end-to-end run.*
+
+- ✅ 2026-08-26 — **Custom rankings (v1, ahead of the full projections
+  engine).** User wants their own player rankings in the app now — "it
+  doesn't have to be the full projection capability we discussed elsewhere,
+  that can be added on in the next 1-2 weeks" — but it must be (a) league-
+  aware (rankings belong to a league profile, not global) and (b) saved
+  across sessions and tied to their account, not to a browser. Supersedes
+  the older 2026-08-24 "Custom/personal rankings" entry as the active
+  thread; the 2026-08-25 league-aware projections-engine entry stays the
+  anchor for the bigger model that layers on top of this.
+  *Done — new **Rankings** tab, per account and per league
+  (`GET/PUT /api/rankings`, its own KV entity with 20 rolling backups and a
+  restore panel). Seed from ECR or ADP and rearrange (▲/▼/⤒/type a number),
+  or paste a ranked list one name per line — matching got a new last-resort
+  pass that ignores every non-alphanumeric character, so "Ja Marr Chase"
+  finds "Ja'Marr Chase" instead of coming back unmatched. Your own tiers per
+  player, plus an auto-tier button that picks the gap threshold from the data
+  (~12 tiers) rather than a fixed number that gives 3 tiers on one pool and 80
+  on another. Switching it on only reorders what **you** see: `available()`
+  stays ADP-ordered so rivals keep drafting the market and the sim stays
+  honest, and ECR/ADP/proj are never overwritten. See SPECS.md → "My
+  rankings".*
+- ✅ 2026-08-26 — **Real user authentication** — so the app can be shared
+  with friends while keeping the user's own strategy and rankings hidden
+  from them. This is the "multiple people / separate save files" idea
+  (2026-08-25, previously "not that important") promoted to a now item,
+  because custom rankings tied to an account need it as a foundation.
+  Guest mode's UI-only trick doesn't cover it.
+  *Done — optional accounts: with none created the app behaves exactly as
+  before (one shared save file, no sign-in, guest link unchanged), and
+  creating the first one on the new **Account** tab turns auth on and makes
+  you the admin. League facts (settings, keepers, trades) stay shared and
+  admin-writable; rankings, queue, tendency read and the in-progress draft
+  become per-account, so a friend can run their own board without seeing
+  yours and two people can draft at once. Mocks are tagged by author.
+  Commissioner data is admin-only to read as well as write. PBKDF2-SHA256
+  passwords + KV session cookies — a real server-side boundary this time, not
+  guest mode's UI-level one. An admin's existing draft/queue/tendencies are
+  adopted into their private record automatically on first sign-in. Verified
+  end-to-end against a local Worker: role separation, private isolation
+  between two accounts, mock scoping, password change and account deletion
+  all behave. See SPECS.md → "Accounts".*
+- 🆕 2026-08-26 — **Yahoo read-only import of *public* league data as a
+  fallback** — user is still waiting on Yahoo Fantasy API access (manual
+  review, blocked since 2026-08-23) and may not get it. Wants a plan in
+  place for pulling public league data read-only, without OAuth, in case
+  the answer is no or arrives too late for the Sept 8 draft.
+  *Investigated 2026-08-26, plan written into SPECS.md → "Yahoo import:
+  where it stands, and the fallback". Short version: reading public league
+  data without OAuth doesn't look possible — the Fantasy API returns 401
+  unauthenticated for every endpoint, and league pages redirect to Yahoo's
+  login wall (the ids that don't redirect serve an error page, not league
+  content). Caveat: no genuinely public league id was available to test
+  against, so that's evidence, not proof. The fallback that needs nothing
+  from Yahoo is a **paste-based import** — you're already signed in on
+  yahoo.com where Draft Results and Teams are right there, and the app
+  already eats `owner|player|drafted|keeper` lines with forgiving name
+  matching. Scoped, not built — say the word and it's a small one.*
+- ✅ 2026-08-26 — **Draft-day bundle** — the four self-contained in-app items
+  from the older backlog, taken together this session: tiers with a
+  "N left in tier" counter, pick-value/scarcity run cues on the clock,
+  rewind-to-any-pick, and post-draft analysis/grade. See their individual
+  entries below (2026-08-20) for the original asks.
+  *Done — all four. **Tiers**: Best Available is broken up by tier with a
+  "N left" counter (amber at 4, red at ≤2) counted over the whole remaining
+  pool; the `tier` CSV column was being parsed away entirely, which is why it
+  had never displayed. Breaks are drawn only when a *deeper* tier first
+  appears, since tier numbers aren't monotonic in ADP order and drawing every
+  transition produced 94 separators over 220 rows. **Scarcity**: a line under
+  the draft controls showing the run since your last pick by position, how
+  many are left in the top remaining tier at QB/RB/WR/TE, and how many picks
+  until your turn comes round again. **Rewind**: click any made pick on the
+  board (or type a pick number) to drop everything from there on and
+  re-draft; keepers survive. **Analysis**: grades every roster on projected
+  starting-lineup points, with your projected finish and lineup, a league
+  table with each team's best/worst pick, and league-wide steals/reaches vs
+  ADP — and it says so plainly rather than grading zeroes if the pool has no
+  projections loaded.*
+- ✅ 2026-08-26 — **Commish v2 polish** — the restore-panel UI that v1
+  shipped without, plus a pass on which fields actually matter (dues
+  totals/outstanding, returning-count summary, contact export).
+  *Done — restore panel wired to the `/api/commish/history|restore` endpoints
+  v1 already had; a per-owner "outstanding" column; a rollup line (in/out/
+  unsure, dues collected vs owed, what's outstanding, how many owners have no
+  contact details); and a "Copy contact list" button that puts owner /
+  returning / contact / outstanding on the clipboard, falling back to a CSV
+  download where the clipboard API isn't available.*
 
 - 🔧 2026-08-25 — **Roadmap/priority order, as of today.** User wants friends
   actively using the app now for feedback. Stated order: (1) this push —
@@ -39,7 +302,7 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   versioned-backup pattern as `/api/setup`/`/api/leagues`. Scoped per league
   like everything else. Hidden entirely in guest mode. First pass — no
   polish pass on what fields matter most yet, revisit if asked.*
-- 🆕 2026-08-25 — **Multiple people logging in with separate save files** —
+- ✅ 2026-08-25 (done 2026-08-26, see the "Real user authentication" entry at the top) — **Multiple people logging in with separate save files** —
   user's friend is now testing the app (via the guest link) and this came up
   as a "maybe later" idea: real multi-user accounts, each with their own
   save data, rather than one shared setup per league. Explicitly low
@@ -277,7 +540,7 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   rows; also recovered season-long FPTS projections for the 59 players
   FantasyPros exposes without a login (full projections are paywalled).
   Shipped as PR #4 on `hkeseyan/aeo-draft-lab`, pending merge/deploy.*
-- 🆕 2026-08-24 — **Custom/personal rankings** — wants the ability to enter
+- ✅ 2026-08-24 (done 2026-08-26, see the "Custom rankings (v1)" entry at the top) — **Custom/personal rankings** — wants the ability to enter
   their own player rankings instead of relying solely on ECR. User explicitly
   deferred this themselves ("we can keep it that way until we develop a
   different page or something") — not blocking, revisit later.
@@ -345,7 +608,7 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   once that player is drafted (by anyone) and reappear automatically on
   undo, since it's a display filter over the live pool, not a one-time
   removal. Persists via /api/setup like keepers/trades/tendencies.*
-- 🆕 2026-08-20 — **Tiers** — group players into tiers with a visible break
+- ✅ 2026-08-20 (done 2026-08-26, see the "Draft-day bundle" entry at the top) — **Tiers** — group players into tiers with a visible break
   in the pool list, plus a "N left in this tier" counter that turns red as a
   tier empties. Currently `players-2026.csv` has a `tier` column that the app
   parses but never displays.
@@ -368,14 +631,14 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   the new opponent model.
   *Done 2026-08-24 — pool extended to 250, see the "ADP/ECR data feels
   stale" entry above.*
-- 🆕 2026-08-20 — **Post-draft analysis / draft grade** — after a mock: grade,
+- ✅ 2026-08-20 (done 2026-08-26, see "Draft-day bundle") — **Post-draft analysis / draft grade** — after a mock: grade,
   projected standings/finish vs the other 11 rosters, positional ranks,
   strengths & weaknesses, and biggest steals/reaches vs ADP.
-- 🆕 2026-08-20 — **Pick-value & scarcity cues on the clock** — show runs
+- ✅ 2026-08-20 (done 2026-08-26, see "Draft-day bundle") — **Pick-value & scarcity cues on the clock** — show runs
   ("4 RBs gone since your last pick"), positional scarcity warnings, and
   who's likely gone before your next pick (already partly present as
   "projected availability" — wants to be more prominent).
-- 🆕 2026-08-20 — **Redo / rewind to any point** — Draft Wizard can restart a
+- ✅ 2026-08-20 (done 2026-08-26, see "Draft-day bundle") — **Redo / rewind to any point** — Draft Wizard can restart a
   mock from any earlier pick to test a different branch. Today there's only a
   single-step `undo()`.
 - ✅ 2026-08-20 — **Keeper cost/value view** — a dedicated read on each

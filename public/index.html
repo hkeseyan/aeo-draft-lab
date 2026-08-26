@@ -40,7 +40,9 @@
   .pos{display:inline-block;min-width:30px;text-align:center;border-radius:5px;font-size:11px;font-weight:700;padding:1px 5px;color:#0b0f18}
   .pos.QB{background:var(--qb)} .pos.RB{background:var(--rb)} .pos.WR{background:var(--wr)}
   .pos.TE{background:var(--te)} .pos.K{background:var(--k)} .pos.DST{background:var(--dst)}
-  .val-good{color:var(--accent2);font-weight:700} .val-bad{color:var(--bad)}
+  .val-good{color:var(--accent2);font-weight:700} .val-bad{color:var(--bad)} .val-warn{color:var(--warn);font-weight:700}
+  /* Tier separators inside the pool table — a visible break where the drop-off is. */
+  tr.tierrow td{background:var(--panel2);border-top:1px solid var(--line);padding-top:5px;padding-bottom:5px}
   .pick-btn{background:var(--accent2);color:#04210f;border:none;border-radius:6px;padding:4px 8px;font-weight:700;cursor:pointer;font-size:12px}
   .kchip{font-size:10px;color:var(--warn);border:1px solid var(--warn);border-radius:10px;padding:0 5px;margin-left:4px}
   /* grid-template-columns is set inline per-league (team count varies); every
@@ -77,16 +79,19 @@
   <select id="leagueSelect"></select>
   <span class="tag" id="leagueTag1">12-team · Half-PPR · Snake · Slot 6</span>
   <span class="tag" id="leagueTag2">Draft Sep 8 · Keepers Sep 1</span>
+  <span class="tag" id="userChip" style="display:none"></span>
   <span class="seedwarn" id="seedWarn">⚠ Baseline ranking (SEED) — replace with FantasyPros/Yahoo ADP in the Data tab</span>
   <nav>
     <button data-view="room" class="active">Draft Room</button>
     <button data-view="teams">Teams & Keepers</button>
     <button data-view="trades">Trades</button>
+    <button data-view="rankings">Rankings</button>
     <button data-view="mocks">Mocks</button>
     <button data-view="lab">Strategy Lab</button>
     <button data-view="data">Data</button>
     <button data-view="leagues">Leagues</button>
     <button data-view="commish">Commish</button>
+    <button data-view="account">Account</button>
   </nav>
 </header>
 <main>
@@ -98,12 +103,18 @@
         <button class="btn ghost" id="advance1">Advance 1 pick (ADP)</button>
         <button class="btn ghost" id="undo">↩ Undo</button>
         <button class="btn warn" id="resetDraft">Reset draft (keep keepers)</button>
+        <span class="row small" style="gap:4px">⟲ rewind to pick
+          <input type="number" id="rewindTo" min="1" placeholder="#" style="width:64px">
+          <button class="btn ghost" id="rewindBtn">go</button>
+        </span>
         <span class="muted small" id="onClock"></span>
+        <span class="small" id="roomStatus"></span>
         <label class="row small" style="margin-left:auto;gap:4px">Rival noise
           <input type="range" id="noise" min="0" max="6" value="2" style="width:90px">
           <span id="noiseVal" class="muted">±2</span>
         </label>
       </div>
+      <div class="small" id="scarcity" style="margin-top:6px"></div>
     </div>
     <div class="grid2">
       <div>
@@ -122,7 +133,7 @@
           </div>
           <div class="scroll">
             <table id="poolTable">
-              <thead><tr><th title="Queue">Q</th><th>ADP</th><th>ECR</th><th>Pos</th><th>Player</th><th>P.Rk</th><th>Proj</th><th class="dcol">Δ</th><th></th></tr></thead>
+              <thead><tr><th title="Queue">Q</th><th id="poolMyHead" style="display:none" title="your rank">My</th><th>ADP</th><th>ECR</th><th>Pos</th><th>Player</th><th>P.Rk</th><th>Proj</th><th class="dcol">Δ</th><th></th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -140,12 +151,20 @@
       </div>
     </div>
     <div class="card">
-      <h2>Draft board <span class="muted small">(dashed = keeper · click a cell team header to set who's on the clock manually)</span></h2>
+      <h2>Draft board <span class="muted small">(dashed = keeper · click any made pick to rewind the draft back to it)</span></h2>
       <div class="board" id="boardGrid"></div>
     </div>
     <div class="card">
       <h2>My picks & projected availability</h2>
       <div id="myPicks"></div>
+    </div>
+    <div class="card">
+      <h2>Draft analysis <span class="muted small">(grades, projected finish, steals & reaches)</span></h2>
+      <div class="row">
+        <button class="btn ghost" id="analyzeBtn">Analyze current draft</button>
+        <span class="muted small">Scored on projected starting-lineup points, so it means more the fuller the board is.</span>
+      </div>
+      <div id="analysis" class="small muted" style="margin-top:10px">Draft a few rounds, then run this.</div>
     </div>
   </section>
 
@@ -205,6 +224,54 @@
       <div class="small muted" id="setupStatus"></div>
       <details style="margin-top:8px"><summary class="small muted">Backup history (roll back keepers/trades/picks if something got overwritten)</summary>
         <div class="scroll" style="margin-top:8px"><table id="backupTable"><thead><tr><th>When</th><th></th></tr></thead><tbody></tbody></table></div>
+      </details>
+    </div>
+  </section>
+
+
+  <!-- RANKINGS (per-user, per-league custom board) -->
+  <section class="view" id="view-rankings">
+    <div class="card">
+      <h2>My rankings <span class="muted small">(private to your account · this league only)</span></h2>
+      <p class="small muted">Your own board, on top of the market. ECR/ADP stay untouched and rivals keep drafting off ADP — turning this on only changes the order <b>you</b> see in Best Available, and lets you set your own tier breaks.</p>
+      <div id="rankGate" class="small muted"></div>
+      <div id="rankBody" style="display:none">
+        <div class="row">
+          <label class="row small" style="gap:5px"><input type="checkbox" id="rankEnabled"> Sort Best Available by my rankings</label>
+          <button class="btn ghost" id="rankSeedEcr">Start from ECR</button>
+          <button class="btn ghost" id="rankSeedAdp">Start from ADP</button>
+          <button class="btn ghost" id="rankAutoTiers">Auto-tier by gaps</button>
+          <button class="btn warn" id="rankClear">Clear my rankings</button>
+          <span class="muted small" id="rankStatus" style="margin-left:auto"></span>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <select id="rankPosFilter">
+            <option value="ALL">All positions</option>
+            <option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>K</option><option>DST</option>
+          </select>
+          <input type="text" id="rankSearch" placeholder="search player…" style="flex:1;min-width:120px">
+          <button class="btn ghost" id="rankExport">Export as text</button>
+        </div>
+        <div class="scroll" style="max-height:62vh;margin-top:8px">
+          <table id="rankTable">
+            <thead><tr><th>#</th><th>Move</th><th>Pos</th><th>Player</th><th>Tier</th><th>ECR</th><th>ADP</th><th title="my rank vs ADP — positive means I have him higher than the market">Δ mkt</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="card" id="rankPasteCard" style="display:none">
+      <h2>Paste a ranked list</h2>
+      <p class="small muted">One name per line, best first — the fastest way to get a board in from somewhere else. Names are matched the same forgiving way as everywhere else in the app (punctuation/suffixes ignored); anything that doesn't match is reported rather than silently dropped. Players you leave out keep their ECR order below the ones you ranked.</p>
+      <textarea id="rankPaste" placeholder="Ja'Marr Chase&#10;Bijan Robinson&#10;Jahmyr Gibbs&#10;…"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" id="rankPasteApply">Apply pasted order</button>
+        <span class="small muted" id="rankPasteStatus"></span>
+      </div>
+    </div>
+    <div class="card" id="rankBackupCard" style="display:none">
+      <details><summary class="small muted">Backup history (roll back to an earlier version of your board)</summary>
+        <div class="scroll" style="margin-top:8px"><table id="rankBackupTable"><thead><tr><th>When</th><th>Players</th><th></th></tr></thead><tbody></tbody></table></div>
       </details>
     </div>
   </section>
@@ -328,10 +395,15 @@
       <div class="small muted" id="mflImportStatus" style="margin-top:6px"></div>
     </div>
     <div class="card">
-      <h2>Connect Yahoo (in progress)</h2>
-      <p class="small muted">OAuth handshake works; the roster-import mapping isn't built yet. "List my leagues" is a diagnostic to see what Yahoo returns.</p>
+      <h2>Import from Yahoo</h2>
+      <p class="small muted">Paste a league id — the number in <code>football.fantasysports.yahoo.com/f1/<b>123456</b></code> — or a full league key like <code>nfl.l.123456</code> for a past season. A <b>public</b> league needs no Yahoo sign-in: the Worker signs the request with the app's own credentials. Connect an account below only if the league is private.</p>
       <div class="row">
-        <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account</button>
+        <input type="text" id="yahooLeagueId" placeholder="123456 or nfl.l.123456" style="min-width:180px">
+        <button class="btn" id="importYahooBtn">Import from Yahoo</button>
+      </div>
+      <div class="small muted" id="yahooImportStatus" style="margin-top:6px"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account (private leagues)</button>
         <button class="btn ghost" id="yahooListBtn">List my leagues</button>
       </div>
       <div class="small muted" id="yahooStatus" style="margin-top:6px"></div>
@@ -406,13 +478,72 @@
             <th>Returning</th>
             <th>Dues owed ($)</th>
             <th>Dues paid ($)</th>
+            <th>Outstanding</th>
             <th style="text-align:left">Contact</th>
+            <th style="text-align:left">Known by <span title="who in the league actually knows this person — useful once it's not just the same 12 people every year">ⓘ</span></th>
             <th style="text-align:left">Notes</th>
           </tr></thead>
           <tbody id="commishTable"></tbody>
         </table>
       </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" id="commishCopy">Copy contact list</button>
+        <span class="small muted" id="commishSummary" style="margin-left:auto"></span>
+      </div>
       <div class="small muted" id="commishStatus" style="margin-top:8px"></div>
+      <details style="margin-top:8px"><summary class="small muted">Backup history (roll back if dues or contacts got overwritten)</summary>
+        <div class="scroll" style="margin-top:8px"><table id="commishBackupTable"><thead><tr><th>When</th><th></th></tr></thead><tbody></tbody></table></div>
+      </details>
+    </div>
+    <div class="card">
+      <h2>Prospective replacements</h2>
+      <p class="small muted">Candidates for an opening — not one of the confirmed owners yet. The point of "known by" here: a friend-of-a-friend the commish has never met is a different level of vetting than someone an existing owner vouches for personally.</p>
+      <div class="scroll">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr class="small muted">
+            <th style="text-align:left">Name</th>
+            <th style="text-align:left">Known by</th>
+            <th style="text-align:left">Contact</th>
+            <th>Status</th>
+            <th style="text-align:left">Notes</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="prospectTable"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input type="text" id="prospectName" placeholder="name" style="min-width:120px">
+        <input type="text" id="prospectKnownBy" placeholder="known by (who vouches for them)" style="min-width:180px">
+        <button class="btn" id="prospectAdd">Add prospect</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ACCOUNT -->
+  <section class="view" id="view-account">
+    <div class="card">
+      <h2>Account</h2>
+      <div id="acctBox"></div>
+      <div class="small muted" id="acctStatus" style="margin-top:8px"></div>
+    </div>
+    <div class="card" id="acctUsersCard" style="display:none">
+      <h2>League members</h2>
+      <p class="small muted">Accounts you create here can run their own board, keep their own queue, rankings and opponent read, and save their own mocks. They can't change keepers, trades, league settings or commissioner data, and they can't see anyone else's rankings or draft.</p>
+      <div id="acctUsers" class="small"></div>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="acctNewUser" placeholder="username" style="min-width:140px">
+        <input type="password" id="acctNewPass" placeholder="temporary password (4+ chars)" style="min-width:180px">
+        <select id="acctNewRole"><option value="member">member</option><option value="admin">admin</option></select>
+        <button class="btn" id="acctCreateUser">Create account</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>What's shared, what's yours</h2>
+      <div class="small muted">
+        <p><b>Shared with everyone in the league</b> — league settings and rosters, who's keeping whom, and pick/player trades. These are facts about the league, so everybody sees the same board setup.</p>
+        <p><b>Private to your account</b> — your custom rankings, your queue, your per-owner tendency read, and your in-progress draft. Nobody else can load them, including the commissioner.</p>
+        <p class="small">Before any account exists the app works exactly as it always has, with one shared save file. The read-only guest link (<code>?guest=1</code>) keeps working either way.</p>
+      </div>
     </div>
   </section>
 </main>
@@ -996,7 +1127,7 @@ let LEAGUES = {...LEAGUES_DEFAULT};
 const GUEST_MODE = new URLSearchParams(location.search).get('guest')==='1';
 function applyGuestModeUI(){
   if(!GUEST_MODE)return;
-  document.querySelectorAll('nav button').forEach(b=>{ if(b.dataset.view!=='room')b.style.display='none'; });
+  document.querySelectorAll('nav button').forEach(b=>{ if(b.dataset.view!=='room')b.remove(); });
   const sel=el('leagueSelect'); if(sel)sel.style.display='none';
   // Hiding the tab isn't enough — the other views' data still populates the DOM
   // in the background and a right-click "Inspect" would see it. Strip those
@@ -1052,10 +1183,15 @@ function seedPool(){
     .map((p,i)=>({id:i+1,name:p[0],pos:p[1],team:p[2],adp:i+1,ecr:i+1,proj:0,drafted:false,keeper:null}));
 }
 function normName(s){return s.toLowerCase().replace(/\s+(jr|sr|ii|iii|iv)\.?$/,'').replace(/[.'’`-]/g,'').replace(/\s+/g,' ').trim();}
+// Last resort strips everything that isn't a letter or digit, so a list pasted
+// from somewhere that writes "Ja Marr Chase" or "AJ Brown" still finds the
+// player instead of being reported as unmatched.
+function squashName(s){return String(s).toLowerCase().replace(/\s+(jr|sr|ii|iii|iv)\.?$/,'').replace(/[^a-z0-9]/g,'');}
 function findPlayer(name){
   const n=name.trim().toLowerCase();
   return PLAYERS.find(p=>p.name.toLowerCase()===n) ||
-         PLAYERS.find(p=>normName(p.name)===normName(name));
+         PLAYERS.find(p=>normName(p.name)===normName(name)) ||
+         PLAYERS.find(p=>squashName(p.name)===squashName(name));
 }
 
 // ---------- KEEPER SETUP ----------
@@ -1212,7 +1348,7 @@ function myRoster(){return picks.filter(p=>ownerOf(p.overall)===mySlot).map(p=>P
 const el=id=>document.getElementById(id);
 function render(){
   if(LEAGUE.draftType==='auction'){ renderAuctionPlaceholder(); return; }
-  renderPool();renderBoard();renderMyPicks();renderRoster();renderOnClock();renderKeeperList();renderQueue();
+  renderPool();renderBoard();renderMyPicks();renderRoster();renderOnClock();renderKeeperList();renderQueue();renderScarcity();
 }
 function renderAuctionPlaceholder(){
   const msg='Auction drafting isn\'t built yet for this league. Teams, Trades, Mocks, and Data still work.';
@@ -1223,6 +1359,7 @@ function renderAuctionPlaceholder(){
   const myPicks=el('myPicks'); if(myPicks) myPicks.innerHTML=`<div class="muted small">${msg}</div>`;
   const rosterView=el('rosterView'); if(rosterView) rosterView.innerHTML=`<div class="muted small">${msg}</div>`;
   const myQueue=el('myQueue'); if(myQueue) myQueue.innerHTML=`<div class="muted small">${msg}</div>`;
+  const sc=el('scarcity'); if(sc) sc.innerHTML='';
 }
 function renderOnClock(){
   const ov=nextOpenPick(curPick);
@@ -1239,12 +1376,34 @@ function renderPool(){
   let rows=available();
   if(pos!=='ALL')rows=rows.filter(p=>p.pos===pos);
   if(q)rows=rows.filter(p=>p.name.toLowerCase().includes(q));
-  el('poolCount').textContent=`(${available().length} left)`;
+  // available() is ADP-ordered because that's what the opponent model runs on;
+  // my own board only reorders what I look at.
+  if(useMyRank())rows=rows.slice().sort((a,b)=>poolSortKey(a)-poolSortKey(b));
+  el('poolCount').textContent=`(${available().length} left)`+(useMyRank()?' · my order':'');
+  const mineHead=el('poolMyHead'); if(mineHead)mineHead.style.display=useMyRank()?'':'none';
   const tb=el('poolTable').querySelector('tbody'); tb.innerHTML='';
+  // How many of each tier are still on the board, so the counter reflects the
+  // whole pool rather than just the slice of rows being shown.
+  const tierLeft={}; available().forEach(p=>{const t=tierOf(p); if(t)tierLeft[t]=(tierLeft[t]||0)+1;});
+  // Tier numbers aren't monotonic in ADP order (a tier-4 guy can sit between two
+  // tier-5s), so a break is only drawn the first time a *deeper* tier appears —
+  // otherwise the board fills with separators bouncing between the same two tiers.
+  let deepestTier=0;
   rows.slice(0,220).forEach(p=>{
+    const t=tierOf(p);
+    const isBreak=t>deepestTier;
+    if(t)deepestTier=Math.max(deepestTier,t);
+    if(isBreak&&pos==='ALL'&&!q){
+      const left=tierLeft[t]||0;
+      const sep=document.createElement('tr'); sep.className='tierrow';
+      sep.innerHTML=`<td colspan="10" class="small"><span class="muted">Tier ${t}</span> — <b class="${left<=2?'val-bad':(left<=4?'val-warn':'muted')}">${left} left</b></td>`;
+      tb.appendChild(sep);
+    }
     const d=Math.round((p.adp-p.ecr)*10)/10; // + = falls later than ranked = value
+    const mine=myRankOf(p.name);
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><input type="checkbox" class="qcheck" data-q="${p.name.replace(/"/g,'&quot;')}" ${queued.has(p.name)?'checked':''}></td>
+      ${useMyRank()?`<td class="small"><b>${mine!=null?mine:'—'}</b></td>`:''}
       <td>${p.adp}</td><td>${p.ecr}</td><td><span class="pos ${p.pos}">${p.pos}</span></td>
       <td>${p.name}${p.keeper?`<span class="kchip">K</span>`:''}</td><td class="muted small">${p.pos}${p.posRank||''}</td><td class="small">${p.proj?p.proj.toFixed(1):''}</td>
       <td class="dcol ${valClass(d)}">${d>0?'+':''}${d}</td>
@@ -1298,6 +1457,11 @@ function renderBoard(){
       c.className='cell'+(own===mySlot?' me':'')+(pk&&pk.keeper?' keeper':'')+(ov===ovNext?' now':'')+(traded?' traded':'');
       if(pk){const pl=PLAYERS.find(x=>x.id===pk.playerId);
         c.innerHTML=`<div class="pk">${label(r,s)} ${pk.keeper?'· K':''}${tt}</div><b>${pl?pl.name:''}</b> <span class="pos ${pl?pl.pos:''}">${pl?pl.pos:''}</span>`;
+        if(!pk.keeper){
+          c.style.cursor='pointer';
+          c.title='Rewind the draft to this pick and re-draft from here';
+          c.onclick=()=>{ if(confirm('Rewind to '+label(r,s)+' (#'+ov+')? Everything drafted from here on is undone; keepers stay.'))rewindTo(ov); };
+        }
       } else {c.innerHTML=`<div class="pk">${label(r,s)} · #${ov}${tt}</div>`;}
       g.appendChild(c);
     }
@@ -1440,7 +1604,7 @@ function renderTeams(){
       const key=owner+'|'+r.player;
       const checked=assigned.has(key);
       const row=document.createElement('label'); row.className='mypick-row'; row.style.cursor='pointer';
-      const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=checked; cb.dataset.k=key;
+      const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=checked; cb.dataset.k=key; cb.disabled=!canEditShared();
       const left=document.createElement('span');
       left.innerHTML=` <span class="pos ${r.pos}">${r.pos||'?'}</span> ${r.player}`;
       const right=document.createElement('span'); right.className='small '+(r.val>=3?'val-good':(r.val<=-3?'val-bad':'muted'));
@@ -1598,7 +1762,7 @@ function parsePlayers(txt){
     const c=lines[i].split(',').map(x=>x.trim());
     if(c.length<2)continue;
     arr.push({id:i, name:c[0], pos:(c[1]||'').toUpperCase(), team:c[2]||'',
-      adp:+c[3]||(i), ecr:+c[4]||(+c[3]||i), proj:+c[5]||0, drafted:false, keeper:null});
+      adp:+c[3]||(i), ecr:+c[4]||(+c[3]||i), proj:+c[5]||0, tier:+c[6]||0, drafted:false, keeper:null});
   }
   return arr;
 }
@@ -1630,7 +1794,14 @@ function addSuggested(){
     }});
   applyKeepers(); resetDraft(); setStatus('Added suggested bargain keepers (edit teams as needed).');
 }
-function setStatus(s){el('saveStatus').textContent=s; setTimeout(()=>el('saveStatus').textContent='',4000);}
+// Writes to both status slots: the Data tab's (where it has always gone) and
+// the Draft Room's, since the Data tab isn't in the DOM at all for guests and
+// member accounts — and messages like "rewound to pick #12" belong by the board
+// anyway.
+function setStatus(s){
+  ['saveStatus','roomStatus'].forEach(id=>{const n=el(id); if(n)n.textContent=s;});
+  setTimeout(()=>{['saveStatus','roomStatus'].forEach(id=>{const n=el(id); if(n)n.textContent='';});},4000);
+}
 
 // config persistence
 // Full backup, independent of the cloud KV store — includes keepers/trades/picks
@@ -1910,6 +2081,31 @@ async function importFromSleeper(){
     el('sleeperImportStatus').textContent='✓ Imported as a NEW league — review fields below (draft type, superflex, scoring, keeper rules aren\'t set by this import) then Save to create it. This will not overwrite any existing league.';
   }catch(e){ el('sleeperImportStatus').textContent='⚠ Import failed: '+e.message; }
 }
+async function importFromYahoo(){
+  const id=el('yahooLeagueId').value.trim(); if(!id)return;
+  // Same policy as importFromSleeper()/importFromMfl(): always a NEW league,
+  // never whatever the form happened to be showing.
+  editingLeagueId=null;
+  el('yahooImportStatus').textContent='Importing…';
+  try{
+    const r=await fetch('/api/import/yahoo/'+encodeURIComponent(id));
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
+    el('lgName').value=data.name||'';
+    el('lgTeams').value=data.teams||12;
+    el('lgOwners').value=(data.owners||[]).join(', ');
+    renderOwnerSlotInputs(data.owners||[], data.ownerSlot||{}, (data.owners||[])[0]||'');
+    el('lgRostersRaw').value=data.rostersRaw||'';
+    if(data.draftType&&el('lgDraftType'))el('lgDraftType').value=data.draftType;
+    if(data.leagueType&&el('lgLeagueType')){el('lgLeagueType').value=data.leagueType; updateLgKeeperFieldsVisibility();}
+    if(data.scoringLabel&&el('lgScoring'))el('lgScoring').value=data.scoringLabel;
+    if(el('lgSuperflex'))el('lgSuperflex').checked=!!data.superflex;
+    if(data.starters&&Object.keys(data.starters).length)renderStartersInputs(data.starters);
+    const rounds=(data.rostersRaw||'').split('\n').filter(Boolean).length;
+    el('yahooImportStatus').textContent='✓ Imported '+(data.owners||[]).length+' teams / '+rounds+' rostered players as a NEW league via '+(data._authMode||'the API')+
+      '. Review the fields below — draft rounds came through where Yahoo had them, but keeper COST is left blank because that rule is yours, not Yahoo\'s — then Save.';
+  }catch(e){ el('yahooImportStatus').textContent='⚠ Import failed: '+e.message; }
+}
 async function importFromMfl(){
   const mid=el('mflLeagueId').value.trim(); if(!mid)return;
   const year=el('mflYear').value.trim()||'2026';
@@ -1972,17 +2168,467 @@ async function listYahooLeagues(){
   }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
 }
 
+// ---------- ACCOUNTS (optional per-user auth) ----------
+// Auth is off until the first account is created, and the app behaves exactly
+// as it did before that happened — one shared save file, no sign-in. Creating
+// an account turns it on: league facts (settings, keepers, trades) stay shared
+// and admin-writable, while rankings/queue/tendencies/in-progress draft become
+// per-account so friends can use the app without seeing the owner's board.
+let AUTH={enabled:false,user:null};
+const canEditShared=()=>!AUTH.enabled||!!(AUTH.user&&AUTH.user.role==='admin');
+const isSignedIn=()=>!!AUTH.user;
+async function apiAuth(path,method,body){
+  const r=await fetch('/api/auth'+path,{method:method||'GET',headers:{'Content-Type':'application/json',...tokenHdr()},body:body?JSON.stringify(body):undefined});
+  const txt=await r.text(); let data=null; try{data=txt?JSON.parse(txt):null;}catch(e){}
+  if(!r.ok)throw new Error((data&&data.error)||('HTTP '+r.status));
+  return data;
+}
+async function loadAuthState(){
+  try{ AUTH=await apiAuth('/state')||{enabled:false,user:null}; }
+  catch(e){ AUTH={enabled:false,user:null}; } // offline/first run — single-user behaviour
+}
+function renderUserChip(){
+  const chip=el('userChip'); if(!chip)return;
+  if(!AUTH.user){ chip.style.display='none'; return; }
+  chip.style.display=''; chip.textContent='👤 '+AUTH.user.name+(AUTH.user.role==='admin'?' (admin)':'');
+}
+function acctStatus(msg){ const s=el('acctStatus'); if(s)s.textContent=msg||''; }
+function renderAccount(){
+  const box=el('acctBox'); if(!box)return;
+  if(!AUTH.enabled){
+    box.innerHTML=`<p class="small muted">No accounts exist yet, so the app is in single-user mode: one shared save file, no sign-in, and the guest link works as before.</p>
+      <p class="small muted">Claiming the first account turns sign-in on and makes you the admin. After that, keepers/trades/league settings need an admin session (so sign in on your other devices too), and your rankings, queue, tendency read and in-progress draft become private to your account.</p>
+      ${AUTH.bootstrapReady
+        ? '<p class="small muted">Enter the setup key you set on the Worker to prove this deployment is yours.</p>'
+        : '<p class="small val-bad">Setup is locked until a one-time setup key exists on the Worker. From the repo, run <code>npx wrangler secret put BOOTSTRAP_SECRET</code>, then reload this page and enter that key below. This is what stops whoever else has the app\'s URL from claiming admin before you do.</p>'}
+      <div class="row">
+        <input type="text" id="acctBootUser" placeholder="username" style="min-width:140px">
+        <input type="password" id="acctBootPass" placeholder="password (4+ chars)" style="min-width:160px">
+        <input type="password" id="acctBootKey" placeholder="setup key" style="min-width:150px">
+        <button class="btn" id="acctBootBtn" ${AUTH.bootstrapReady?'':'disabled'}>Claim the admin account</button>
+      </div>`;
+    el('acctBootBtn').onclick=async()=>{
+      acctStatus('Claiming…');
+      try{ await apiAuth('/bootstrap','POST',{username:el('acctBootUser').value.trim(),password:el('acctBootPass').value,bootstrapSecret:el('acctBootKey').value});
+        location.reload();
+      }catch(e){ acctStatus('⚠ '+e.message); }
+    };
+    return;
+  }
+  if(!AUTH.user){
+    box.innerHTML=`<p class="small muted">Sign in to load your own rankings, queue and draft. Without signing in you can still look at the league's shared board.</p>
+      <div class="row">
+        <input type="text" id="acctUser" placeholder="username" style="min-width:140px">
+        <input type="password" id="acctPass" placeholder="password" style="min-width:160px">
+        <button class="btn" id="acctLoginBtn">Sign in</button>
+      </div>`;
+    const go=async()=>{
+      acctStatus('Signing in…');
+      try{ await apiAuth('/login','POST',{username:el('acctUser').value.trim(),password:el('acctPass').value}); location.reload(); }
+      catch(e){ acctStatus('⚠ '+e.message); }
+    };
+    el('acctLoginBtn').onclick=go;
+    el('acctPass').onkeydown=e=>{ if(e.key==='Enter')go(); };
+    return;
+  }
+  box.innerHTML=`<p class="small">Signed in as <b>${AUTH.user.name}</b> <span class="muted">· ${AUTH.user.role}</span></p>
+    <div class="row"><button class="btn ghost" id="acctLogoutBtn">Sign out</button></div>
+    <div class="row" style="margin-top:10px">
+      <input type="password" id="acctCurPass" placeholder="current password" style="min-width:150px">
+      <input type="password" id="acctNextPass" placeholder="new password (4+ chars)" style="min-width:170px">
+      <button class="btn ghost" id="acctPassBtn">Change password</button>
+    </div>`;
+  el('acctLogoutBtn').onclick=async()=>{ try{await apiAuth('/logout','POST');}catch(e){} location.reload(); };
+  el('acctPassBtn').onclick=async()=>{
+    acctStatus('Updating…');
+    try{ await apiAuth('/password','POST',{current:el('acctCurPass').value,next:el('acctNextPass').value});
+      acctStatus('✓ Password changed — your other devices have been signed out.');
+      el('acctCurPass').value=''; el('acctNextPass').value='';
+    }catch(e){ acctStatus('⚠ '+e.message); }
+  };
+  renderAccountUsers();
+}
+async function renderAccountUsers(){
+  const card=el('acctUsersCard'); if(!card)return;
+  if(!AUTH.user||AUTH.user.role!=='admin'){ card.style.display='none'; return; }
+  card.style.display='';
+  try{
+    const users=await apiAuth('/users');
+    el('acctUsers').innerHTML=(users||[]).map(u=>`<div class="mypick-row">
+      <span>${u.name} <span class="muted small">· ${u.role}</span></span>
+      <span>${u.name===AUTH.user.name?'<span class="muted small">that’s you</span>':`<a href="#" data-rmuser="${u.name}">remove</a>`}</span>
+    </div>`).join('')||'<span class="muted small">No accounts.</span>';
+    el('acctUsers').querySelectorAll('[data-rmuser]').forEach(a=>a.onclick=async e=>{
+      e.preventDefault();
+      const name=a.dataset.rmuser;
+      if(!confirm('Remove '+name+'? Their rankings, queue and saved draft are deleted too.'))return;
+      try{ await apiAuth('/users/'+encodeURIComponent(name),'DELETE'); renderAccountUsers(); acctStatus('Removed '+name+'.'); }
+      catch(err){ acctStatus('⚠ '+err.message); }
+    });
+  }catch(e){ el('acctUsers').innerHTML='<span class="muted small">Could not load accounts: '+e.message+'</span>'; }
+}
+async function createAccount(){
+  const name=el('acctNewUser').value.trim(), pass=el('acctNewPass').value, role=el('acctNewRole').value;
+  acctStatus('Creating…');
+  try{
+    let reset=false;
+    try{ await apiAuth('/users','POST',{username:name,password:pass,role}); }
+    catch(e){
+      if(!/already exists/.test(e.message))throw e;
+      if(!confirm(name+' already has an account. Reset their password to this one?'))throw new Error('Cancelled.');
+      reset=true; await apiAuth('/users','POST',{username:name,password:pass,role,reset:true});
+    }
+    el('acctNewUser').value=''; el('acctNewPass').value='';
+    acctStatus(reset?('✓ Password reset for '+name+'.'):('✓ Created '+name+'. Give them the username and password — they can change it on this tab.'));
+    renderAccountUsers();
+  }catch(e){ acctStatus('⚠ '+e.message); }
+}
+// Members get the app minus the commissioner's half of it. This is the same
+// UI-level posture as guest mode — the API is what actually enforces it (writes
+// need an admin session, private data needs your own) — but the sections are
+// removed rather than hidden so nothing sensitive is rendered into their DOM.
+function applyRoleUI(){
+  if(GUEST_MODE||canEditShared())return;
+  ['leagues','commish','data'].forEach(v=>{
+    const btn=document.querySelector('nav button[data-view="'+v+'"]'); if(btn)btn.remove();
+    const sec=el('view-'+v); if(sec)sec.remove();
+  });
+  // Saving a mock stays enabled — a member running their own board is the point.
+  ['addPickTrade','addPlayerTrade','autoKeepers','clearKeepers'].forEach(id=>{
+    const b=el(id); if(b)b.disabled=true;
+  });
+  const bt=el('backupTable'); // rolling restore of shared keepers/trades is an admin tool
+  if(bt&&bt.closest('details'))bt.closest('details').remove();
+  const tw=el('teamsWrap');
+  if(tw){
+    const note=document.createElement('div'); note.className='small muted';
+    note.textContent='Keepers and trades are set by the league admin — shown here read-only. Your tendency read below is yours alone.';
+    tw.parentNode.insertBefore(note,tw);
+  }
+}
+
+// ---------- PRIVATE (per-account) STATE ----------
+async function apiPrivate(method,body){
+  const r=await fetch('/api/private?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method,headers:{'Content-Type':'application/json',...tokenHdr()},body:body?JSON.stringify(body):undefined});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const t=await r.text(); return t?JSON.parse(t):null;
+}
+const privateState=()=>({queued:[...queued],tendencies:TENDENCIES,picks,curPick});
+// First sign-in on a league whose state predates accounts: adopt whatever
+// /api/setup already had (that's the owner's real in-progress draft) instead of
+// starting them from an empty board.
+async function loadPrivate(setupSnapshot){
+  if(!isSignedIn())return;
+  let p=null;
+  try{ p=await apiPrivate('GET'); }catch(e){ return; }
+  const empty=!p||(!Array.isArray(p.picks)&&!Array.isArray(p.queued)&&!p.tendencies);
+  if(empty){
+    if(setupSnapshot&&canEditShared()){ try{ await apiPrivate('PUT',privateState()); }catch(e){} }
+    return;
+  }
+  if(Array.isArray(p.queued))queued=new Set(p.queued);
+  applyTendencies(p.tendencies);
+  if(Array.isArray(p.picks)&&p.picks.length){
+    picks=p.picks.slice(); curPick=p.curPick||1;
+    PLAYERS.forEach(x=>x.drafted=false);
+    picks.forEach(pk=>{const pl=PLAYERS.find(x=>x.id===pk.playerId); if(pl)pl.drafted=true;});
+    if(LEAGUE.leagueType==='dynasty')OWNERS.forEach(owner=>{
+      dynastyKeptRoster(owner).forEach(r=>{const pl=findPlayer(r.player); if(pl)pl.drafted=true;});
+    });
+  } else if(!canEditShared()){
+    resetDraft(); // a member's own board starts from the keepers, not the admin's picks
+  }
+  render(); if(el('teamsWrap')){renderTeams();renderTendencies();}
+}
+
+// ---------- MY RANKINGS (per-account, per-league) ----------
+let RANKINGS={order:[],tiers:{},enabled:false};
+const rankIndex={}; // name -> 0-based position, rebuilt whenever order changes
+function rebuildRankIndex(){
+  Object.keys(rankIndex).forEach(k=>delete rankIndex[k]);
+  RANKINGS.order.forEach((n,i)=>{rankIndex[n]=i;});
+}
+const useMyRank=()=>RANKINGS.enabled&&RANKINGS.order.length>0;
+function myRankOf(name){ const i=rankIndex[name]; return i==null?null:i+1; }
+// Sort key for the pool: my rank when I'm using my board, ADP otherwise.
+// Unranked players sort after every ranked one, in ECR order, so a partial
+// board (say my top 40) still behaves sensibly.
+function poolSortKey(p){
+  if(!useMyRank())return p.adp;
+  const r=myRankOf(p.name);
+  return r!=null?r:RANKINGS.order.length+(p.ecr||9999);
+}
+function tierOf(p){
+  if(useMyRank()&&RANKINGS.tiers[p.name])return RANKINGS.tiers[p.name];
+  return p.tier||0;
+}
+async function apiRankings(method,body,sub){
+  const r=await fetch('/api/rankings'+(sub||'')+'?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method,headers:{'Content-Type':'application/json',...tokenHdr()},body:body?JSON.stringify(body):undefined});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const t=await r.text(); return t?JSON.parse(t):null;
+}
+function blankRankings(){ return {order:[],tiers:{},enabled:false}; }
+async function loadRankings(){
+  RANKINGS=blankRankings(); rebuildRankIndex();
+  if(!isSignedIn()){ renderRankings(); return; }
+  try{
+    const r=await apiRankings('GET');
+    RANKINGS={order:Array.isArray(r&&r.order)?r.order:[],tiers:(r&&r.tiers)||{},enabled:!!(r&&r.enabled)};
+  }catch(e){ RANKINGS=blankRankings(); }
+  rebuildRankIndex(); renderRankings(); render();
+}
+let _rankSaveT=null;
+function saveRankings(){
+  if(!isSignedIn())return;
+  const s=el('rankStatus'); if(s)s.textContent='saving…';
+  if(_rankSaveT)clearTimeout(_rankSaveT);
+  _rankSaveT=setTimeout(async()=>{
+    try{ await apiRankings('PUT',RANKINGS); if(s)s.textContent='☁ Saved '+new Date().toLocaleTimeString(); }
+    catch(e){ if(s)s.textContent='⚠ Not saved: '+e.message; }
+  },700);
+}
+function seedRankings(by){
+  RANKINGS.order=PLAYERS.slice().sort((a,b)=>(by==='adp'?a.adp-b.adp:(a.ecr||9999)-(b.ecr||9999))).map(p=>p.name);
+  RANKINGS.tiers={}; PLAYERS.forEach(p=>{ if(p.tier)RANKINGS.tiers[p.name]=p.tier; });
+  rebuildRankIndex(); saveRankings(); renderRankings(); render();
+}
+// Tiers from the gaps in my own order: where consecutive players' ADP jumps is
+// where the market sees a drop-off, which makes a decent first draft of tiers to
+// then hand-edit. A fixed gap threshold gives either 3 tiers or 80 depending on
+// the pool, so the threshold is picked from the data instead: take the biggest
+// gaps until we have about `targetTiers` of them.
+function autoTierByGaps(targetTiers){
+  const want=Math.max(2,targetTiers||12);
+  const list=RANKINGS.order.map(findPlayer).filter(Boolean);
+  if(list.length<2)return;
+  const gaps=list.slice(1).map((p,i)=>p.adp-list[i].adp);
+  const ranked=gaps.slice().sort((a,b)=>b-a);
+  const threshold=Math.max(1,ranked[Math.min(ranked.length-1,want-2)]);
+  let tier=1;
+  RANKINGS.tiers={};
+  list.forEach((p,i)=>{
+    if(i>0&&(p.adp-list[i-1].adp)>=threshold)tier++;
+    RANKINGS.tiers[p.name]=tier;
+  });
+  saveRankings(); renderRankings(); render();
+}
+function moveRank(name,to){
+  const from=rankIndex[name]; if(from==null)return;
+  const dest=Math.max(0,Math.min(RANKINGS.order.length-1,to));
+  if(dest===from)return;
+  RANKINGS.order.splice(from,1); RANKINGS.order.splice(dest,0,name);
+  rebuildRankIndex(); saveRankings(); renderRankings(); render();
+}
+function applyPastedRankings(txt){
+  const lines=txt.split(/\r?\n/).map(l=>l.replace(/^\s*\d+[.)]?\s+/,'').trim()).filter(Boolean);
+  const matched=[], missed=[];
+  lines.forEach(l=>{
+    const p=findPlayer(l);
+    if(p&&!matched.includes(p.name))matched.push(p.name); else if(!p)missed.push(l);
+  });
+  if(!matched.length){ el('rankPasteStatus').textContent='⚠ Nothing matched a player in this league’s pool.'; return; }
+  const rest=RANKINGS.order.filter(n=>!matched.includes(n));
+  const restSeed=rest.length?rest:PLAYERS.slice().sort((a,b)=>(a.ecr||9999)-(b.ecr||9999)).map(p=>p.name).filter(n=>!matched.includes(n));
+  RANKINGS.order=matched.concat(restSeed);
+  rebuildRankIndex(); saveRankings(); renderRankings(); render();
+  el('rankPasteStatus').textContent=`✓ Ranked ${matched.length}.`+(missed.length?` Not matched (left where they were): ${missed.slice(0,8).join(', ')}${missed.length>8?'…':''}`:'');
+}
+function renderRankings(){
+  const gate=el('rankGate'); if(!gate)return;
+  const body=el('rankBody'), paste=el('rankPasteCard'), backup=el('rankBackupCard');
+  if(!isSignedIn()){
+    gate.innerHTML=AUTH.enabled
+      ? 'Sign in on the <b>Account</b> tab to build rankings — they’re stored against your account so they follow you between devices and stay private.'
+      : 'Rankings are saved per account. Create an account on the <b>Account</b> tab to turn that on — it takes one username and password, and the rest of the app keeps working exactly as it does now.';
+    body.style.display='none'; paste.style.display='none'; backup.style.display='none';
+    return;
+  }
+  gate.textContent=''; body.style.display=''; paste.style.display=''; backup.style.display='';
+  el('rankEnabled').checked=!!RANKINGS.enabled;
+  if(!RANKINGS.order.length){
+    el('rankTable').querySelector('tbody').innerHTML='<tr><td colspan="8" class="muted small">No rankings yet — “Start from ECR” gives you the consensus board to rearrange, or paste your own list below.</td></tr>';
+    return;
+  }
+  const pos=el('rankPosFilter').value, q=el('rankSearch').value.trim().toLowerCase();
+  const tb=el('rankTable').querySelector('tbody'); tb.innerHTML='';
+  let shown=0, lastTier=null;
+  RANKINGS.order.forEach((name,i)=>{
+    const p=findPlayer(name); if(!p)return;
+    if(pos!=='ALL'&&p.pos!==pos)return;
+    if(q&&!p.name.toLowerCase().includes(q))return;
+    if(shown++>400)return;
+    const t=RANKINGS.tiers[name]||'';
+    if(pos==='ALL'&&!q&&t&&t!==lastTier){
+      const sep=document.createElement('tr');
+      sep.innerHTML=`<td colspan="8" class="small muted" style="padding-top:8px">— Tier ${t} —</td>`;
+      tb.appendChild(sep); lastTier=t;
+    }
+    const d=Math.round((p.adp-(i+1))*10)/10;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="small">${i+1}</td>
+      <td class="small"><a href="#" data-mv-top="${name}" title="to the top">⤒</a> <a href="#" data-mv-up="${name}">▲</a> <a href="#" data-mv-dn="${name}">▼</a>
+        <input type="number" data-mv-to="${name}" placeholder="#" style="width:52px" min="1" max="${RANKINGS.order.length}"></td>
+      <td><span class="pos ${p.pos}">${p.pos}</span></td>
+      <td>${p.name} <span class="muted small">${p.team||''}</span></td>
+      <td><input type="number" data-tier="${name}" value="${t}" min="1" max="30" style="width:52px"></td>
+      <td class="small muted">${p.ecr}</td><td class="small muted">${p.adp}</td>
+      <td class="small ${valClass(d)}">${d>0?'+':''}${d}</td>`;
+    tb.appendChild(tr);
+  });
+  tb.querySelectorAll('[data-mv-up]').forEach(a=>a.onclick=e=>{e.preventDefault();moveRank(a.dataset.mvUp,rankIndex[a.dataset.mvUp]-1);});
+  tb.querySelectorAll('[data-mv-dn]').forEach(a=>a.onclick=e=>{e.preventDefault();moveRank(a.dataset.mvDn,rankIndex[a.dataset.mvDn]+1);});
+  tb.querySelectorAll('[data-mv-top]').forEach(a=>a.onclick=e=>{e.preventDefault();moveRank(a.dataset.mvTop,0);});
+  tb.querySelectorAll('[data-mv-to]').forEach(inp=>inp.onchange=()=>{const v=+inp.value; if(v>=1)moveRank(inp.dataset.mvTo,v-1);});
+  tb.querySelectorAll('[data-tier]').forEach(inp=>inp.onchange=()=>{
+    const v=Math.max(0,Math.round(+inp.value||0));
+    if(v)RANKINGS.tiers[inp.dataset.tier]=v; else delete RANKINGS.tiers[inp.dataset.tier];
+    saveRankings(); renderRankings(); render();
+  });
+}
+async function renderRankBackups(){
+  const tb=el('rankBackupTable'); if(!tb||!isSignedIn())return;
+  const body=tb.querySelector('tbody');
+  try{
+    const hist=await apiRankings('GET',null,'/history');
+    body.innerHTML=(hist||[]).map(h=>`<tr><td class="small muted">${new Date(h.ts).toLocaleString()}</td>
+      <td class="small muted">${(h.data&&h.data.order&&h.data.order.length)||0}</td>
+      <td><button class="pick-btn" data-rrst="${h.ts}">restore</button></td></tr>`).join('')
+      ||'<tr><td colspan="3" class="muted small">No earlier versions yet.</td></tr>';
+    body.querySelectorAll('[data-rrst]').forEach(b=>b.onclick=async()=>{
+      if(!confirm('Roll your rankings back to this version? The current one is backed up first.'))return;
+      try{ const r=await apiRankings('POST',{ts:+b.dataset.rrst},'/restore');
+        RANKINGS={order:(r&&r.order)||[],tiers:(r&&r.tiers)||{},enabled:!!(r&&r.enabled)};
+        rebuildRankIndex(); renderRankings(); render(); renderRankBackups();
+      }catch(e){ el('rankStatus').textContent='⚠ Restore failed: '+e.message; }
+    });
+  }catch(e){ body.innerHTML='<tr><td colspan="3" class="muted small">Backups unavailable: '+e.message+'</td></tr>'; }
+}
+
+// ---------- SCARCITY / RUN CUES ----------
+// What's come off the board since my last pick, and how thin the tier I'm
+// looking at has become — the two things you actually want on the clock.
+function renderScarcity(){
+  const box=el('scarcity'); if(!box)return;
+  if(LEAGUE.draftType==='auction'||!PLAYERS.length){ box.innerHTML=''; return; }
+  const ov=nextOpenPick(curPick);
+  const mineBefore=picks.filter(p=>ownerOf(p.overall)===mySlot&&p.overall<ov&&!p.keeper)
+    .sort((a,b)=>b.overall-a.overall)[0];
+  const since=mineBefore?picks.filter(p=>p.overall>mineBefore.overall&&p.overall<ov&&!p.keeper):[];
+  const runs={};
+  since.forEach(p=>{const pl=PLAYERS.find(x=>x.id===p.playerId); if(pl)runs[pl.pos]=(runs[pl.pos]||0)+1;});
+  const runTxt=Object.keys(runs).sort((a,b)=>runs[b]-runs[a]).map(k=>`<span class="pos ${k}">${k}</span> ${runs[k]}`).join(' · ');
+  const avail=available();
+  const tierBits=['QB','RB','WR','TE'].map(pos=>{
+    const pool=avail.filter(p=>p.pos===pos).sort((a,b)=>poolSortKey(a)-poolSortKey(b));
+    if(!pool.length)return null;
+    const t=tierOf(pool[0]);
+    if(!t)return null;
+    const left=pool.filter(p=>tierOf(p)===t).length;
+    return `<span class="pos ${pos}">${pos}</span> tier ${t}: <b class="${left<=2?'val-bad':''}">${left} left</b>`;
+  }).filter(Boolean).join(' · ');
+  const myNext=[]; for(let o=ov;o<=totalPicks;o++){ if(ownerOf(o)===mySlot&&!pickTakenAt(o)){myNext.push(o); if(myNext.length>1)break;} }
+  const gap=(myNext.length>1)?(myNext[1]-myNext[0]-1):0;
+  const bits=[];
+  if(mineBefore&&since.length)bits.push(`<span class="muted">Since your last pick (${since.length}):</span> ${runTxt}`);
+  if(tierBits)bits.push(`<span class="muted">Tier watch:</span> ${tierBits}`);
+  if(gap)bits.push(`<span class="muted">${gap} picks until your next turn after this one.</span>`);
+  box.innerHTML=bits.join(' &nbsp;·&nbsp; ');
+}
+
+// ---------- REWIND ----------
+// Single-step undo() covers "oops"; this covers "what if I'd gone RB there
+// instead" — drop everything from a pick onward and re-draft from that point.
+// Keepers are pre-placed, not drafted, so they always survive a rewind.
+function rewindTo(ov){
+  if(!(ov>=1&&ov<=totalPicks))return;
+  const dropped=picks.filter(p=>!p.keeper&&p.overall>=ov).length;
+  if(!dropped)return;
+  picks=picks.filter(p=>p.keeper||p.overall<ov);
+  PLAYERS.forEach(p=>p.drafted=false);
+  picks.forEach(pk=>{const pl=PLAYERS.find(x=>x.id===pk.playerId); if(pl)pl.drafted=true;});
+  if(LEAGUE.leagueType==='dynasty')OWNERS.forEach(owner=>{
+    dynastyKeptRoster(owner).forEach(r=>{const pl=findPlayer(r.player); if(pl)pl.drafted=true;});
+  });
+  curPick=nextOpenPick(ov);
+  render(); saveSetup();
+  setStatus('Rewound to pick #'+ov+' ('+dropped+' pick'+(dropped===1?'':'s')+' undone).');
+}
+
+// ---------- POST-DRAFT ANALYSIS ----------
+// Grades every roster on its projected starting lineup, which is the only
+// number here that isn't a matter of taste: bench depth and "best player
+// available" arguments don't score points. Steals/reaches are measured against
+// ADP, i.e. against the market, not against my own board.
+function lineupPoints(roster){
+  const {starterSlots}=slotRosterPlayers(roster,LEAGUE.starters||{});
+  return starterSlots.reduce((sum,s)=>sum+((s.player&&s.player.proj)||0),0);
+}
+function gradeFor(pct){
+  if(pct>=0.92)return 'A+'; if(pct>=0.80)return 'A'; if(pct>=0.68)return 'B+';
+  if(pct>=0.55)return 'B'; if(pct>=0.42)return 'C+'; if(pct>=0.28)return 'C';
+  if(pct>=0.15)return 'D'; return 'F';
+}
+function analyzeDraft(){
+  const box=el('analysis'); if(!box)return;
+  const made=picks.filter(p=>!p.keeper).length;
+  if(!PLAYERS.length){ box.innerHTML='No player pool loaded for this league yet.'; return; }
+  if(!picks.length){ box.innerHTML='Nothing drafted yet.'; return; }
+  const hasProj=PLAYERS.some(p=>p.proj>0);
+  const teams=[];
+  for(let s=1;s<=LEAGUE.teams;s++){
+    const roster=rosterOf(s);
+    teams.push({slot:s,owner:ownerLabel(s),roster,pts:lineupPoints(roster)});
+  }
+  const sorted=teams.slice().sort((a,b)=>b.pts-a.pts);
+  sorted.forEach((t,i)=>{t.rank=i+1; t.pct=teams.length>1?1-(i/(teams.length-1)):1; t.grade=gradeFor(t.pct);});
+  // Value vs the market: a pick's ADP minus where it actually went.
+  const valued=picks.filter(p=>!p.keeper).map(p=>{
+    const pl=PLAYERS.find(x=>x.id===p.playerId); if(!pl)return null;
+    return {name:pl.name,pos:pl.pos,owner:ownerLabel(ownerOf(p.overall)),ov:p.overall,val:Math.round((pl.adp-p.overall)*10)/10};
+  }).filter(Boolean);
+  const steals=valued.slice().sort((a,b)=>b.val-a.val).slice(0,5);
+  const reaches=valued.slice().sort((a,b)=>a.val-b.val).slice(0,5);
+  const meRow=sorted.find(t=>t.slot===mySlot);
+  const posLine=(t)=>{
+    const {starterSlots}=slotRosterPlayers(t.roster,LEAGUE.starters||{});
+    return starterSlots.map(s=>`${s.label}: ${s.player?s.player.name:'—'}`).join(' · ');
+  };
+  box.innerHTML=`
+    ${hasProj?'':'<p class="val-bad small">Heads up: this pool has no projections loaded, so lineup points are all zero and the grades below are meaningless. Load projections in the Data tab first.</p>'}
+    ${meRow?`<p><b>Your team (${meRow.owner})</b> — grade <b>${meRow.grade}</b>, projected ${Math.round(meRow.pts)} starting pts, <b>${meRow.rank}${['st','nd','rd'][meRow.rank-1]||'th'}</b> of ${teams.length}.<br><span class="muted small">${posLine(meRow)}</span></p>`:''}
+    <table style="width:100%"><thead><tr><th>#</th><th>Team</th><th>Grade</th><th>Proj starters</th><th>Best pick</th><th>Worst pick</th></tr></thead><tbody>
+    ${sorted.map(t=>{
+      const mine=valued.filter(v=>v.owner===t.owner);
+      const best=mine.slice().sort((a,b)=>b.val-a.val)[0];
+      const worst=mine.slice().sort((a,b)=>a.val-b.val)[0];
+      return `<tr${t.slot===mySlot?' style="font-weight:600"':''}>
+        <td class="small muted">${t.rank}</td><td>${t.owner}</td>
+        <td>${t.grade}</td><td class="small">${Math.round(t.pts)}</td>
+        <td class="small ${best&&best.val>0?'val-good':''}">${best?`${best.name} <span class="muted">(${best.val>0?'+':''}${best.val})</span>`:'—'}</td>
+        <td class="small ${worst&&worst.val<0?'val-bad':''}">${worst?`${worst.name} <span class="muted">(${worst.val>0?'+':''}${worst.val})</span>`:'—'}</td>
+      </tr>`;}).join('')}
+    </tbody></table>
+    <div class="grid2" style="margin-top:10px">
+      <div><b class="small">Biggest steals vs ADP</b>${steals.map(v=>`<div class="mypick-row small"><span><span class="pos ${v.pos}">${v.pos}</span> ${v.name} <span class="muted">— ${v.owner}</span></span><span class="val-good">+${v.val}</span></div>`).join('')}</div>
+      <div><b class="small">Biggest reaches vs ADP</b>${reaches.map(v=>`<div class="mypick-row small"><span><span class="pos ${v.pos}">${v.pos}</span> ${v.name} <span class="muted">— ${v.owner}</span></span><span class="val-bad">${v.val}</span></div>`).join('')}</div>
+    </div>
+    <p class="muted small" style="margin-top:8px">${made} picks made${made<LEAGUE.teams*3?' — still early, so treat this as a sketch.':'.'}</p>`;
+}
+
 // ---------- EVENTS ----------
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  const target=el('view-'+b.dataset.view); if(!target)return; // section stripped for this role
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active'); el('view-'+b.dataset.view).classList.add('active');
+  b.classList.add('active'); target.classList.add('active');
   if(b.dataset.view==='lab')renderStratCards();
   if(b.dataset.view==='teams'){updateKeeperCopy();renderTeams();renderTendencies();}
   if(b.dataset.view==='mocks')renderMocks();
   if(b.dataset.view==='trades'){renderTrades();renderBackupHistory();}
   if(b.dataset.view==='leagues')renderLeaguesTab();
-  if(b.dataset.view==='commish')renderCommish();
+  if(b.dataset.view==='commish'){renderCommish();renderCommishBackups();}
+  if(b.dataset.view==='rankings'){renderRankings();renderRankBackups();}
+  if(b.dataset.view==='account'){renderAccount();}
 });
 el('autoKeepers').onclick=autoKeepers;
 el('clearKeepers').onclick=clearRivalKeepers;
@@ -1993,6 +2639,21 @@ el('addPickTrade').onclick=addPickTrade; el('addPlayerTrade').onclick=addPlayerT
 el('toggleDelta').onchange=e=>document.body.classList.toggle('hide-delta',!e.target.checked);
 el('saveMock').onclick=saveMock; el('refreshMocks').onclick=renderMocks;
 el('saveToken').onclick=()=>{localStorage.setItem('aeoToken',el('tokenInput').value.trim());setStatus&&setStatus('Token set.');renderMocks();};
+el('rewindBtn').onclick=()=>{const v=+el('rewindTo').value; if(v>=1)rewindTo(v);};
+el('analyzeBtn').onclick=analyzeDraft;
+el('rankEnabled').onchange=()=>{RANKINGS.enabled=el('rankEnabled').checked; saveRankings(); render();};
+el('rankSeedEcr').onclick=()=>seedRankings('ecr');
+el('rankSeedAdp').onclick=()=>seedRankings('adp');
+el('rankAutoTiers').onclick=()=>autoTierByGaps(12);
+el('rankClear').onclick=()=>{ if(!confirm('Clear your rankings for this league? The current version is backed up first.'))return;
+  RANKINGS={order:[],tiers:{},enabled:false}; rebuildRankIndex(); saveRankings(); renderRankings(); render(); };
+el('rankPosFilter').onchange=renderRankings; el('rankSearch').oninput=renderRankings;
+el('rankPasteApply').onclick=()=>applyPastedRankings(el('rankPaste').value);
+el('rankExport').onclick=()=>exportText(RANKINGS.order.map((n,i)=>`${i+1}. ${n}${RANKINGS.tiers[n]?' (tier '+RANKINGS.tiers[n]+')':''}`).join('\n'),'my-rankings.txt');
+el('acctCreateUser').onclick=createAccount;
+el('commishCopy').onclick=copyCommishContacts;
+el('prospectAdd').onclick=addProspect;
+el('prospectName').onkeydown=e=>{ if(e.key==='Enter')addProspect(); };
 el('simToMe').onclick=simToMe;
 el('advance1').onclick=advanceOne;
 el('undo').onclick=undo;
@@ -2016,6 +2677,7 @@ el('deleteLeagueBtn').onclick=deleteSelectedLeague;
 el('saveLeagueBtn').onclick=saveLeagueForm;
 el('importSleeperBtn').onclick=importFromSleeper;
 el('importMflBtn').onclick=importFromMfl;
+el('importYahooBtn').onclick=importFromYahoo;
 el('yahooConnectBtn').onclick=connectYahoo;
 el('yahooListBtn').onclick=listYahooLeagues;
 el('lgOpenRosterBuilderBtn').onclick=openRosterBuilder;
@@ -2088,9 +2750,10 @@ function renderTrades(){
   if(!el('pickTradeList'))return;
   fillTradeSelects();
   const pl=Object.keys(pickOwnerOverride).map(Number).sort((a,b)=>a-b);
-  el('pickTradeList').innerHTML = pl.length? pl.map(ov=>{const {round,slot}=slotForOverall(ov);return `<span class="pill">${label(round,slot)} (#${ov}) → T${pickOwnerOverride[ov]} <a href="#" data-rmpick="${ov}">✕</a></span>`;}).join('') : '<span class="muted small">No pick trades.</span>';
+  const rm=canEditShared(); // a member sees the league's trades but doesn't undo them
+  el('pickTradeList').innerHTML = pl.length? pl.map(ov=>{const {round,slot}=slotForOverall(ov);return `<span class="pill">${label(round,slot)} (#${ov}) → ${ownerLabel(pickOwnerOverride[ov])}${rm?` <a href="#" data-rmpick="${ov}">✕</a>`:''}</span>`;}).join('') : '<span class="muted small">No pick trades.</span>';
   const keys=Object.keys(playerTrades);
-  el('playerTradeList').innerHTML = keys.length? keys.map(p=>`<span class="pill">${p} → ${playerTrades[p]} <a href="#" data-rmpt="${p}">✕</a></span>`).join('') : '<span class="muted small">No player trades.</span>';
+  el('playerTradeList').innerHTML = keys.length? keys.map(p=>`<span class="pill">${p} → ${playerTrades[p]}${rm?` <a href="#" data-rmpt="${p}">✕</a>`:''}</span>`).join('') : '<span class="muted small">No player trades.</span>';
   el('pickTradeList').querySelectorAll('[data-rmpick]').forEach(a=>a.onclick=e=>{e.preventDefault();delete pickOwnerOverride[+a.dataset.rmpick];applyAndReset();});
   el('playerTradeList').querySelectorAll('[data-rmpt]').forEach(a=>a.onclick=e=>{e.preventDefault();delete playerTrades[a.dataset.rmpt];applyAndReset();});
 }
@@ -2139,7 +2802,7 @@ async function apiSetup(method,body){const r=await fetch('/api/setup?league='+en
 // ---------- COMMISH (membership: returning/dues/contact) ----------
 let COMMISH={};
 async function apiCommish(method,body){const r=await fetch('/api/commish?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method,headers:{'Content-Type':'application/json',...tokenHdr()},body:body?JSON.stringify(body):undefined});if(!r.ok)throw new Error('HTTP '+r.status);const t=await r.text();return t?JSON.parse(t):null;}
-function commishRowFor(owner){ return COMMISH[owner]=COMMISH[owner]||{returning:'unsure',duesOwed:0,duesPaid:0,contact:'',notes:''}; }
+function commishRowFor(owner){ return COMMISH[owner]=COMMISH[owner]||{returning:'unsure',duesOwed:0,duesPaid:0,contact:'',notes:'',knownBy:''}; }
 function renderCommish(){
   const tb=el('commishTable'); if(!tb)return;
   tb.innerHTML=OWNERS.map(owner=>{
@@ -2153,7 +2816,9 @@ function renderCommish(){
       </select></td>
       <td style="text-align:center"><input type="number" min="0" step="1" data-cm-owed="${owner}" value="${r.duesOwed}" style="width:70px"></td>
       <td style="text-align:center"><input type="number" min="0" step="1" data-cm-paid="${owner}" value="${r.duesPaid}" style="width:70px"></td>
+      <td style="text-align:center" class="small ${(r.duesOwed-r.duesPaid)>0?'val-bad':((r.duesOwed>0)?'val-good':'muted')}">${(r.duesOwed-r.duesPaid)>0?('$'+(r.duesOwed-r.duesPaid)):(r.duesOwed>0?'paid':'—')}</td>
       <td><input type="text" data-cm-contact="${owner}" value="${r.contact}" placeholder="email/phone" style="width:100%"></td>
+      <td><input type="text" data-cm-knownby="${owner}" value="${r.knownBy||''}" placeholder="e.g. Dirty's coworker" style="width:100%"></td>
       <td><input type="text" data-cm-notes="${owner}" value="${r.notes}" placeholder="" style="width:100%"></td>
     </tr>`;
   }).join('');
@@ -2161,7 +2826,105 @@ function renderCommish(){
   tb.querySelectorAll('[data-cm-owed]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmOwed).duesOwed=+inp.value||0; saveCommish();});
   tb.querySelectorAll('[data-cm-paid]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmPaid).duesPaid=+inp.value||0; saveCommish();});
   tb.querySelectorAll('[data-cm-contact]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmContact).contact=inp.value; saveCommish();});
+  tb.querySelectorAll('[data-cm-knownby]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmKnownby).knownBy=inp.value; saveCommish();});
   tb.querySelectorAll('[data-cm-notes]').forEach(inp=>inp.onchange=()=>{commishRowFor(inp.dataset.cmNotes).notes=inp.value; saveCommish();});
+  renderCommishSummary();
+  renderProspects();
+}
+// ---------- Prospective replacements (not-yet-owners being considered for an
+// open slot) — kept apart from the OWNERS-keyed rows above since these
+// people aren't in OWNERS at all yet, sometimes never will be. Stored as an
+// array under a key that can't collide with an owner name.
+function prospectsList(){ return COMMISH.__prospects=COMMISH.__prospects||[]; }
+function prospectFor(id){ return prospectsList().find(p=>p.id===id); }
+function renderProspects(){
+  const tb=el('prospectTable'); if(!tb)return;
+  const list=prospectsList();
+  tb.innerHTML = list.length ? list.map(p=>`<tr>
+      <td>${p.name}</td>
+      <td><input type="text" data-pr-knownby="${p.id}" value="${p.knownBy||''}" placeholder="who vouches for them" style="width:100%"></td>
+      <td><input type="text" data-pr-contact="${p.id}" value="${p.contact||''}" placeholder="email/phone" style="width:100%"></td>
+      <td style="text-align:center"><select data-pr-status="${p.id}">
+        <option value="considering" ${p.status==='considering'?'selected':''}>Considering</option>
+        <option value="invited" ${p.status==='invited'?'selected':''}>Invited</option>
+        <option value="confirmed" ${p.status==='confirmed'?'selected':''}>Confirmed</option>
+        <option value="declined" ${p.status==='declined'?'selected':''}>Declined</option>
+      </select></td>
+      <td><input type="text" data-pr-notes="${p.id}" value="${p.notes||''}" style="width:100%"></td>
+      <td><a href="#" data-pr-rm="${p.id}">✕</a></td>
+    </tr>`).join('')
+    : '<tr><td colspan="6" class="muted small">No prospects yet — add someone being considered for an open slot below.</td></tr>';
+  tb.querySelectorAll('[data-pr-knownby]').forEach(inp=>inp.onchange=()=>{const p=prospectFor(inp.dataset.prKnownby); if(p){p.knownBy=inp.value; saveCommish();}});
+  tb.querySelectorAll('[data-pr-contact]').forEach(inp=>inp.onchange=()=>{const p=prospectFor(inp.dataset.prContact); if(p){p.contact=inp.value; saveCommish();}});
+  tb.querySelectorAll('[data-pr-status]').forEach(inp=>inp.onchange=()=>{const p=prospectFor(inp.dataset.prStatus); if(p){p.status=inp.value; saveCommish();}});
+  tb.querySelectorAll('[data-pr-notes]').forEach(inp=>inp.onchange=()=>{const p=prospectFor(inp.dataset.prNotes); if(p){p.notes=inp.value; saveCommish();}});
+  tb.querySelectorAll('[data-pr-rm]').forEach(a=>a.onclick=e=>{
+    e.preventDefault();
+    const list=prospectsList(); const i=list.findIndex(p=>p.id===a.dataset.prRm); if(i===-1)return;
+    if(!confirm('Remove '+list[i].name+' from prospects?'))return;
+    list.splice(i,1); renderProspects(); saveCommish();
+  });
+}
+function addProspect(){
+  const nameInp=el('prospectName'), knownByInp=el('prospectKnownBy');
+  const name=nameInp.value.trim(); if(!name)return;
+  prospectsList().push({
+    id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    name, knownBy: knownByInp.value.trim(), contact:'', status:'considering', notes:'',
+  });
+  nameInp.value=''; knownByInp.value='';
+  renderProspects(); saveCommish();
+}
+// The two questions a commissioner actually opens this tab to answer: is the
+// league full, and who still owes.
+function renderCommishSummary(){
+  const box=el('commishSummary'); if(!box)return;
+  let yes=0,no=0,unsure=0,owed=0,paid=0,noContact=0;
+  OWNERS.forEach(owner=>{
+    const r=commishRowFor(owner);
+    if(r.returning==='yes')yes++; else if(r.returning==='no')no++; else unsure++;
+    owed+=+r.duesOwed||0; paid+=+r.duesPaid||0;
+    if(!String(r.contact||'').trim())noContact++;
+  });
+  const out=owed-paid;
+  box.innerHTML=`${yes} in · ${no} out · ${unsure} unsure &nbsp;·&nbsp; dues $${paid} of $${owed} collected`+
+    (out>0?` · <b class="val-bad">$${out} outstanding</b>`:(owed>0?' · <b class="val-good">all paid</b>':''))+
+    (noContact?` &nbsp;·&nbsp; ${noContact} without contact details`:'');
+}
+function copyCommishContacts(){
+  const lines=OWNERS.map(owner=>{
+    const r=commishRowFor(owner);
+    return [owner,r.returning,r.contact||'',(+r.duesOwed||0)-(+r.duesPaid||0)].join(', ');
+  });
+  const txt='owner, returning, contact, outstanding\n'+lines.join('\n');
+  const done=(msg)=>{const st=el('commishStatus'); if(st)st.textContent=msg;};
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(()=>done('Copied '+lines.length+' contacts to the clipboard.'),()=>exportText(txt,'league-contacts.csv'));
+  } else { exportText(txt,'league-contacts.csv'); done('Downloaded the contact list.'); }
+}
+// Same restore panel the other cloud-backed entities have — /api/commish has
+// carried a rolling backup history since v1, it just had no way to use it.
+async function renderCommishBackups(){
+  const tb=el('commishBackupTable'); if(!tb)return;
+  const body=tb.querySelector('tbody');
+  try{
+    const r=await fetch('/api/commish/history?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const hist=await r.json();
+    body.innerHTML=(hist||[]).map(h=>`<tr><td class="small muted">${new Date(h.ts).toLocaleString()}</td>
+      <td><button class="pick-btn" data-cmrst="${h.ts}">restore</button></td></tr>`).join('')
+      ||'<tr><td colspan="2" class="muted small">No earlier versions yet.</td></tr>';
+    body.querySelectorAll('[data-cmrst]').forEach(b=>b.onclick=async()=>{
+      if(!confirm('Roll commissioner data back to this snapshot? The current one is backed up first.'))return;
+      try{
+        const res=await fetch('/api/commish/restore?league='+encodeURIComponent(CURRENT_LEAGUE_ID),
+          {method:'POST',headers:{'Content-Type':'application/json',...tokenHdr()},body:JSON.stringify({ts:+b.dataset.cmrst})});
+        if(!res.ok)throw new Error('HTTP '+res.status);
+        COMMISH=await res.json()||{}; renderCommish(); renderCommishBackups();
+        el('commishStatus').textContent='Restored.';
+      }catch(e){ el('commishStatus').textContent='⚠ Restore failed: '+e.message; }
+    });
+  }catch(e){ body.innerHTML='<tr><td colspan="2" class="muted small">Backups unavailable: '+e.message+'</td></tr>'; }
 }
 let _commishSaveT=null;
 function saveCommish(){
@@ -2179,27 +2942,67 @@ async function loadCommish(){
 let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
-function saveSetup(){if(GUEST_MODE)return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
+// Once accounts exist the payload splits: keepers and trades are league facts and
+// stay in the shared setup (admin-written), while the queue, tendency read and
+// in-progress picks go to the signed-in account's own record.
+function saveSetup(){
+  if(GUEST_MODE)return;
+  if(_saveT)clearTimeout(_saveT);
+  _saveT=setTimeout(async()=>{
+    const shared={assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades};
+    // With no accounts there's a single save file, so it carries everything —
+    // byte-for-byte the payload this app has always written.
+    const payload=isSignedIn()?shared:{...shared,tendencies:TENDENCIES,queued:[...queued],picks,curPick};
+    const jobs=[];
+    if(canEditShared())jobs.push(apiSetup('PUT',payload));
+    if(isSignedIn())jobs.push(apiPrivate('PUT',privateState()));
+    const st=el('setupStatus');
+    if(!jobs.length){ if(st)st.textContent='Read-only — keepers and trades are the admin\u2019s to change.'; return; }
+    try{ await Promise.all(jobs); if(st)st.textContent='\u2601 Setup saved '+new Date().toLocaleTimeString(); }
+    catch(e){ if(st)st.textContent='\u26a0 Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.'; }
+  },600);
+}
 function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},v.bias||{})};}); }
-async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||(Array.isArray(s.picks)&&s.picks.length))){
-  if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
-  if(Array.isArray(s.cutPlayers))cutPlayers=new Set(s.cutPlayers);
-  if(Array.isArray(s.queued))queued=new Set(s.queued);
-  pickOwnerOverride=s.pickOwnerOverride||{}; playerTrades=s.playerTrades||{};
-  applyTendencies(s.tendencies);
-  rebuildKeepers(); applyKeepers();
-  if(Array.isArray(s.picks)&&s.picks.length){
-    picks=s.picks.slice(); curPick=s.curPick||1;
-    PLAYERS.forEach(p=>p.drafted=false);
-    picks.forEach(pk=>{const pl=PLAYERS.find(x=>x.id===pk.playerId); if(pl)pl.drafted=true;});
-    if(LEAGUE.leagueType==='dynasty')OWNERS.forEach(owner=>{
-      dynastyKeptRoster(owner).forEach(r=>{const p=findPlayer(r.player); if(p)p.drafted=true;});
-    });
-    render();
-  } else { resetDraft(); }
-  if(el('teamsWrap')){renderTeams();renderTendencies();} renderTrades();
-  const st=el('setupStatus');if(st)st.textContent='☁ Loaded saved setup from cloud.';
-}}catch(e){}}
+async function loadSetup(){
+  let s=null;
+  try{ s=await apiSetup('GET'); }catch(e){}
+  if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||(Array.isArray(s.picks)&&s.picks.length))){
+    if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
+    if(Array.isArray(s.cutPlayers))cutPlayers=new Set(s.cutPlayers);
+    pickOwnerOverride=s.pickOwnerOverride||{}; playerTrades=s.playerTrades||{};
+    rebuildKeepers(); applyKeepers();
+    // queued/tendencies/picks in the shared record are what a pre-accounts save
+    // looked like. They're still the source of truth with no accounts, and the
+    // admin's own state to adopt on first sign-in — but a member must never see
+    // them, so they're skipped outright there. A guest link is a third case,
+    // distinct from "no accounts yet": it's deliberately shown to people the
+    // owner doesn't want seeing their real draft-in-progress (which players
+    // they've queued, their opponent-model tendencies, picks already made) —
+    // real keepers/trades are still league facts guests should see, but the
+    // board itself always starts from resetDraft() so their session begins
+    // blank and is theirs alone to draft and undo locally (saveSetup() already
+    // no-ops for guests, so nothing they do here can leak back either).
+    if(GUEST_MODE){
+      resetDraft();
+    } else if(!isSignedIn()||canEditShared()){
+      if(Array.isArray(s.queued))queued=new Set(s.queued);
+      applyTendencies(s.tendencies);
+      if(Array.isArray(s.picks)&&s.picks.length){
+        picks=s.picks.slice(); curPick=s.curPick||1;
+        PLAYERS.forEach(p=>p.drafted=false);
+        picks.forEach(pk=>{const pl=PLAYERS.find(x=>x.id===pk.playerId); if(pl)pl.drafted=true;});
+        if(LEAGUE.leagueType==='dynasty')OWNERS.forEach(owner=>{
+          dynastyKeptRoster(owner).forEach(r=>{const p=findPlayer(r.player); if(p)p.drafted=true;});
+        });
+        render();
+      } else { resetDraft(); }
+    } else { resetDraft(); }
+    if(el('teamsWrap')){renderTeams();renderTendencies();} renderTrades();
+    const st=el('setupStatus');if(st)st.textContent='\u2601 Loaded saved setup from cloud.';
+  }
+  await loadPrivate(s);
+  await loadRankings();
+}
 
 // ---------- HEADER / LEAGUE SELECTOR ----------
 function renderHeader(){
@@ -2267,7 +3070,7 @@ function applyLeagueProfile(id){
     renderStratCards();
     renderMocks();
     if(el('leaguesList'))renderLeaguesTab();
-    loadCommish();
+    if(canEditShared())loadCommish();
   }
   loadSetup();
 }
@@ -2301,9 +3104,12 @@ async function fetchCloudLeagues(){
   }
 }
 async function boot(){
+  await loadAuthState();
+  renderUserChip(); renderAccount();
   LEAGUES=await fetchCloudLeagues();
   fillLeagueSelect();
   applyGuestModeUI();
+  applyRoleUI(); // before any league renders, so a member's DOM never holds the commissioner's data
   if(GUEST_MODE){ applyLeagueProfile('aeo-keepers'); return; }
   const params=new URLSearchParams(location.search);
   const urlLeague=params.get('league');

@@ -59,8 +59,12 @@ in-app (see "Multi-league support" below) — no code change needed to add a lea
   all league profiles), `OWNER_SLOT` (draft order for the active league), `PLAYERS`,
   `ROSTERS`, `assigned` (keeper picks), `pickOwnerOverride`/`playerTrades` (trades),
   `TENDENCIES` (per-owner opponent-model bias). Views: Draft Room, Teams & Keepers,
-  Trades, Mocks, Strategy Lab, Data, Leagues.
-- `worker.js` — API, all KV-backed, league-scoped via `?league=`: `GET/PUT
+  Trades, Rankings, Mocks, Strategy Lab, Data, Leagues, Commish, Account.
+- `worker.js` — API, all KV-backed, league-scoped via `?league=`. Optional
+  per-user accounts gate it (`/api/auth/*`; none created = the pre-accounts
+  behaviour, see `SPECS.md` → "Accounts"), with per-account private state at
+  `GET/PUT /api/private` and `GET/PUT /api/rankings` (+ history/restore).
+  Shared, league-wide: `GET/PUT
   /api/setup` (keepers/trades/tendencies/in-progress picks) with rolling backup
   history (`GET /api/setup/history`, `POST /api/setup/restore`); `GET/POST
   /api/leagues`, `PUT/DELETE /api/leagues/:id` (league profile CRUD); `GET
@@ -118,27 +122,38 @@ current than this list.
    a placeholder, not yet built.
 3. ~~A **standard redraft** profile for quick drafts (no keepers)~~ — done via
    `leagueType==='redraft'` (see SPECS.md → "League profiles").
-4. ~~**Commissioner mode**~~ — v1 done 2026-08-25: a **Commish** tab, its own
-   `commish:<league>` KV entity, `GET/PUT /api/commish` (+ history/restore).
-   No restore-panel UI yet; revisit fields/polish if asked.
-5. **League-aware custom rankings/projections engine** — in active design as
+4. ~~**Commissioner mode**~~ — done: v1 2026-08-25 (a **Commish** tab, its own
+   `commish:<league>` KV entity, `GET/PUT /api/commish` + history/restore),
+   v2 2026-08-26 (restore panel, dues rollup + outstanding column, contact
+   export; admin-only to read once accounts exist).
+5. ~~**Custom rankings v1**~~ — done 2026-08-26: a **Rankings** tab, per
+   account and per league (`GET/PUT /api/rankings` + history/restore), with
+   seeding, reordering, pasted lists, and user-set tiers. Deliberately the
+   small hand-built version — the model below still stands.
+6. **League-aware custom rankings/projections engine** — in active design as
    of 2026-08-25, planned over several sessions/days (user wants to discuss
    via phone/Remote Control, not a solo build). This is what actually
    differentiates `guillotine`/`bestball` from plain `redraft` (they exist as
    selectable `leagueType`s already but behave identically to redraft until
    this lands). See `FEEDBACK.md` for the live state of that design thread.
-6. **Live draft capability** (real-time sync with an in-progress draft on
+7. **Live draft capability** (real-time sync with an in-progress draft on
    Yahoo/Sleeper/MFL) — was explicitly deprioritized earlier, now scheduled
    for the next 2-3 days per the user (2026-08-25).
-7. **Multiple people / separate save files** — real per-user accounts, each
-   with their own save data (today it's one shared setup per league; guest
-   mode is read-only and doesn't address this). Explicitly low priority;
-   user wants it after commissioner mode, alongside the two items above.
-8. Later, still deferred: in-season tools — waivers/FAAB, start/sit, trade
+8. ~~**Multiple people / separate save files**~~ — done 2026-08-26: optional
+   accounts (**Account** tab). With none created the app behaves exactly as
+   before; the first account created becomes admin. League facts stay shared,
+   while rankings/queue/tendencies/in-progress draft go per account. See
+   `SPECS.md` → "Accounts".
+9. Later, still deferred: in-season tools — waivers/FAAB, start/sit, trade
    analysis; ESPN/FanTracks import; Yahoo Fantasy import (needs the user to
    register an OAuth app first — see conversation history, not recorded here
    since it involves credentials; also blocked on Yahoo's manual Fantasy
-   Sports API access review as of 2026-08-23).
+   Sports API access review as of 2026-08-23). **Superseded 2026-08-26**: the pending review
+   is not the gate for public leagues. Yahoo reads them with 2-legged OAuth
+   1.0a — app consumer key + HMAC-SHA1 signature, no user sign-in — so
+   `GET /api/import/yahoo/:leagueKey` is built and needs only the
+   `YAHOO_CLIENT_ID`/`YAHOO_CLIENT_SECRET` secrets. See `SPECS.md` →
+   "Yahoo import".
 
 ## Conventions
 - Keep `public/index.html` self-contained (data embedded) — no external JS/CSS
