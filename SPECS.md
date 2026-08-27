@@ -332,6 +332,43 @@ a real auth boundary — someone hitting the API directly from devtools isn't
 blocked — which is an accepted tradeoff for "show a friend," not a security
 posture for a hostile viewer.
 
+## Admin gate
+
+The same Draft-Room-only restriction guest mode uses also applies to anyone
+who *isn't* the owner — not just people on a `?guest=1` link. On boot the app
+calls `GET /api/whoami` (with whatever token is saved from a previous
+sign-in) and gets back `{admin:true|false}`; `restricted()` is
+`GUEST_MODE || !IS_ADMIN`, and everywhere the app used to check `GUEST_MODE`
+(nav visibility, DOM stripping of the other views, `saveSetup()`/
+`saveCommish()` no-opping) now checks `restricted()` instead. So someone who
+strips `?guest=1` off a shared link, or anyone else who finds the plain URL,
+gets the exact same Draft-Room-only view a guest link gives — they don't
+need the query param to be restricted, only the correct token to *not* be.
+
+The header has a "Sign in" button (hidden once you're admin, replaced by a
+"★ Admin" badge) that prompts for the owner token, saves it to
+`localStorage['aeoToken']`, and reloads. The same token field that already
+existed on the Mocks tab (previously "Privacy token") does the same thing —
+kept as a second entry point, not a separate mechanism.
+
+This is opt-in and fails open: `/api/whoami` reports `admin:true` for
+everyone as long as the `AUTH_TOKEN` secret isn't set in Cloudflare (`npx
+wrangler secret put AUTH_TOKEN`) — matching today's default, so nothing
+changes for anyone until the owner deliberately turns it on. If the
+`/api/whoami` call itself fails (offline, or an old deploy without the
+route yet), the client also defaults to `admin:true` rather than locking
+the viewer out. Once `AUTH_TOKEN` is set, it's a real server-side boundary
+too: `authed()` already gated every `/api/*` route before this — `/api/whoami`
+is the one exception, deliberately outside that gate so it can answer
+`{admin:false}` for a bad token instead of a blanket 401 (that response is
+exactly what the UI gate reads to decide what to show).
+
+Not built: real multi-user accounts with separate save files per person
+(FEEDBACK.md's 2026-08-25 "Multiple people logging in with separate save
+files" entry, roadmap item 7 in `CLAUDE.md`) — this is a single shared
+owner/not-owner boundary, not per-user identity or per-user data. That
+remains a bigger, explicitly deprioritized lift if ever wanted.
+
 ## Deployment
 
 See `CLAUDE.md` for the Worker/KV architecture — not a feature spec concern,
