@@ -332,6 +332,62 @@ a real auth boundary — someone hitting the API directly from devtools isn't
 blocked — which is an accepted tradeoff for "show a friend," not a security
 posture for a hostile viewer.
 
+## Accounts (Google sign-in)
+
+Identity comes from Google OAuth. There are no passwords stored here to leak
+or reset, and no signup form — signing in with a Google account *is* creating
+the account.
+
+**The first Google account that ever signs in becomes the admin.** Everyone
+after that is a regular user. Re-signing in refreshes your name/avatar but
+never re-grants admin, so the role can't be taken by signing in again later.
+
+Three tiers, enforced on the server (`worker.js`) and mirrored in the UI:
+
+| | Tabs | Data |
+|---|---|---|
+| **Admin** | all eight | keeps the original unprefixed KV keys — the owner's existing keepers/trades/picks/mocks carry over untouched |
+| **Signed in** | Draft Room, Teams & Keepers, Trades, Mocks, Strategy Lab | own private setup + mocks under `:u:<id>` keys; reads shared league profiles, can't edit them |
+| **Signed out** | Draft Room only, nothing saves | none — same view a `?guest=1` link gives |
+
+Commish, Leagues, and Data are admin-only: the first is league administration
+(dues, contact info), and the other two edit *shared* league structure — the
+owner list, draft order, and player pool everyone else drafts against. So are
+the Sleeper/MFL/Yahoo imports, since they feed league-profile edits, and the
+Yahoo connect handshake, since there's one shared Yahoo grant slot.
+
+The admin keeping the legacy unprefixed keys is the same trick `aeo-keepers`
+already uses to keep its pre-multi-league data (see `leagueId()` in
+`worker.js`): it means turning accounts on requires no migration and can't
+strand the owner's existing draft prep.
+
+Mechanically: `/auth/google/start` redirects to Google's consent screen with a
+random `state` echoed through a short-lived cookie (CSRF on login);
+`/auth/google/callback` exchanges the code server-to-server, reads the
+`id_token` payload for the Google subject id, upserts a `user:<sub>` record,
+and sets an HttpOnly/Secure/SameSite=Lax session cookie signed with HMAC-SHA256
+(30 days). The `id_token`'s signature isn't separately verified because it
+arrives directly from Google's token endpoint over TLS in a call we initiated —
+verification matters for tokens handed over by a client, which this isn't.
+`/api/me` reports `{accountsEnabled, signedIn, admin, user}` and is the one
+route answerable while signed out; `/auth/signout` clears the cookie.
+
+**Dormant until configured.** With no `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+secrets set, `ACCOUNTS_ON` is false, every caller is treated as the owner, and
+the app behaves exactly as it did before accounts existed. That's a deployment
+prerequisite — you can't run OAuth without an OAuth app — not a security
+stance, and the header says so out loud ("⚠ Accounts off — everyone has full
+access") rather than looking like a login that isn't one. To turn it on:
+
+1. Create an OAuth client at https://console.cloud.google.com/apis/credentials
+   (type: Web application), with the authorized redirect URI
+   `https://aeo-draft-lab.hkeseyan.workers.dev/auth/google/callback`.
+2. `npx wrangler secret put GOOGLE_CLIENT_ID` and
+   `npx wrangler secret put GOOGLE_CLIENT_SECRET`.
+   Optionally `npx wrangler secret put SESSION_SECRET` (any long random string);
+   `GOOGLE_CLIENT_SECRET` is used for cookie signing if it's absent.
+3. Sign in first, before sharing the URL — whoever signs in first is admin.
+
 ## Deployment
 
 See `CLAUDE.md` for the Worker/KV architecture — not a feature spec concern,

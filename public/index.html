@@ -67,6 +67,12 @@
   .dcol{}
   body.hide-delta .dcol{display:none}
   .tradetag{font-size:9px;color:var(--warn);border:1px solid var(--warn);border-radius:8px;padding:0 4px;margin-left:3px}
+  .acct{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+  .acct img{width:24px;height:24px;border-radius:50%;border:1px solid var(--line)}
+  .acct .who{color:var(--ink);font-weight:600}
+  .gbtn{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#3c4043;border:1px solid #dadce0;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none}
+  .gbtn:hover{background:#f7f8f8}
+  .signin-note{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
   .tierrow td{background:#0e1626;border-top:2px solid var(--line);font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:3px 6px}
   .cues{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
   .cues b{color:var(--ink)}
@@ -94,6 +100,7 @@
     <button data-view="leagues">Leagues</button>
     <button data-view="commish">Commish</button>
   </nav>
+  <div class="acct" id="acctBox"></div>
 </header>
 <main>
   <!-- DRAFT ROOM -->
@@ -1001,22 +1008,77 @@ const LEAGUES_DEFAULT = {
 let LEAGUES = {...LEAGUES_DEFAULT};
 </script>
 <script>
-// ---------- GUEST MODE (?guest=1) ----------
-// A read-only, single-league, Draft-Room-only view for sharing a link without
-// exposing other leagues or letting the viewer save/change anything. This is
-// a UI-level restriction only (hides tabs, no-ops the save call) — someone
-// technical enough to hit the API directly from devtools isn't blocked by
-// this, which is an accepted tradeoff for "just show a friend," not a
-// security boundary for a hostile viewer.
+// ---------- ACCOUNTS + GUEST MODE ----------
+// Who you are decides which tabs exist. Three states, in order of access:
+//
+//   admin      — the first Google account that ever signed in. Everything.
+//   signed in  — own private keepers/trades/picks/mocks; no Commish, no league
+//                editing, no Data tab (that edits the shared player pool).
+//   signed out — Draft Room only, nothing saves. Same as a ?guest=1 link.
+//
+// This mirrors the server (worker.js), which enforces the same three tiers on
+// /api/*. The UI hiding is convenience; the server is the actual boundary.
+// When accounts aren't configured yet (no GOOGLE_CLIENT_ID secret), the server
+// reports accountsEnabled:false and treats everyone as the owner — the app then
+// behaves exactly as it did before accounts existed, and the header says so
+// rather than pretending to be a login.
 const GUEST_MODE = new URLSearchParams(location.search).get('guest')==='1';
-function applyGuestModeUI(){
-  if(!GUEST_MODE)return;
-  document.querySelectorAll('nav button').forEach(b=>{ if(b.dataset.view!=='room')b.style.display='none'; });
-  const sel=el('leagueSelect'); if(sel)sel.style.display='none';
+let ME = { accountsEnabled:false, signedIn:false, admin:true, user:null };
+async function loadMe(){
+  try{
+    const r = await fetch('/api/me', { headers: tokenHdr() });
+    if(r.ok) ME = await r.json();
+  }catch(e){ /* offline: leave the permissive default so a local/offline page still works */ }
+}
+// Tabs only an admin should ever see: league administration and anything that
+// edits shared league structure rather than your own draft prep.
+const ADMIN_ONLY_VIEWS = ['commish','leagues','data'];
+function canSave(){ return !GUEST_MODE && (ME.admin || ME.signedIn); }
+function roomOnly(){ return GUEST_MODE || (ME.accountsEnabled && !ME.signedIn); }
+function applyAccessUI(){
+  const allowed = (v) => {
+    if(roomOnly()) return v==='room';
+    if(ME.admin) return true;
+    return !ADMIN_ONLY_VIEWS.includes(v);
+  };
+  document.querySelectorAll('nav button').forEach(b=>{ if(!allowed(b.dataset.view))b.style.display='none'; });
+  if(roomOnly()){ const sel=el('leagueSelect'); if(sel)sel.style.display='none'; }
   // Hiding the tab isn't enough — the other views' data still populates the DOM
   // in the background and a right-click "Inspect" would see it. Strip those
   // sections down to nothing rather than just hiding them.
-  document.querySelectorAll('main .view').forEach(sec=>{ if(sec.id!=='view-room')sec.remove(); });
+  document.querySelectorAll('main .view').forEach(sec=>{
+    if(!allowed(sec.id.replace('view-','')))sec.remove();
+  });
+}
+function renderAcct(){
+  const box=el('acctBox'); if(!box)return;
+  if(GUEST_MODE){ box.innerHTML='<span class="tag">Guest view</span>'; return; }
+  if(!ME.accountsEnabled){
+    box.innerHTML='<span class="tag" title="Set the GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET secrets in Cloudflare to turn on sign-in. Until then everyone who reaches this URL has full access.">⚠ Accounts off — everyone has full access</span>';
+    return;
+  }
+  if(!ME.signedIn){
+    box.innerHTML='<a class="gbtn" href="/auth/google/start">Sign in with Google</a>';
+    return;
+  }
+  const u=ME.user||{};
+  box.innerHTML=`${u.picture?`<img src="${u.picture}" alt="">`:''}
+    <span class="who">${u.name||u.email||'Signed in'}</span>
+    ${ME.admin?'<span class="tag">admin</span>':''}
+    <a href="/auth/signout" class="small">Sign out</a>`;
+}
+// Signed-out visitors get the Draft Room as a sandbox (picks work, nothing
+// saves) plus a plain explanation of why the rest of the app isn't there.
+function renderSignInNote(){
+  if(!(ME.accountsEnabled && !ME.signedIn) || GUEST_MODE) return;
+  const room=el('view-room'); if(!room)return;
+  const d=document.createElement('div');
+  d.className='signin-note';
+  d.innerHTML=`<b>You're not signed in.</b><br>
+    <span class="small muted">This is a scratch draft board — pick away, but nothing is saved.
+    Sign in with Google to get your own keepers, trades, mocks and saved drafts.</span>
+    <div style="margin-top:10px"><a class="gbtn" href="/auth/google/start">Sign in with Google</a></div>`;
+  room.insertBefore(d, room.firstChild);
 }
 
 // ---------- STATE ----------
@@ -2316,7 +2378,7 @@ function renderCommish(){
 }
 let _commishSaveT=null;
 function saveCommish(){
-  if(GUEST_MODE)return;
+  if(!canSave())return;
   if(_commishSaveT)clearTimeout(_commishSaveT);
   _commishSaveT=setTimeout(async()=>{
     try{ await apiCommish('PUT',COMMISH); const s=el('commishStatus'); if(s)s.textContent='☁ Saved '+new Date().toLocaleTimeString(); }
@@ -2330,7 +2392,7 @@ async function loadCommish(){
 let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
-function saveSetup(){if(GUEST_MODE)return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
+function saveSetup(){if(!canSave())return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
 function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},v.bias||{})};}); }
 async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||(Array.isArray(s.picks)&&s.picks.length))){
   if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
@@ -2408,17 +2470,18 @@ function applyLeagueProfile(id){
 
   initKeepers(); applyKeepers(); resetDraft();
   renderHeader(); updateKeeperCopy();
-  if(!GUEST_MODE){
-    // Guest mode already stripped these views' DOM sections entirely (see
-    // applyGuestModeUI) — skip populating them too, both to avoid touching
-    // elements that no longer exist and so nothing sensitive is ever computed
-    // into memory/DOM for a guest session in the first place.
+  if(!roomOnly()){
+    // Views the current viewer isn't allowed had their DOM sections removed
+    // outright by applyAccessUI() — skip populating them too, both to avoid
+    // touching elements that no longer exist and so nothing they shouldn't see
+    // is ever computed into memory/DOM in the first place. Hence the el()
+    // guards: each one is really "does this viewer still have that view?".
     fillTradeSelects(); renderTrades(); renderBackupHistory();
     if(el('teamsWrap')){renderTeams();renderTendencies();}
     renderStratCards();
     renderMocks();
     if(el('leaguesList'))renderLeaguesTab();
-    loadCommish();
+    if(el('commishTable'))loadCommish();
   }
   loadSetup();
 }
@@ -2452,10 +2515,13 @@ async function fetchCloudLeagues(){
   }
 }
 async function boot(){
+  await loadMe();          // decides which tabs exist — must run before applyAccessUI()
+  applyAccessUI();
+  renderAcct();
+  renderSignInNote();
   LEAGUES=await fetchCloudLeagues();
   fillLeagueSelect();
-  applyGuestModeUI();
-  if(GUEST_MODE){ applyLeagueProfile('aeo-keepers'); return; }
+  if(roomOnly()){ applyLeagueProfile('aeo-keepers'); return; }
   const params=new URLSearchParams(location.search);
   const urlLeague=params.get('league');
   let saved=null; try{saved=localStorage.getItem('league');}catch(e){}

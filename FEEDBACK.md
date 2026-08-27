@@ -16,6 +16,43 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-08-27 — **Real accounts: Google sign-in, first account is admin.**
+  User asked to make sure only the admin sees Commish and the other
+  administrative tabs, and said the "account login functionality that allows
+  different users to have their own configurations" was missing — with their
+  account (kyos) as admin "since it was the first one that signed in."
+  Searched all 33 commits and every branch: no login/account UI has ever
+  existed in this repo, so that was an unbuilt feature (roadmap item 7), not
+  a regression — said so plainly rather than pretending to restore something.
+  *First attempt was wrong and got reverted:* a shared `AUTH_TOKEN` password
+  behind a "Sign in" button and "★ Admin" badge, which looked like an account
+  system but wasn't one, and was dormant besides (verified against the live
+  app — `/api/whoami` returned `{"admin":true}` and `/api/setup` served real
+  data to an anonymous curl). User: *"I don't understand how it knows I'm
+  admin without a login, or how someone is supposed to create their own
+  account."* Correct on both counts. They chose to drop it and build the
+  real thing with Google sign-in.
+  *Done — reverted that commit (`git revert`, so PR #12's net diff is the
+  draft-room features again), then built actual accounts: Google OAuth
+  (`/auth/google/start|callback`, `/auth/signout`), HMAC-signed HttpOnly
+  session cookies, a `user:<sub>` record per Google account, `/api/me`, and
+  an admin-only `/api/users`. **The first account to sign in becomes admin**,
+  and re-signing in never re-grants it. Three server-enforced tiers: admin
+  (everything), signed in (own private keepers/trades/picks/mocks, read-only
+  on shared league profiles, no Commish/Leagues/Data/imports), signed out
+  (Draft Room sandbox, nothing saves — same as a `?guest=1` link). The admin
+  keeps the original unprefixed KV keys so the owner's existing draft prep
+  carries over with zero migration; everyone else gets `:u:<id>` keys.
+  Still dormant until `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are set —
+  unavoidable, OAuth needs an OAuth app — but this time the header says
+  "⚠ Accounts off — everyone has full access" instead of hiding it. Setup
+  steps in `SPECS.md` → "Accounts (Google sign-in)"; **whoever signs in first
+  is admin, so sign in before sharing the URL.** Tested: full sign-in flow
+  against a mocked Google token endpoint (first-user-admin, no re-promotion,
+  CSRF state mismatch → 400), all three tiers against the real route table,
+  per-user data isolation, forged cookie → 401, and accounts-off →
+  byte-identical legacy behavior.*
+
 - ✅ 2026-08-26 — **Draft-room decision support push** (user: "ready for next
   features"). Picked the four unambiguous 🆕 backlog items that make the room
   more useful on the clock rather than starting a roadmap item that needs the
@@ -49,7 +86,7 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   versioned-backup pattern as `/api/setup`/`/api/leagues`. Scoped per league
   like everything else. Hidden entirely in guest mode. First pass — no
   polish pass on what fields matter most yet, revisit if asked.*
-- 🆕 2026-08-25 — **Multiple people logging in with separate save files** —
+- ✅ 2026-08-25 — **Multiple people logging in with separate save files** —
   user's friend is now testing the app (via the guest link) and this came up
   as a "maybe later" idea: real multi-user accounts, each with their own
   save data, rather than one shared setup per league. Explicitly low
@@ -57,6 +94,9 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   has none beyond the optional `AUTH_TOKEN` env var that gates the whole
   API, not per-user) — a bigger lift than guest mode's UI-only trick. Not
   started.
+  *Done 2026-08-27 — built once the user asked for it directly; see the
+  Google sign-in entry at the top of this file. This was roadmap item 7 in
+  `CLAUDE.md`.*
 - ✅ 2026-08-25 — **AEO-Keepers draft order was wrong: Edward/Aren slots
   swapped** — user's friend (testing via the guest link) caught that Edward
   should be slot 9 and Aren slot 8, not the reverse. Real keepers and pick
