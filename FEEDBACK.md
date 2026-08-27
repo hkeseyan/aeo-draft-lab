@@ -16,35 +16,6 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
-- ✅ 2026-08-27 — **"The account page is gone, I can't log in" + "only admin
-  should see Commish and other tabs."** User was frustrated (also flagged the
-  hourly PR check-in routine as burning usage — deleted that trigger, see
-  below). Investigated the "account page" claim first: searched all 33
-  commits across the whole repo history plus every branch for any login/
-  account/password UI — found none. This app has never had per-user
-  accounts or a login screen; the closest things are the optional
-  `AUTH_TOKEN`-gated "Privacy token" field (Mocks tab) and `?guest=1` guest
-  mode. What the user described (a "kyos" account, first-to-sign-in becomes
-  admin, separate configs per person) matches the *already-logged, already
-  explicitly-deprioritized* roadmap item 7 in `CLAUDE.md` ("Multiple people
-  / separate save files") — not a regression, an unbuilt feature.
-  *Shipped the buildable half now — an owner/not-owner admin gate — without
-  building full multi-user accounts (a bigger lift the user already called
-  low-priority): a new `GET /api/whoami` route reports `{admin:true|false}`
-  based on the existing `AUTH_TOKEN` check; the UI now treats "not admin" the
-  same as `?guest=1` (Draft-Room-only, `saveSetup()`/`saveCommish()` no-op),
-  so removing `?guest=1` from a shared link — or anyone else finding the
-  plain URL — no longer exposes Commish/Leagues/Data/Trades/Teams &amp;
-  Keepers. A header "Sign in" button (badge once signed in) prompts for the
-  token and reloads. Deliberately fails open: `AUTH_TOKEN` isn't set by
-  default, so `/api/whoami` reports `admin:true` for everyone and nothing
-  changes until the user opts in — no risk of locking themselves out, which
-  was the exact complaint. See `SPECS.md` → "Admin gate" for the full
-  writeup and how to turn it on (`npx wrangler secret put AUTH_TOKEN`, then
-  sign in with that same value). If what's wanted is the fuller "kyos" per-
-  person-accounts idea, that's still roadmap item 7 — say the word to
-  schedule it.*
-
 - ✅ 2026-08-26 — **Draft-room decision support push** (user: "ready for next
   features"). Picked the four unambiguous 🆕 backlog items that make the room
   more useful on the clock rather than starting a roadmap item that needs the

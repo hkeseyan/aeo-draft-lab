@@ -84,8 +84,6 @@
   <span class="tag" id="leagueTag1">12-team · Half-PPR · Snake · Slot 6</span>
   <span class="tag" id="leagueTag2">Draft Sep 8 · Keepers Sep 1</span>
   <span class="seedwarn" id="seedWarn">⚠ Baseline ranking (SEED) — replace with FantasyPros/Yahoo ADP in the Data tab</span>
-  <span class="tag" id="adminBadge" style="display:none">★ Admin</span>
-  <button class="btn ghost" id="adminSignIn" style="display:none" title="Enter the owner token to unlock Commish, Leagues, Data, Trades, and Teams &amp; Keepers">Sign in</button>
   <nav>
     <button data-view="room" class="active">Draft Room</button>
     <button data-view="teams">Teams & Keepers</button>
@@ -236,7 +234,7 @@
         <button class="btn ghost" id="refreshMocks">Refresh</button>
       </div>
       <div class="small muted" id="cloudStatus" style="margin-top:6px"></div>
-      <details style="margin-top:8px"><summary class="small muted">Owner / admin token (optional — same as the "Sign in" button in the header)</summary>
+      <details style="margin-top:8px"><summary class="small muted">Privacy token (optional)</summary>
         <div class="row" style="margin-top:6px">
           <input type="text" id="tokenInput" placeholder="access token (matches AUTH_TOKEN in Cloudflare)" style="flex:1">
           <button class="btn ghost" id="saveToken">Set token</button>
@@ -1003,45 +1001,22 @@ const LEAGUES_DEFAULT = {
 let LEAGUES = {...LEAGUES_DEFAULT};
 </script>
 <script>
-// ---------- GUEST MODE (?guest=1) / ADMIN GATE ----------
-// A read-only, single-league, Draft-Room-only view — either because the link
-// was shared as ?guest=1 (intentional, for showing a friend), or because the
-// viewer isn't signed in as the owner (see IS_ADMIN below). Same UI-level
-// restriction either way (hides tabs, no-ops the save call) — someone
+// ---------- GUEST MODE (?guest=1) ----------
+// A read-only, single-league, Draft-Room-only view for sharing a link without
+// exposing other leagues or letting the viewer save/change anything. This is
+// a UI-level restriction only (hides tabs, no-ops the save call) — someone
 // technical enough to hit the API directly from devtools isn't blocked by
-// this, which is an accepted tradeoff, not a security boundary for a
-// hostile viewer. (The server-side AUTH_TOKEN check on /api/* is the real
-// boundary; this just decides what the UI *shows*.)
+// this, which is an accepted tradeoff for "just show a friend," not a
+// security boundary for a hostile viewer.
 const GUEST_MODE = new URLSearchParams(location.search).get('guest')==='1';
-// True until proven otherwise by /api/whoami — matches the "AUTH_TOKEN unset"
-// default (see worker.js), so nothing changes for anyone until the owner
-// actually configures the secret and signs in with it.
-let IS_ADMIN = true;
-async function checkAdmin(){
-  try{
-    const r = await fetch('/api/whoami', { headers: tokenHdr() });
-    const j = await r.json();
-    IS_ADMIN = !!j.admin;
-  }catch(e){
-    IS_ADMIN = true; // endpoint unreachable (old deploy, offline) — fail open, not locked out
-  }
-}
-function restricted(){ return GUEST_MODE || !IS_ADMIN; }
 function applyGuestModeUI(){
-  if(!restricted())return;
+  if(!GUEST_MODE)return;
   document.querySelectorAll('nav button').forEach(b=>{ if(b.dataset.view!=='room')b.style.display='none'; });
   const sel=el('leagueSelect'); if(sel)sel.style.display='none';
   // Hiding the tab isn't enough — the other views' data still populates the DOM
   // in the background and a right-click "Inspect" would see it. Strip those
   // sections down to nothing rather than just hiding them.
   document.querySelectorAll('main .view').forEach(sec=>{ if(sec.id!=='view-room')sec.remove(); });
-}
-function renderAdminControl(){
-  const badge=el('adminBadge'), btn=el('adminSignIn');
-  if(!badge||!btn)return;
-  if(GUEST_MODE){ badge.style.display='none'; btn.style.display='none'; return; } // guest link: not the sign-in flow
-  badge.style.display = IS_ADMIN ? '' : 'none';
-  btn.style.display = IS_ADMIN ? 'none' : '';
 }
 
 // ---------- STATE ----------
@@ -2168,12 +2143,6 @@ el('addPickTrade').onclick=addPickTrade; el('addPlayerTrade').onclick=addPlayerT
 el('toggleDelta').onchange=e=>document.body.classList.toggle('hide-delta',!e.target.checked);
 el('saveMock').onclick=saveMock; el('refreshMocks').onclick=renderMocks;
 el('saveToken').onclick=()=>{localStorage.setItem('aeoToken',el('tokenInput').value.trim());setStatus&&setStatus('Token set.');renderMocks();};
-el('adminSignIn').onclick=()=>{
-  const t=prompt('Owner token (set via `npx wrangler secret put AUTH_TOKEN`):');
-  if(t===null)return; // cancelled
-  try{localStorage.setItem('aeoToken',t.trim());}catch(e){}
-  location.reload(); // simplest way to re-run the whoami check + full boot cleanly
-};
 el('simToMe').onclick=simToMe;
 el('advance1').onclick=advanceOne;
 el('undo').onclick=undo;
@@ -2347,7 +2316,7 @@ function renderCommish(){
 }
 let _commishSaveT=null;
 function saveCommish(){
-  if(restricted())return;
+  if(GUEST_MODE)return;
   if(_commishSaveT)clearTimeout(_commishSaveT);
   _commishSaveT=setTimeout(async()=>{
     try{ await apiCommish('PUT',COMMISH); const s=el('commishStatus'); if(s)s.textContent='☁ Saved '+new Date().toLocaleTimeString(); }
@@ -2361,7 +2330,7 @@ async function loadCommish(){
 let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
-function saveSetup(){if(restricted())return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
+function saveSetup(){if(GUEST_MODE)return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
 function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},v.bias||{})};}); }
 async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||(Array.isArray(s.picks)&&s.picks.length))){
   if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
@@ -2439,7 +2408,7 @@ function applyLeagueProfile(id){
 
   initKeepers(); applyKeepers(); resetDraft();
   renderHeader(); updateKeeperCopy();
-  if(!restricted()){
+  if(!GUEST_MODE){
     // Guest mode already stripped these views' DOM sections entirely (see
     // applyGuestModeUI) — skip populating them too, both to avoid touching
     // elements that no longer exist and so nothing sensitive is ever computed
@@ -2483,12 +2452,10 @@ async function fetchCloudLeagues(){
   }
 }
 async function boot(){
-  await checkAdmin();
   LEAGUES=await fetchCloudLeagues();
   fillLeagueSelect();
   applyGuestModeUI();
-  renderAdminControl();
-  if(restricted()){ applyLeagueProfile('aeo-keepers'); return; }
+  if(GUEST_MODE){ applyLeagueProfile('aeo-keepers'); return; }
   const params=new URLSearchParams(location.search);
   const urlLeague=params.get('league');
   let saved=null; try{saved=localStorage.getItem('league');}catch(e){}

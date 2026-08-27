@@ -20,10 +20,6 @@
 //   GET     /api/import/mfl/:mflLeagueId          -> best-effort structure import (?year=)
 //   GET/POST /api/mocks            -> list / save mock drafts
 //   GET/DELETE /api/mocks/:id      -> load / delete a mock
-//   GET     /api/whoami             -> {admin:true|false} — whether the caller's
-//                                     x-auth-token matches AUTH_TOKEN; drives the
-//                                     admin-only tab gating in the UI. Always
-//                                     admin:true when AUTH_TOKEN isn't set.
 //   GET     /api/yahoo/status      -> is a Yahoo account connected?
 //   GET     /api/yahoo/leagues     -> diagnostic: list the connected account's
 //                                     NFL leagues (raw Yahoo JSON + best-effort
@@ -151,18 +147,6 @@ export default {
       } catch (e) {
         return new Response("Yahoo auth failed: " + e.message, { status: 500 });
       }
-    }
-
-    // ---- /api/whoami : reports whether the caller's x-auth-token (if any) matches
-    // AUTH_TOKEN, so the UI can gate the admin-only tabs (Commish, Leagues, Data,
-    // Trades, Teams & Keepers). Deliberately outside the blanket authed() gate below
-    // — it needs to answer {admin:false} for a bad/missing token, not 401, or the
-    // UI would have no way to distinguish "not admin" from "endpoint unreachable."
-    // If AUTH_TOKEN isn't set, authed() always returns true, so this always reports
-    // admin:true — i.e. nothing changes here until the owner actually sets the secret.
-    if (path === "/api/whoami") {
-      if (request.method === "OPTIONS") return J({}, 204);
-      return J({ admin: authed(request, env) });
     }
 
     if (path.startsWith("/api/")) {
