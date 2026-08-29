@@ -24,6 +24,13 @@
   .view{display:none} .view.active{display:block}
   .grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:16px}
   @media(max-width:1100px){.grid2{grid-template-columns:1fr}}
+  @media(max-width:760px){
+    /* Fixed tracks, not 1fr: the grid must be wider than the viewport for the
+       horizontal scroll to expose every team column. */
+    .board{grid-template-columns:repeat(var(--teams,12), 104px);max-height:calc(6 * 46px + 28px)}
+    .cell{font-size:10px;padding:3px 4px}
+    .h{font-size:10px}
+  }
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:16px}
   .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 10px}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -47,8 +54,20 @@
      header/cell is a direct grid child in row-major order so a taller cell
      (e.g. a wrapped long name) grows that whole row for every column instead
      of pushing just its own column out of alignment. */
-  .board{display:grid;gap:2px;overflow-x:auto;padding-bottom:6px}
-  .h{min-width:120px;font-size:11px;color:var(--muted);text-align:center;padding:3px;font-weight:700}
+  /* --teams is set by renderBoard(); keeping the track list in CSS (rather than
+     an inline style) is what lets the mobile media query below actually win. */
+  .board{
+    display:grid;gap:2px;padding-bottom:6px;
+    grid-template-columns:repeat(var(--teams,12), minmax(120px,1fr));
+    /* ~6 rounds tall, then scroll — the board is the top card now, so it can't
+       be allowed to push the player list off-screen. */
+    max-height:calc(6 * 40px + 28px);
+    overflow:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;
+  }
+  .h{
+    position:sticky;top:0;z-index:2;background:var(--panel);
+    font-size:11px;color:var(--muted);text-align:center;padding:4px 3px;font-weight:700;
+  }
   .h.me{color:#c9b8ff}
   .cell{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:11px;min-height:34px}
   .cell.me{background:var(--me)}
@@ -119,6 +138,10 @@
       </div>
       <div class="cues small muted" id="clockCues"></div>
     </div>
+    <div class="card">
+      <h2>Draft board <span class="muted small">(dashed = keeper · click a filled cell to rewind there · scrolls for later rounds)</span></h2>
+      <div class="board" id="boardGrid"></div>
+    </div>
     <div class="grid2">
       <div>
         <div class="card">
@@ -152,10 +175,6 @@
           <div id="myQueue" class="small muted">Check "Q" next to a player in Best Available to add them.</div>
         </div>
       </div>
-    </div>
-    <div class="card">
-      <h2>Draft board <span class="muted small">(dashed = keeper · click a cell team header to set who's on the clock manually)</span></h2>
-      <div class="board" id="boardGrid"></div>
     </div>
     <div class="card">
       <h2>My picks & projected availability</h2>
@@ -203,10 +222,10 @@
   <section class="view" id="view-trades">
     <div class="card">
       <h2>Draft-pick trades</h2>
-      <p class="small muted">Reassign any pick to another manager (real trades, or hypothetical ones you're weighing). Traded picks change who's on the clock and which picks are yours. Saved to the cloud so you only enter them once.</p>
+      <p class="small muted">Reassign any pick to another manager (real trades, or hypothetical ones you're weighing). The pick list shows what that manager <em>currently</em> holds, so a pick they acquired in an earlier trade can be traded on again. Traded picks change who's on the clock and which picks are yours. Saved to the cloud so you only enter them once.</p>
       <div class="tradebox">
-        <label class="small">Round <select id="ptRound"></select></label>
         <label class="small">from <select id="ptFrom"></select></label>
+        <label class="small">pick <select id="ptPick" style="min-width:190px"></select></label>
         <label class="small">to <select id="ptTo"></select></label>
         <button class="btn" id="addPickTrade">Add pick trade</button>
       </div>
@@ -524,7 +543,7 @@ Robert|Brandon Aiyuk|10|9
 Robert|Brashard Smith|FA|10
 Robert|Jason Myers|FA|10
 Robert|Broncos|12|11
-Robert|Jonathan Brooks|FA|10
+Robert|Jonathon Brooks|FA|10
 Robert|Brock Bowers|7|6
 Edward|Matthew Stafford|FA|10
 Edward|Puka Nacua|9|8
@@ -651,7 +670,7 @@ Jiro|Omarion Hampton|2|1
 Jiro|Jake Ferguson|FA|10
 Jiro|Tony Pollard|3|2
 Jiro|Emanuel Wilson|FA|10
-Jiro|Jaocry Croskey-Merritt|6|5
+Jiro|Jacory Croskey-Merritt|6|5
 Jiro|Oronde Gadsden|FA|10
 Jiro|Rhamondre Stevenson|7|6
 Jiro|Rome Odunze|6|5
@@ -1119,10 +1138,25 @@ function effOwner(pl){return playerTrades[pl]||ORIG_OWNER[pl];}
 function effRoster(owner){const out=[];Object.keys(ROSTERS).forEach(o=>ROSTERS[o].forEach(r=>{if(effOwner(r.player)===owner)out.push(r);}));return out;}
 function ownerOf(ov){return pickOwnerOverride[ov]||slotForOverall(ov).slot;}
 function computePosRanks(){const byPos={};PLAYERS.forEach(p=>{(byPos[p.pos]=byPos[p.pos]||[]).push(p);});Object.values(byPos).forEach(a=>{a.slice().sort((x,y)=>x.adp-y.adp).forEach((p,i)=>p.posRank=i+1);});}
-function adpRoundOf(name){const p=findPlayer(name); return p?Math.ceil(p.adp/LEAGUE.teams):99;}
+function adpRoundOf(name){const p=findPlayer(name); return p?Math.ceil(p.adp/LEAGUE.teams):null;}
 // value = keeper cost round − where he'd actually be drafted. Positive = paying a LATER pick than his draft value = bargain.
 // dollar-based keeper cost (auction leagues) isn't modeled yet — no comparable "round" value to diff against.
-function keepValue(name,cost){return LEAGUE.keeperCostType==='dollar' ? null : cost-adpRoundOf(name);} // higher = better keep
+function keepValue(name,cost){
+  if(LEAGUE.keeperCostType==='dollar')return null;
+  const r=adpRoundOf(name);
+  return r===null ? null : cost-r;   // null = not in the pool, so genuinely unknown
+}
+// Renders a keeper value, distinguishing "no data" from a real (possibly bad) number.
+function valText(v){ return v===null||v===undefined ? '—' : (v>0?'+':'')+v; }
+// Sort best-value-first with unknowns last, rather than letting null coerce to 0
+// (which used to float unrated players into the middle of the table).
+function byValueDesc(a,b){
+  const av=a.val, bv=b.val;
+  if(av===null&&bv===null)return 0;
+  if(av===null)return 1;
+  if(bv===null)return -1;
+  return bv-av;
+}
 
 function seedPool(){
   PLAYERS = SEED.filter((p,i,a)=>a.findIndex(x=>x[0]===p[0])===i) // dedupe
@@ -1131,8 +1165,13 @@ function seedPool(){
 function normName(s){return s.toLowerCase().replace(/\s+(jr|sr|ii|iii|iv)\.?$/,'').replace(/[.'’`-]/g,'').replace(/\s+/g,' ').trim();}
 function findPlayer(name){
   const n=name.trim().toLowerCase();
+  const nn=normName(name);
   return PLAYERS.find(p=>p.name.toLowerCase()===n) ||
-         PLAYERS.find(p=>normName(p.name)===normName(name));
+         PLAYERS.find(p=>normName(p.name)===nn) ||
+         // Team defenses are entered by nickname on rosters ("Broncos") but carry
+         // the full name in the player pool ("Denver Broncos"). Restricted to
+         // DEF/DST so this can never latch onto a surname.
+         PLAYERS.find(p=>(p.pos==='DEF'||p.pos==='DST') && normName(p.name).endsWith(' '+nn));
 }
 
 // ---------- KEEPER SETUP ----------
@@ -1171,15 +1210,41 @@ function resetDraft(){
     render();
     return;
   }
-  // pre-place keepers at their team's pick in that round
+  // Pre-place keepers on a pick the team actually still owns.
+  //
+  // The cost round says what the keeper is *worth*, not which pick pays for him:
+  //   - pay with the least valuable pick the team holds in that round (latest
+  //     overall), so a team holding two 5ths burns the worse one;
+  //   - a team can hold several picks in one round, or none, once trades are in,
+  //     so each keeper consumes a distinct pick (`used`);
+  //   - if the cost round is gone, walk to *earlier* rounds (a 10th-round cost
+  //     falls back to a 9th, then an 8th...). Never later — that would underpay.
+  // Anything still unpaid after round 1 is surfaced rather than silently dropped.
+  const used=new Set();
+  unpayableKeepers=[];
+  const heldInRound=(slot,r)=>{
+    const out=[];
+    for(let s2=1;s2<=LEAGUE.teams;s2++){ const ov=overall(r,s2); if(ownerOf(ov)===slot) out.push(ov); }
+    return out.sort((a,b)=>b-a); // latest pick first = least valuable
+  };
   KEEPERS.forEach(k=>{
     const p=findPlayer(k.name); if(!p) return;
-    const ov=overall(k.round,k.team);
-    picks.push({overall:ov,round:k.round,slot:k.team,playerId:p.id,keeper:true});
+    let paid=null;
+    for(let r=k.round; r>=1 && paid===null; r--){
+      const free=heldInRound(k.team,r).filter(ov=>!used.has(ov));
+      if(free.length) paid=free[0];
+    }
+    if(paid===null){ unpayableKeepers.push({name:k.name, team:k.team, round:k.round}); return; }
+    used.add(paid);
+    const pos=slotForOverall(paid);
+    picks.push({overall:paid, round:pos.round, slot:pos.slot, playerId:p.id, keeper:true, costRound:k.round});
     p.drafted=true;
   });
   render();
 }
+// Keepers whose team has no pick left at or before the cost round — they can't
+// legally be paid for, so they're reported instead of quietly vanishing.
+let unpayableKeepers=[];
 function slotForOverall(ov){const N=LEAGUE.teams;const r=Math.ceil(ov/N);const idx=ov-(r-1)*N;if(LEAGUE.draftType==='linear')return {round:r,slot:idx};const s=(r%2===1)?idx:(N-idx+1);return {round:r,slot:s};}
 function pickTakenAt(ov){return picks.find(p=>p.overall===ov);}
 function nextOpenPick(from){let ov=from;while(ov<=totalPicks && pickTakenAt(ov))ov++;return ov;}
@@ -1424,7 +1489,7 @@ function renderQueue(){
 function ownerLabel(slot){ return (SLOT_OWNER&&SLOT_OWNER[slot]) || ('T'+slot); }
 function renderBoard(){
   const g=el('boardGrid'); g.innerHTML='';
-  g.style.gridTemplateColumns=`repeat(${LEAGUE.teams}, minmax(120px,1fr))`;
+  g.style.setProperty('--teams', LEAGUE.teams);
   const ovNext=nextOpenPick(curPick);
   // Headers and cells are appended directly as grid children in row-major
   // order (all team headers, then all round-1 cells, then all round-2
@@ -1571,7 +1636,16 @@ function renderRoster(){
 }
 function renderKeeperList(){
   const wrap=el('keeperList'); if(!wrap)return;
-  wrap.innerHTML = KEEPERS.map(k=>`<span class="pill">${k.name} · ${ownerLabel(k.team)} · R${k.round}</span>`).join('');
+  const pills = KEEPERS.map(k=>{
+    const unpaid = unpayableKeepers.some(u=>u.name===k.name && u.team===k.team);
+    return `<span class="pill"${unpaid?' style="border-color:var(--bad);color:var(--bad)" title="This team has no pick left in R'+k.round+' or any earlier round, so this keeper can\'t be paid for"':''}>${k.name} · ${ownerLabel(k.team)} · R${k.round}${unpaid?' ⚠':''}</span>`;
+  }).join('');
+  // A keeper whose team traded away every pick at or before the cost round can't
+  // legally be kept — say so rather than letting him quietly vanish off the board.
+  const warn = unpayableKeepers.length
+    ? `<div class="small" style="color:var(--bad);margin-top:6px">⚠ ${unpayableKeepers.length} keeper${unpayableKeepers.length>1?'s':''} can't be paid for — no pick left at or before the cost round: ${unpayableKeepers.map(u=>`${u.name} (${ownerLabel(u.team)}, R${u.round})`).join(', ')}</div>`
+    : '';
+  wrap.innerHTML = pills + warn;
   renderKeeperValueTable();
 }
 function renderKeeperValueTable(){
@@ -1584,14 +1658,14 @@ function renderKeeperValueTable(){
   if(!applicable)return;
   const tb=el('keeperValueTable'); if(!tb)return;
   const rows=KEEPERS.map(k=>({...k, pos:(findPlayer(k.name)||{}).pos||'', adpRound:adpRoundOf(k.name), val:keepValue(k.name,k.round)}))
-    .sort((a,b)=>b.val-a.val);
+    .sort(byValueDesc);
   tb.innerHTML=rows.map(k=>`<tr>
     <td>${ownerLabel(k.team)}</td>
     <td>${k.name}</td>
     <td style="text-align:center"><span class="pos ${k.pos}">${k.pos}</span></td>
     <td style="text-align:center">R${k.round}</td>
-    <td style="text-align:center">R${k.adpRound}</td>
-    <td style="text-align:center" class="${k.val>=3?'val-good':(k.val<=-3?'val-bad':'muted')}">${k.val>0?'+':''}${k.val}</td>
+    <td style="text-align:center">${k.adpRound===null?'<span class="muted" title="Not in the player pool — no ADP to compare against">—</span>':'R'+k.adpRound}</td>
+    <td style="text-align:center" class="${k.val===null?'muted':(k.val>=3?'val-good':(k.val<=-3?'val-bad':'muted'))}" ${k.val===null?'title="Not in the player pool, so there is no value to compute"':''}>${valText(k.val)}</td>
   </tr>`).join('') || '<tr><td colspan="6" class="muted small">No keepers set yet.</td></tr>';
 }
 
@@ -1640,7 +1714,7 @@ function renderTeams(){
     const roster=effRoster(owner);
     const eligible=roster.filter(r=>r.keeper!=null)
       .map(r=>({...r, pos:(findPlayer(r.player)||{}).pos||'', val:keepValue(r.player,r.keeper)}))
-      .sort((a,b)=>b.val-a.val);
+      .sort(byValueDesc);
     const chosen=eligible.filter(r=>assigned.has(owner+'|'+r.player));
     const max=LEAGUE.maxKeepers!=null?LEAGUE.maxKeepers:'?';
     tally.push(`${owner} ${chosen.length}/${max}`);
@@ -1655,8 +1729,9 @@ function renderTeams(){
       const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=checked; cb.dataset.k=key;
       const left=document.createElement('span');
       left.innerHTML=` <span class="pos ${r.pos}">${r.pos||'?'}</span> ${r.player}`;
-      const right=document.createElement('span'); right.className='small '+(r.val>=3?'val-good':(r.val<=-3?'val-bad':'muted'));
-      right.textContent=`cost R${r.keeper} · val ${r.val>0?'+':''}${r.val}`;
+      const right=document.createElement('span'); right.className='small '+(r.val===null?'muted':(r.val>=3?'val-good':(r.val<=-3?'val-bad':'muted')));
+      right.textContent=`cost R${r.keeper} · val ${valText(r.val)}`;
+      if(r.val===null)right.title='Not in the player pool — no ADP to compare against';
       const wrapL=document.createElement('span'); wrapL.appendChild(cb); wrapL.appendChild(left);
       row.appendChild(wrapL); row.appendChild(right); c.appendChild(row);
     });
@@ -1676,7 +1751,7 @@ function autoKeepers(){
   const max=LEAGUE.maxKeepers||0;
   OWNERS.forEach(owner=>{ if(owner===ME_OWNER)return;
     const elig=(ROSTERS[owner]||[]).filter(r=>r.keeper!=null)
-      .map(r=>({...r,val:keepValue(r.player,r.keeper)})).sort((a,b)=>b.val-a.val);
+      .map(r=>({...r,val:keepValue(r.player,r.keeper)})).sort(byValueDesc);
     elig.slice(0,max).forEach(r=>assigned.add(owner+'|'+r.player));
   });
   applyAndReset();
@@ -2202,6 +2277,7 @@ el('tendAllOn').onclick=()=>{OWNERS.forEach(o=>{TENDENCIES[o].enabled=true;});re
 el('tendAllOff').onclick=()=>{OWNERS.forEach(o=>{TENDENCIES[o].enabled=false;});renderTendencies();saveSetup();};
 el('tendReset').onclick=()=>{OWNERS.forEach(o=>{TEND_POS.forEach(p=>{TENDENCIES[o].bias[p]=0;});});renderTendencies();saveSetup();};
 el('addPickTrade').onclick=addPickTrade; el('addPlayerTrade').onclick=addPlayerTrade;
+if(el('ptFrom'))el('ptFrom').onchange=fillPickOptions;
 el('toggleDelta').onchange=e=>document.body.classList.toggle('hide-delta',!e.target.checked);
 el('saveMock').onclick=saveMock; el('refreshMocks').onclick=renderMocks;
 el('saveToken').onclick=()=>{localStorage.setItem('aeoToken',el('tokenInput').value.trim());setStatus&&setStatus('Token set.');renderMocks();};
@@ -2287,27 +2363,61 @@ async function loadMock(id){ try{const rec=await api('/'+id); applyMock(rec.data
 async function delMock(id){ if(!confirm('Delete this mock?'))return; try{ await api('/'+id,{method:'DELETE'}); renderMocks(); }catch(e){ setStatus('Delete failed.'); } }
 
 // ---------- TRADES ----------
+// Every pick this slot owns right now — original picks it still has, plus any
+// acquired by trade, minus any traded away. This is what makes re-trading work:
+// the options come from current ownership, not from who the pick started with.
+function picksHeldBy(slot){
+  const out=[];
+  for(let ov=1; ov<=totalPicks; ov++){ if(ownerOf(ov)===slot) out.push(ov); }
+  return out;
+}
+function fillPickOptions(){
+  const sel=el('ptPick'); if(!sel)return;
+  const from=el('ptFrom') && el('ptFrom').value;
+  const slot=OWNER_SLOT[from];
+  if(!slot){ sel.innerHTML='<option value="">—</option>'; return; }
+  const held=picksHeldBy(slot);
+  sel.innerHTML = held.length
+    ? held.map(ov=>{
+        const {round,slot:orig}=slotForOverall(ov);
+        const via = orig!==slot ? ` · via ${ownerLabel(orig)}` : '';
+        const taken = pickTakenAt(ov) ? ' (used)' : '';
+        return `<option value="${ov}">R${round} — ${label(round,orig)} · #${ov}${via}${taken}</option>`;
+      }).join('')
+    : '<option value="">no picks left</option>';
+}
 function fillTradeSelects(){
   const owg=OWNERS.slice().sort((a,b)=>OWNER_SLOT[a]-OWNER_SLOT[b]);
   const optOwners=owg.map(o=>`<option value="${o}">${o} (T${OWNER_SLOT[o]})</option>`).join('');
   const rounds=[];for(let r=1;r<=LEAGUE.rounds;r++)rounds.push(`<option value="${r}">R${r}</option>`);
-  if(el('ptRound'))el('ptRound').innerHTML=rounds.join('');
   if(el('ptFrom'))el('ptFrom').innerHTML=optOwners;
   if(el('ptTo'))el('ptTo').innerHTML=optOwners;
   if(el('plTo'))el('plTo').innerHTML=optOwners;
   if(el('allPlayers'))el('allPlayers').innerHTML=Object.keys(ORIG_OWNER).sort().map(n=>`<option value="${n}">`).join('');
+  fillPickOptions();
 }
 function renderTrades(){
   if(!el('pickTradeList'))return;
   fillTradeSelects();
   const pl=Object.keys(pickOwnerOverride).map(Number).sort((a,b)=>a-b);
-  el('pickTradeList').innerHTML = pl.length? pl.map(ov=>{const {round,slot}=slotForOverall(ov);return `<span class="pill">${label(round,slot)} (#${ov}) → T${pickOwnerOverride[ov]} <a href="#" data-rmpick="${ov}">✕</a></span>`;}).join('') : '<span class="muted small">No pick trades.</span>';
+  el('pickTradeList').innerHTML = pl.length? pl.map(ov=>{const {round,slot}=slotForOverall(ov);return `<span class="pill">${label(round,slot)} (#${ov}) ${ownerLabel(slot)} → ${ownerLabel(pickOwnerOverride[ov])} <a href="#" data-rmpick="${ov}">✕</a></span>`;}).join('') : '<span class="muted small">No pick trades.</span>';
   const keys=Object.keys(playerTrades);
   el('playerTradeList').innerHTML = keys.length? keys.map(p=>`<span class="pill">${p} → ${playerTrades[p]} <a href="#" data-rmpt="${p}">✕</a></span>`).join('') : '<span class="muted small">No player trades.</span>';
   el('pickTradeList').querySelectorAll('[data-rmpick]').forEach(a=>a.onclick=e=>{e.preventDefault();delete pickOwnerOverride[+a.dataset.rmpick];applyAndReset();});
   el('playerTradeList').querySelectorAll('[data-rmpt]').forEach(a=>a.onclick=e=>{e.preventDefault();delete playerTrades[a.dataset.rmpt];applyAndReset();});
 }
-function addPickTrade(){const rd=+el('ptRound').value,from=el('ptFrom').value,to=el('ptTo').value;if(!from||!to||from===to)return;pickOwnerOverride[overall(rd,OWNER_SLOT[from])]=OWNER_SLOT[to];applyAndReset();}
+function addPickTrade(){
+  const ov=+el('ptPick').value, from=el('ptFrom').value, to=el('ptTo').value;
+  if(!ov||!from||!to||from===to)return;
+  const toSlot=OWNER_SLOT[to];
+  // Sanity: only trade a pick the "from" manager actually holds right now.
+  if(ownerOf(ov)!==OWNER_SLOT[from])return;
+  // Trading a pick back to whoever it originally belonged to clears the override
+  // rather than recording a redundant one.
+  if(slotForOverall(ov).slot===toSlot) delete pickOwnerOverride[ov];
+  else pickOwnerOverride[ov]=toSlot;
+  applyAndReset();
+}
 function addPlayerTrade(){const raw=el('plPlayer').value.trim(),to=el('plTo').value;if(!raw||!to)return;const nm=Object.keys(ORIG_OWNER).find(n=>n.toLowerCase()===raw.toLowerCase())||raw;playerTrades[nm]=to;el('plPlayer').value='';applyAndReset();}
 
 // ---------- BACKUP HISTORY (cloud: /api/setup/history, /api/setup/restore) ----------

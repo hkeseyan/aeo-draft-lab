@@ -16,6 +16,86 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-08-27 — **Draft Room layout: board on top, list underneath (desktop).**
+  Wants the draft board moved above the player list on desktop, and the board
+  itself scrollable — about 6 rounds visible, scroll for the rest.
+  *Done — board card moved directly under the draft controls, above the
+  pool/roster grid. `max-height` sized to ~6 rounds with `overflow:auto`, and
+  `.h` headers made `position:sticky` so the team names stay visible while
+  scrolling rounds.*
+- ✅ 2026-08-27 — **Mobile: the draft board doesn't render the entire width.**
+  Bug, not a preference.
+  *Done — root cause: `renderBoard()` set `grid-template-columns` as an *inline*
+  style, which no media query can override, and `minmax(120px,1fr)` tracks
+  collapsed on a narrow viewport. The column count now travels as a `--teams`
+  CSS custom property and the track list lives in the stylesheet, so a
+  `max-width:760px` rule can swap to fixed 104px columns — wider than the
+  viewport, so horizontal scrolling actually reaches every team.*
+- 🆕 2026-08-27 — **Why are projections missing for many players?** (question)
+- 🆕 2026-08-27 — **Wants fresher ADP.** Current pool carries noise from 2+
+  weeks ago — players drafted higher/lower before signings, injuries and
+  preseason performances moved them. Thinks FantasyPros has something more
+  recent but isn't sure how reliable. Asked what the ADP formula currently is
+  ("is it just 50/50 standard FP and Yahoo?") and whether it needs adjusting.
+- ✅ 2026-08-27 — **Keepers tab values look stale/wrong.** Jonathan Brooks shows
+  val -89 though he's clearly being drafted much higher. Is it a name→player
+  linking failure, outdated ADP/ECR on that tab, or both?
+  *Answer: purely name linking — the ADP data is fine. The roster said
+  "Jonath**a**n Brooks", the pool says "Jonath**o**n Brooks", so `findPlayer()`
+  returned null, `adpRoundOf()` fell back to its `99` sentinel, and
+  `keepValue` computed `10 − 99 = −89`. His real value is **+2** (cost R10,
+  ADP round 8) — a bargain the app was calling a disaster. Audited all 196
+  roster entries against the pool: **38 were unlinked**, all showing the same
+  fabricated ≈−89. Three causes, all addressed: (1) two genuine misspellings
+  fixed in the roster data (Jonathon Brooks, Jacory Croskey-Merritt — the
+  latter was "Jaocry"); (2) every team defense was unlinked because rosters use
+  nicknames ("Broncos") and the pool uses full names ("Denver Broncos") —
+  `findPlayer` now falls back to a DEF/DST-only suffix match, recovering 6 of
+  them; (3) the rest (~25) are genuinely outside the top-250 pool (Aiyuk,
+  Mixon, most kickers, 17 of 32 defenses), so `adpRoundOf`/`keepValue` now
+  return **null** and the UI shows "—" with a tooltip instead of inventing a
+  number. Sorting treats null as last rather than coercing to 0, and
+  auto-assign no longer ranks unrated players against rated ones.*
+- ✅ 2026-08-27 — **Trades must support re-trading picks.** A pick that was
+  already traded can be traded again. Wanted flow: pick the team giving up the
+  pick → dropdown lists the picks that team *currently* holds → pick the team
+  receiving it.
+  *Done exactly as described. The old form was Round + from + to, and computed
+  `overall(round, OWNER_SLOT[from])` — i.e. it could only ever move a team's
+  *own original* pick, so an acquired pick was untradeable and picking the
+  wrong round silently moved the wrong pick. Now: from-team → a pick list built
+  from `picksHeldBy(slot)` (current ownership, so acquired picks appear, tagged
+  "via <original owner>") → to-team. Trading a pick back to its original owner
+  deletes the override rather than storing a redundant one, and the trade list
+  now names both managers instead of "→ T4".*
+- ✅ 2026-08-27 — **Verify keeper slot assignment.** When a keeper is selected,
+  assign the *lowest* pick that team has available in the cost round. Multiple
+  keepers in the same round: assign in any order. If the team has no pick left
+  in that round, walk *earlier* (a 10th-round cost → try 9th, then 8th, …) —
+  never skip the payment, never accept a later round.
+  *Was broken, now fixed. `resetDraft()` did `overall(k.round, k.team)` — the
+  team's own original pick in the cost round — which ignored trades entirely
+  (a keeper could be placed on a pick the team no longer owned), collided
+  silently when two keepers shared a round (two `picks` entries with the same
+  `overall`), and had no fallback. Rewritten to walk the team's **current**
+  holdings: least-valuable (latest) pick in the cost round first, each keeper
+  consuming a distinct pick, falling back to earlier rounds only. Read
+  "lowest pick" as lowest-value = latest in the round, consistent with the
+  user's "do not accept a lower round" for the fallback direction. Keepers that
+  can't be paid at all (every pick at or before the cost round traded away) are
+  now listed with a ⚠ instead of silently disappearing. Verified against four
+  scenarios: same-round collision, cost round traded away, an acquired second
+  pick in the round (burns the later one), and fully unpayable.*
+- 🆕 2026-08-27 — **Player headshots — worth it?** Explicitly doesn't want to
+  burn time/credits/storage or complicate the Cloudflare setup; asked for a
+  recommendation given everything else due in a few days.
+- 🆕 2026-08-27 — **Strategy Lab: hold.** User still needs to work out how they'd
+  actually use it before giving feedback; unsure it's useful to them yet. Do
+  not build anything here.
+- 🆕 2026-08-27 — **Stated next priorities** (after the fixes above): Leagues,
+  Commish, and auction strategies; then how to incorporate personal rankings
+  and how those shift per league type (bestball, guillotine).
+
 - ✅ 2026-08-27 — **Real accounts: Google sign-in, first account is admin.**
   User asked to make sure only the admin sees Commish and the other
   administrative tabs, and said the "account login functionality that allows

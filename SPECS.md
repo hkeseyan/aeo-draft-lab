@@ -22,9 +22,17 @@ targeted picks, a full draft board (dashed cells = keepers), and my picks
 "League profiles" below. Auction-type leagues show a placeholder here
 instead of the pool/board — the auction draft engine isn't built yet.
 
-The board is a genuine CSS grid (`grid-template-columns` set per league's
-team count, every header/cell a direct grid child in row-major order) so a
-row's height is shared across every column — a wrapped long name doesn't
+The board sits directly under the draft controls, above the player list — it's
+the thing you read first on the clock. It's capped at roughly six rounds tall
+and scrolls for the rest, with `position:sticky` team headers so you always
+know whose column you're in. Column tracks come from a `--teams` CSS custom
+property set by `renderBoard()` rather than an inline `grid-template-columns`,
+which is what lets a `max-width:760px` media query swap to fixed 104px columns
+on mobile; with inline styles (and `minmax(120px,1fr)` tracks that collapse on
+a narrow viewport) the rightmost teams were unreachable.
+
+The board is a genuine CSS grid (every header/cell a direct grid child in
+row-major order) so a row's height is shared across every column — a wrapped long name doesn't
 push just its own column out of alignment with its neighbors, which a
 per-column block-stacked layout couldn't guarantee. Column headers and
 traded-pick tags show the real owner name (`ownerLabel(slot)`, falling back
@@ -98,8 +106,42 @@ ones. Auction leagues show a placeholder here like the rest of the room.
 Rival roster view and keeper assignment/modeling across the league, plus
 the owner-tendency controls (see Opponent model below).
 
+**Which pick pays for a keeper.** The cost round says what a keeper is *worth*,
+not which pick pays for him — with trades in play a team can hold several picks
+in one round or none at all. So each keeper is placed on a pick its team
+**currently owns**: the least valuable (latest) one available in the cost
+round, each keeper consuming a distinct pick so two keepers in the same round
+can't collide. If the cost round is exhausted, it falls back to *earlier*
+rounds — a 10th-round cost is paid with a 9th, then an 8th, and so on. Never
+later, which would underpay. A keeper whose team has traded away every pick at
+or before the cost round can't legally be kept, and is flagged with a ⚠ rather
+than silently vanishing off the board.
+
+**Unknown values read as "—", not as a number.** `adpRoundOf()` returns `null`
+for a player who isn't in the pool, and `keepValue()` propagates it. Previously
+a missing player fell through to a `99` sentinel, so a keeper costing a 10th
+displayed as `−89` — indistinguishable from a genuinely terrible keeper, and
+the cause of a real bug where a misspelled name made a `+2` bargain look like a
+disaster. Sorting places unknowns last rather than coercing them to 0, and
+auto-assign won't rank an unrated player against a rated one.
+
+`findPlayer()` matches exactly, then on a normalized form (case, punctuation,
+Jr/Sr/III suffixes), then — for DEF/DST only — on a name suffix, because
+rosters carry defenses by nickname ("Broncos") while the player pool carries
+full names ("Denver Broncos").
+
 ### Trades
-Reassign a draft pick to another manager (by round), or move a player/keeper
+**Pick trades work on current ownership, not original ownership.** You choose
+the manager giving up the pick, then choose from the picks that manager
+*actually holds right now* — including ones they acquired in an earlier trade,
+tagged "via <original owner>" — then the manager receiving it. This is what
+makes re-trading possible: previously the form took a round and computed the
+`from` manager's own original pick in it, so an acquired pick could never be
+moved on, and choosing a round whose pick had already been traded silently
+moved the wrong pick. Trading a pick back to whoever originally owned it clears
+the override instead of recording a redundant one.
+
+Reassign a draft pick to another manager, or move a player/keeper
 to a different roster — both change who's on the clock, who owns which
 pick, and keeper eligibility. Saved to the cloud (`/api/setup`) alongside
 keepers so trades only need entering once. Includes a "backup history"
