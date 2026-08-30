@@ -27,7 +27,8 @@
   @media(max-width:760px){
     /* Fixed tracks, not 1fr: the grid must be wider than the viewport for the
        horizontal scroll to expose every team column. */
-    .board{grid-template-columns:repeat(var(--teams,12), 104px);max-height:calc(6 * 46px + 28px)}
+    /* Narrower columns wrap names onto more lines, so rows are taller here. */
+    .board{grid-template-columns:repeat(var(--teams,12), 104px);--board-row-h:74px}
     .cell{font-size:10px;padding:3px 4px}
     .h{font-size:10px}
   }
@@ -59,9 +60,12 @@
   .board{
     display:grid;gap:2px;padding-bottom:6px;
     grid-template-columns:repeat(var(--teams,12), minmax(120px,1fr));
-    /* ~6 rounds tall, then scroll — the board is the top card now, so it can't
-       be allowed to push the player list off-screen. */
-    max-height:calc(6 * 40px + 28px);
+    /* Six rounds tall, then scroll — the board is the top card now, so it can't
+       be allowed to push the player list off-screen. Row height is explicit
+       because a populated cell (pick label + wrapped player name) runs well
+       taller than .cell's 34px min-height; assuming the minimum showed 4. */
+    --board-rows:6; --board-row-h:60px;
+    max-height:calc(var(--board-rows) * var(--board-row-h) + 30px);
     overflow:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;
   }
   .h{
@@ -987,7 +991,9 @@ Elic Ayomanor,WR,TEN,250.0,250,0,9,250.0,`;
 const LEAGUES_DEFAULT = {
   'aeo-keepers': {
     id:'aeo-keepers', name:'AEO-Keepers',
-    teams:12, rounds:16, mySlot:6, draftType:'snake', superflex:false,
+    // 15 rounds: 10 starters + 5 bench. (Was 16 — a league settings error that
+    // was corrected by dropping one bench spot.)
+    teams:12, rounds:15, mySlot:6, draftType:'snake', superflex:false,
     scoringLabel:'Half-PPR', draftDateLabel:'Sept 8', keeperDeadlineLabel:'Sept 1',
     starters:{QB:1,RB:2,WR:3,TE:1,FLEX:1,K:1,DST:1}, flexEligible:['RB','WR','TE'],
     maxKeepers:3, keeperCostType:'round',
@@ -1162,8 +1168,19 @@ function seedPool(){
   PLAYERS = SEED.filter((p,i,a)=>a.findIndex(x=>x[0]===p[0])===i) // dedupe
     .map((p,i)=>({id:i+1,name:p[0],pos:p[1],team:p[2],adp:i+1,ecr:i+1,proj:0,drafted:false,keeper:null}));
 }
+// Hand-entered rosters drift from the player pool's spelling. Each of these was
+// verified against the pool before being added; a wrong name silently breaks
+// keeper valuation (findPlayer returns null), so they're bridged here rather
+// than left to fail quietly. Safe to drop an entry once the stored roster is
+// corrected — it simply stops matching anything.
+const NAME_ALIASES = {
+  'jonathan brooks':'Jonathon Brooks',
+  'jaocry croskeymerritt':'Jacory Croskey-Merritt',
+};
 function normName(s){return s.toLowerCase().replace(/\s+(jr|sr|ii|iii|iv)\.?$/,'').replace(/[.'’`-]/g,'').replace(/\s+/g,' ').trim();}
 function findPlayer(name){
+  const alias=NAME_ALIASES[normName(name)];
+  if(alias)name=alias;
   const n=name.trim().toLowerCase();
   const nn=normName(name);
   return PLAYERS.find(p=>p.name.toLowerCase()===n) ||
@@ -1176,12 +1193,21 @@ function findPlayer(name){
 
 // ---------- KEEPER SETUP ----------
 function initKeepers(){ rebuildKeepers(); }
+// Keeper cost for a saved selection, tolerating a spelling that no longer matches
+// the roster exactly (aliases, punctuation, suffixes) — otherwise renaming a
+// roster entry orphans the saved keeper and it vanishes without a trace.
+function keeperCostFor(player){
+  if(KEEPCOST[player]!=null)return KEEPCOST[player];
+  const want=normName(NAME_ALIASES[normName(player)]||player);
+  const hit=Object.keys(KEEPCOST).find(k=>normName(NAME_ALIASES[normName(k)]||k)===want);
+  return hit!=null?KEEPCOST[hit]:null;
+}
 function rebuildKeepers(){
   KEEPERS=[];
   if(LEAGUE.leagueType==='dynasty')return; // no cost-round concept — see dynastyKeptRoster()
   assigned.forEach(key=>{
     const i=key.indexOf('|'); const owner=key.slice(0,i), player=key.slice(i+1);
-    const cost=KEEPCOST[player];
+    const cost=keeperCostFor(player);
     if(cost!=null){KEEPERS.push({name:player, team:OWNER_SLOT[owner]||1, round:cost});}
   });
 }

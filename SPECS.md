@@ -39,6 +39,12 @@ traded-pick tags show the real owner name (`ownerLabel(slot)`, falling back
 to `T<slot>` only if a slot genuinely has no owner name), not a bare `T1`/
 `T2`/`→T4`.
 
+The board is capped at six rounds tall and scrolls for the rest. That cap is
+`--board-rows` × `--board-row-h`, with the row height stated explicitly (60px
+desktop, 74px mobile) rather than inferred from `.cell`'s 34px `min-height` — a
+populated cell carries a pick label plus a wrapped player name and runs far
+taller, so sizing off the minimum showed four rounds instead of six.
+
 **Roster**: next to Best Available, a dropdown (defaulting to you) shows any
 owner's roster slotted into starters — one row per starting slot in
 `LEAGUE.starters` order (exact positions, then FLEX, then SUPERFLEX if the
@@ -124,6 +130,16 @@ displayed as `−89` — indistinguishable from a genuinely terrible keeper, and
 the cause of a real bug where a misspelled name made a `+2` bargain look like a
 disaster. Sorting places unknowns last rather than coercing them to 0, and
 auto-assign won't rank an unrated player against a rated one.
+
+Hand-entered rosters drift from the pool's spelling, and a mismatch silently
+breaks keeper valuation. `NAME_ALIASES` bridges verified misspellings (each
+checked against the pool before being added) so they resolve regardless of
+which data source supplied the roster — the authoritative copy lives in KV per
+league, so correcting the file alone wouldn't fix live data. Saved keeper
+selections in `assigned` store the name as spelled when it was picked, so
+`keeperCostFor()` resolves through the same alias/normalisation: without it,
+correcting a roster spelling would orphan the saved selection and drop the
+keeper with no visible error.
 
 `findPlayer()` matches exactly, then on a normalized form (case, punctuation,
 Jr/Sr/III suffixes), then — for DEF/DST only — on a name suffix, because

@@ -16,6 +16,26 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🆕 2026-08-29 — **AEO-Keepers is 15 rounds, not 16.** A league settings error
+  was corrected — one fewer bench spot, so the draft runs 15 rounds.
+- 🆕 2026-08-29 — **Evaluate FantasyPros Real-Time ADP** as the ADP source
+  (https://www.fantasypros.com/nfl/real-time-adp/). User expects it to capture
+  recent news the standard ADP lags on — Jeanty and Jacobs going later, Nabers
+  higher, Jordyn Tyson lower, Jeremiyah Love slightly. Explicitly does NOT want
+  hand-tuned per-player adjustments; wants the formula to capture it. If the
+  source checks out, switch to 2/3 real-time + 1/3 Yahoo; if there are doubts,
+  discuss (possibly 1/3 each).
+- 🆕 2026-08-29 — **Draft board only shows ~4 rows** on desktop and mobile after
+  the last change; wants ~50% taller so it shows 6.
+- 🆕 2026-08-29 — **Fix two roster name spellings in the live data**: Jonathan →
+  Jonathon Brooks (Robert's team — should stop showing in the draft pool and
+  show a real keeper value), and the Jacory Croskey-Merritt typo (Jiro's team).
+- ✅ 2026-08-29 — **Pick trade interface** — user: "a big improvement, looks
+  great at first glance."
+- 🆕 2026-08-29 — **FantasyPros authentication for projections.** User has a
+  free FP login, no paid subscription. Willing to buy one if needed. Wants to
+  know whether a free login is enough, and if not, how to set up auth.
+
 - ✅ 2026-08-27 — **Draft Room layout: board on top, list underneath (desktop).**
   Wants the draft board moved above the player list on desktop, and the board
   itself scrollable — about 6 rounds visible, scroll for the rest.
