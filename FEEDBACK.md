@@ -16,8 +16,11 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
-- 🆕 2026-08-29 — **AEO-Keepers is 15 rounds, not 16.** A league settings error
+- ✅ 2026-08-29 — **AEO-Keepers is 15 rounds, not 16.** A league settings error
   was corrected — one fewer bench spot, so the draft runs 15 rounds.
+  *Done — `rounds:15` on the AEO-Keepers profile (10 starters + 5 bench = 180
+  picks). This edits the hardcoded fallback; the live profile in KV needs the
+  same change via the Leagues tab or it'll keep drafting 16.*
 - 🆕 2026-08-29 — **Evaluate FantasyPros Real-Time ADP** as the ADP source
   (https://www.fantasypros.com/nfl/real-time-adp/). User expects it to capture
   recent news the standard ADP lags on — Jeanty and Jacobs going later, Nabers
@@ -25,16 +28,51 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   hand-tuned per-player adjustments; wants the formula to capture it. If the
   source checks out, switch to 2/3 real-time + 1/3 Yahoo; if there are doubts,
   discuss (possibly 1/3 each).
-- 🆕 2026-08-29 — **Draft board only shows ~4 rows** on desktop and mobile after
+  *Investigated 2026-08-29 — **recommending against the straight swap**, decision
+  pending. The page is client-rendered, backed by `api.fantasypros.com/v2/json/
+  nfl/{year}/consensus-rankings?type=adp&scoring=HALF` with an API key published
+  in their own page bundle. It is NOT a broad consensus — it's exactly three
+  sources (ESPN 79, Yahoo 236, Sleeper 4350), and **ESPN currently returns 0
+  players**, so today it's just Yahoo + Sleeper averaged. That makes 2/3
+  real-time + 1/3 Yahoo resolve to ~2/3 Yahoo + 1/3 Sleeper: it drops FP's own
+  broader consensus entirely and heavily double-counts Yahoo. It also doesn't
+  deliver what was wanted — for the five players named, movement was negligible
+  (Jeanty +1.6, Jacobs +1.0, Nabers 0.0, Tyson +0.2, Love +0.5); the big movers
+  are kickers, defenses and backup QBs, i.e. feed disagreement, not news. Root
+  cause: any ADP averages drafts already completed, so it lags news by
+  construction. Proposed instead: keep FP consensus as the base and add Sleeper
+  as a genuinely new third source (~0.5 FP / 0.25 Yahoo / 0.25 Sleeper), and
+  lean on ECR for recency since experts re-rank immediately.*
+- ✅ 2026-08-29 — **Draft board only shows ~4 rows** on desktop and mobile after
   the last change; wants ~50% taller so it shows 6.
-- 🆕 2026-08-29 — **Fix two roster name spellings in the live data**: Jonathan →
+  *Done — the cap assumed `.cell`'s 34px min-height, but a populated cell (pick
+  label + wrapped name) runs ~60px, so six rounds' worth of height showed four.
+  Row height is now an explicit `--board-row-h`: 60px desktop, 74px mobile.*
+- ✅ 2026-08-29 — **Fix two roster name spellings in the live data**: Jonathan →
   Jonathon Brooks (Robert's team — should stop showing in the draft pool and
   show a real keeper value), and the Jacory Croskey-Merritt typo (Jiro's team).
+  *Done — corrected in the fallback roster, plus a verified `NAME_ALIASES` map
+  so the misspellings resolve regardless of data source (the authoritative
+  roster is in KV, which this session can't write to now that accounts gate the
+  API). Also hardened `rebuildKeepers()`: saved selections in `assigned` store
+  the name as spelled at the time, so correcting a roster spelling would orphan
+  the saved pick and silently drop the keeper — `keeperCostFor()` now resolves
+  through the same alias/normalisation. Verified both spellings place Brooks on
+  Robert at 10.01, remove him from the pool, and show his real value of +2.*
 - ✅ 2026-08-29 — **Pick trade interface** — user: "a big improvement, looks
   great at first glance."
-- 🆕 2026-08-29 — **FantasyPros authentication for projections.** User has a
+- ✅ 2026-08-29 — **FantasyPros authentication for projections.** User has a
   free FP login, no paid subscription. Willing to buy one if needed. Wants to
   know whether a free login is enough, and if not, how to set up auth.
+  *Answer: **no subscription needed, and no login at all.** The paywall is on
+  the website UI, not the JSON API. `/v2/json/nfl/2026/projections?position=ALL
+  &scoring=HALF&week=0` returns 598 records, 546 with point totals — and with
+  component stats (`pass_yds`, `pass_tds`, `rush_yds`, `pass_yds_300`,
+  `rush_yds_100`, …), which is exactly what this league's scoring quirks need:
+  6-pt passing TDs, 300/450 passing bonuses, rushing first downs, 40+ yard
+  bonuses. So real league-specific projections are computable rather than
+  borrowing FP's generic 4-pt-TD numbers — the raw material for roadmap item 5
+  is free and available. Not yet wired in.*
 
 - ✅ 2026-08-27 — **Draft Room layout: board on top, list underneath (desktop).**
   Wants the draft board moved above the player list on desktop, and the board
@@ -106,9 +144,16 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   now listed with a ⚠ instead of silently disappearing. Verified against four
   scenarios: same-round collision, cost round traded away, an acquired second
   pick in the round (burns the later one), and fully unpayable.*
-- 🆕 2026-08-27 — **Player headshots — worth it?** Explicitly doesn't want to
+- 🔧 2026-08-27 — **Player headshots — worth it?** Explicitly doesn't want to
   burn time/credits/storage or complicate the Cloudflare setup; asked for a
   recommendation given everything else due in a few days.
+  *Recommendation reversed 2026-08-29. Originally "skip it" — but the same
+  FantasyPros feed carries `player_image_url` per player (e.g.
+  `images.fantasypros.com/images/players/nfl/22968/headshot/210x210.png`). That
+  removes both objections: no name→ID crosswalk to build, since the URL rides
+  along on records we'd already ingest, and no storage, since they're
+  hotlinked. Cost drops from ~half a day to a CSV column plus an `<img>`.
+  Still the user's call on whether it's worth any time at all.*
 - 🆕 2026-08-27 — **Strategy Lab: hold.** User still needs to work out how they'd
   actually use it before giving feedback; unsure it's useful to them yet. Do
   not build anything here.
