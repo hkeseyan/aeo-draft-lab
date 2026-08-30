@@ -387,6 +387,7 @@
       <div class="row">
         <label class="small">Name <input type="text" id="lgName" style="min-width:200px"></label>
         <label class="small">Teams <input type="number" id="lgTeams" min="2" max="32" style="width:70px"></label>
+        <label class="small">Rounds <input type="number" id="lgRounds" min="1" max="40" style="width:70px" title="Total draft rounds = starters + bench. There is no separate bench-count field: bench is however many rounds are left over after starters are filled."></label>
         <label class="small">Draft type <select id="lgDraftType"><option value="snake">Snake</option><option value="linear">Linear (no snake)</option><option value="auction">Auction</option></select></label>
         <label class="small"><input type="checkbox" id="lgSuperflex"> Superflex</label>
       </div>
@@ -1987,6 +1988,7 @@ function loadLeagueIntoForm(id){
   editingLeagueId=id;
   el('lgName').value=p.name||'';
   el('lgTeams').value=p.teams||12;
+  el('lgRounds').value=p.rounds||16;
   el('lgDraftType').value=p.draftType||'snake';
   el('lgLeagueType').value=p.leagueType||'keeper';
   updateLgKeeperFieldsVisibility();
@@ -2131,7 +2133,7 @@ function collectLeagueForm(){
   return {
     name: el('lgName').value.trim()||'New League',
     teams: +el('lgTeams').value||12,
-    rounds: existing.rounds||16,
+    rounds: +el('lgRounds').value||existing.rounds||16,
     mySlot: el('lgMySlot').value!==''? +el('lgMySlot').value : null,
     draftType: el('lgDraftType').value,
     leagueType: el('lgLeagueType').value,
@@ -2172,7 +2174,7 @@ async function saveLeagueForm(){
 }
 function newLeagueForm(){
   editingLeagueId=null;
-  el('lgName').value='New League'; el('lgTeams').value=12; el('lgDraftType').value='snake';
+  el('lgName').value='New League'; el('lgTeams').value=12; el('lgRounds').value=16; el('lgDraftType').value='snake';
   el('lgLeagueType').value='keeper'; updateLgKeeperFieldsVisibility();
   el('lgSuperflex').checked=false; el('lgScoring').value='TBD'; el('lgDraftDate').value='TBD';
   el('lgKeeperDeadline').value='TBD'; el('lgMaxKeepers').value=''; el('lgKeeperCostType').value='round';

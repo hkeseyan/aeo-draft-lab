@@ -249,7 +249,10 @@ owner/slot editor, no code change or redeploy needed. See "League profiles".
 ## League profiles
 
 The app serves multiple leagues from one deployment. A league profile bundles
-everything that used to be hardcoded — team count, scoring label, draft type
+everything that used to be hardcoded — team count, **rounds** (starters +
+bench combined; there's no separate bench-count field, since bench is
+whatever's left over after starters are filled — see `slotRosterPlayers`),
+scoring label, draft type
 (snake/linear/auction — linear keeps the same team order every round, no
 snaking; the draft engine only needs `overall()`/`slotForOverall()`/
 `posInRound()` to know the difference, so trades/board/Strategy Lab all work

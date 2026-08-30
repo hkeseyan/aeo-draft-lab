@@ -16,6 +16,19 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-08-30 — **Leagues tab has no way to set rounds.** User tried to
+  update AEO-Keepers to 15 rounds after the earlier code-side fix and found no
+  field for it — correctly: `collectLeagueForm()` never read a rounds input,
+  it just carried forward whatever the profile already had. Suggested adding
+  either a rounds field or a bench-spots field.
+  *Done — added "Rounds" as a direct field (next to Teams), not a separate
+  bench-spots field: bench isn't a stored quantity in this app's model, it's
+  "whatever's left after starters are filled" (see `slotRosterPlayers`), so a
+  bench field would just need converting back to rounds anyway. Wired into
+  load/new/collect. You can now set AEO-Keepers to 15 in the Leagues tab
+  yourself — the rounds:15 default in the code is only the fallback for a
+  from-scratch KV store, not something you need code changes to override.*
+
 - ✅ 2026-08-29 — **AEO-Keepers is 15 rounds, not 16.** A league settings error
   was corrected — one fewer bench spot, so the draft runs 15 rounds.
   *Done — `rounds:15` on the AEO-Keepers profile (10 starters + 5 bench = 180
