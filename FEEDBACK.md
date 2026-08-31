@@ -47,6 +47,29 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
   wired to `ownerSlot` — the profile's slot order is different, and changing it
   would move existing auction data. Flagged for the user.
 
+- ✅ 2026-08-31 — **Nomination order confirmed correct; kept players not
+  showing on their teams after reload.** User confirmed the pasted nomination
+  order should drive `ownerSlot`. Separately, reloading the app after the
+  keeper commit above still didn't show kept players on their teams.
+  *Both done. **Root cause of the missing keepers**: `fantastic-auction` was
+  seeded into KV by an earlier session (PR #13), and `fetchCloudLeagues()`
+  deliberately never overwrites an already-seeded cloud profile with newer
+  code defaults — a real edit in the Leagues tab must always win. That's
+  correct in general, but it meant the `leagueKeepers` field added in the
+  previous entry could never reach the live KV copy on its own: the code's
+  in-repo default had it, the deployed cloud profile didn't, and cloud always
+  wins. Added a one-time backfill in `fetchCloudLeagues()`: for any built-in
+  league whose cloud copy has an empty/missing `leagueKeepers` but whose code
+  default has a real one, merge it in and PUT the merged profile back —
+  narrowly scoped to that one field so it can never clobber a real edit.
+  **`ownerSlot` now follows nomination order** (Savada 1 → Edward 14) instead
+  of the arbitrary order it had; safe to reslot since no auction sales have
+  been recorded yet. Verified end-to-end with a mock KV that reproduces the
+  exact stale-cloud-profile scenario: the backfill PUT fires once, all 106
+  keepers appear on the right teams via the Roster dropdown, all 14 budgets
+  still reconcile against the sheet, and AEO-Keepers/other leagues are
+  untouched.*
+
 - ✅ 2026-08-30 — **Leagues tab has no way to set rounds.** User tried to
   update AEO-Keepers to 15 rounds after the earlier code-side fix and found no
   field for it — correctly: `collectLeagueForm()` never read a rounds input,

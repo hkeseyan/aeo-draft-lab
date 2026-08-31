@@ -274,9 +274,36 @@ snaking; the draft engine only needs `overall()`/`slotForOverall()`/
 `posInRound()` to know the difference, so trades/board/Strategy Lab all work
 unchanged), superflex flag, starting lineup + flex eligibility, max
 keepers, keeper-cost type (round/dollar), draft/keeper dates, owners, draft
-order (`ownerSlot`), locked/known keepers, the roster data (`rostersRaw`,
-pipe-delimited `owner|player|drafted_round|keeper_round`), and the player
-pool CSV (`playersCsv`).
+order (`ownerSlot`, which for an auction league is nomination order — who
+nominates first, not a snake-draft position), locked/known keepers, the
+roster data (`rostersRaw`, pipe-delimited `owner|player|drafted_round|
+keeper_round`), and the player pool CSV (`playersCsv`).
+
+**`leagueKeepers`** (auction leagues): an array of `"Owner|Player"` for
+keepers the *league itself* has locked in — a passed deadline, identical for
+every viewer, so it lives on the shared profile rather than in a signed-in
+user's personal `assigned` set. `rebuildKeepers()` folds both together
+(league-declared first, then personal, deduped by owner+player) and derives
+each keeper's dollar cost from `rostersRaw`'s 4th field rather than storing it
+twice. `resetDraft()` marks every one drafted so it leaves the auction pool,
+and `auctionTeamState()` sums them into each team's committed spend, open
+roster slots, money left, and max bid — no separate plumbing needed once the
+keepers exist. On Teams & Keepers a league-locked keeper renders checked,
+disabled, and chipped **LOCKED**, since it's a fact rather than a choice.
+
+**Cloud profiles never get newer code defaults for free.** Once a built-in
+league is first seeded to KV (`fetchCloudLeagues()`), the cloud copy is
+authoritative forever — a real edit in the Leagues tab must never be
+overwritten by a later code change, so nothing in the code's `LEAGUES_DEFAULT`
+is pushed to an already-seeded profile. That's the right default, but it has
+one consequence worth knowing: a field added to a built-in profile's defaults
+*after* it was first seeded (like `leagueKeepers`) will never reach the live
+cloud copy on its own. `fetchCloudLeagues()` runs one narrowly-scoped backfill
+for exactly this: if a cloud profile's `leagueKeepers` is empty/missing but
+the code default has a real one, it merges the default in and writes the
+merged profile back — once, and only for that one field, so a genuine edit
+(including an intentionally-cleared list, if that ever becomes editable) is
+never at risk.
 
 **League type** (`leagueType`, separate from `draftType`): `keeper` (default)
 — today's model, pick up to `maxKeepers` at a per-player cost round, opt-in

@@ -1621,7 +1621,9 @@ const LEAGUES_DEFAULT = {
     settings:{waiverType:'FAB w/ continual rolling list tiebreak',weeklyWaivers:'Game Time - Tuesday',postDraftPlayers:'Free Agents',playoffs:'6 teams · Weeks 15-17',tradeDeadline:'Nov 28, 2026'},
     rankSourceLabel:'2026 PPR baseline + keeper-sheet coverage',
     owners:['Gev','Hakop','Gary','Avo','Gugo','Khacho','Edward','Art M','Lev','Hovo','Chris H','Aram','Savada','Art S'],
-    meOwner:'Hovo', ownerSlot:{Gev:1,Hakop:2,Gary:3,Avo:4,Gugo:5,Khacho:6,Edward:7,'Art M':8,Lev:9,Hovo:10,'Chris H':11,Aram:12,Savada:13,'Art S':14},
+    // Slots follow the league's real auction nomination order (1=nominates
+    // first), per the keeper sheet — not an arbitrary draft-order assignment.
+    meOwner:'Hovo', ownerSlot:{Savada:1,'Art M':2,Avo:3,Hakop:4,Gugo:5,Khacho:6,Gev:7,Gary:8,Aram:9,'Chris H':10,Hovo:11,'Art S':12,Lev:13,Edward:14},
     // Keepers the league locked in at its Aug 30 deadline (from the Yahoo keeper
     // sheet): 106 across all 14 teams. Costs are deliberately NOT repeated here —
     // they already live in rostersRaw's 4th field, and every one was verified to
@@ -3626,6 +3628,23 @@ async function fetchCloudLeagues(){
       const missing=Object.values(LEAGUES_DEFAULT).filter(p=>!map[p.id]);
       await Promise.all(missing.map(p=>fetch('/api/leagues/'+encodeURIComponent(p.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}).catch(()=>{})));
       missing.forEach(p=>map[p.id]=p);
+      // A cloud profile, once seeded, is never overwritten by later code defaults
+      // above — by design, so a manual edit in the Leagues tab always wins. But
+      // that also means a field added to a built-in profile *after* it was first
+      // seeded (leagueKeepers, added 2026-08-31) never reaches an already-seeded
+      // cloud copy on its own. Backfill it once, only when the cloud copy has
+      // none at all, so a real (even empty-on-purpose) edit is never clobbered.
+      const toPatch=[];
+      Object.values(LEAGUES_DEFAULT).forEach(def=>{
+        const cur=map[def.id];
+        if(cur && (!cur.leagueKeepers||!cur.leagueKeepers.length) && def.leagueKeepers && def.leagueKeepers.length){
+          const merged={...cur, leagueKeepers:def.leagueKeepers};
+          map[def.id]=merged; toPatch.push(merged);
+        }
+      });
+      if(toPatch.length){
+        await Promise.all(toPatch.map(p=>fetch('/api/leagues/'+encodeURIComponent(p.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}).catch(()=>{})));
+      }
       return map;
     }
     // Empty cloud (first run ever) — seed it with the defaults verbatim. Uses PUT
