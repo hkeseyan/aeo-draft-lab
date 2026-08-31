@@ -20,6 +20,33 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-08-31 — **Fantastic auction keepers loaded as league data.** User
+  pasted the Yahoo keeper sheet (14 teams, nomination order, keepers, salaries,
+  remaining budget) and asked to add it to the league data so kept players drop
+  out of the auction pool and team budgets drive bidding.
+  *Done. Parsed 106 keepers across all 14 teams; every team's salary total and
+  remaining budget reconciled against the sheet with zero arithmetic errors.
+  The paste used **Yahoo team names**, not profile owner names, so the mapping
+  was derived from roster content rather than guessed — all 14 resolved
+  unambiguously (every keeper matched its owner, next-best owner scored 0), and
+  all 106 costs matched the costs already stored in `ROSTERS_RAW_FANTASTIC`'s
+  4th field, so no cost data was duplicated. Stored as a new `leagueKeepers`
+  array of `"Owner|Player"` on the league profile — league facts, not personal
+  modeling, so every signed-in leaguemate sees the same board (per-user
+  `assigned` still stacks on top for what-ifs). `rebuildKeepers()` folds both
+  together with dedupe; `applyLeagueProfile()` now carries `leagueKeepers`
+  through (it builds LEAGUE from an allow-list, which silently dropped it at
+  first). No new auction logic was needed — `resetDraft()` already marks
+  keepers drafted for auction leagues and `auctionTeamState()` already derives
+  spend/remaining/max-bid from KEEPERS. Verified: pool 316 → 210, all 14
+  budgets match the sheet exactly (Avo $187/$13, Savada $92/$108, Hovo
+  $111/$89, …), and 40 simulated sales produced zero overspends. Teams &
+  Keepers shows the 106 as checked + disabled with a LOCKED chip so a locked
+  keeper can't be toggled into a board that doesn't match reality.*
+  **Note:** nomination order from the sheet is recorded in comments but not yet
+  wired to `ownerSlot` — the profile's slot order is different, and changing it
+  would move existing auction data. Flagged for the user.
+
 - ✅ 2026-08-30 — **Leagues tab has no way to set rounds.** User tried to
   update AEO-Keepers to 15 rounds after the earlier code-side fix and found no
   field for it — correctly: `collectLeagueForm()` never read a rounds input,

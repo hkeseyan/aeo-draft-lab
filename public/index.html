@@ -1622,6 +1622,133 @@ const LEAGUES_DEFAULT = {
     rankSourceLabel:'2026 PPR baseline + keeper-sheet coverage',
     owners:['Gev','Hakop','Gary','Avo','Gugo','Khacho','Edward','Art M','Lev','Hovo','Chris H','Aram','Savada','Art S'],
     meOwner:'Hovo', ownerSlot:{Gev:1,Hakop:2,Gary:3,Avo:4,Gugo:5,Khacho:6,Edward:7,'Art M':8,Lev:9,Hovo:10,'Chris H':11,Aram:12,Savada:13,'Art S':14},
+    // Keepers the league locked in at its Aug 30 deadline (from the Yahoo keeper
+    // sheet): 106 across all 14 teams. Costs are deliberately NOT repeated here —
+    // they already live in rostersRaw's 4th field, and every one was verified to
+    // match the sheet exactly. These are league facts, not personal modeling, so
+    // they belong on the profile rather than in per-user setup data.
+    leagueKeepers:[
+      // Savada — "Abella Danger" · nominates 1 · $92 committed, $108 left
+      "Savada|Justin Herbert",
+      "Savada|Chris Olave",
+      "Savada|Travis Etienne Jr.",
+      "Savada|D'Andre Swift",
+      "Savada|Rachaad White",
+      "Savada|Baker Mayfield",
+      "Savada|Quinshon Judkins",
+      "Savada|Tucker Kraft",
+      // Art M — "It's Always Sunny..." · nominates 2 · $148 committed, $52 left
+      "Art M|Brock Purdy",
+      "Art M|Zay Flowers",
+      "Art M|A.J. Brown",
+      "Art M|Chase Brown",
+      "Art M|David Montgomery",
+      "Art M|DeVonta Smith",
+      "Art M|Jameson Williams",
+      "Art M|George Kittle",
+      "Art M|Harold Fannin Jr.",
+      "Art M|J.K. Dobbins",
+      "Art M|Broncos",
+      "Art M|Eagles",
+      // Avo — "Hock Tua" · nominates 3 · $187 committed, $13 left
+      "Avo|Bo Nix",
+      "Avo|CeeDee Lamb",
+      "Avo|Rico Dowdle",
+      "Avo|Kenny Gainwell",
+      "Avo|Trey McBride",
+      "Avo|Chris Godwin Jr.",
+      "Avo|DK Metcalf",
+      "Avo|Jake Ferguson",
+      "Avo|Isiah Pacheco",
+      "Avo|Dontayvion Wicks",
+      "Avo|Vikings",
+      // Hakop — "Hayastan" · nominates 4 · $26 committed, $174 left
+      "Hakop|George Pickens",
+      "Hakop|Jaxon Smith-Njigba",
+      // Gugo — "Flock Nation!!" · nominates 5 · $161 committed, $39 left
+      "Gugo|Lamar Jackson",
+      "Gugo|Deebo Samuel Sr.",
+      "Gugo|Derrick Henry",
+      "Gugo|Jahmyr Gibbs",
+      "Gugo|Mark Andrews",
+      "Gugo|Keenan Allen",
+      "Gugo|Rhamondre Stevenson",
+      "Gugo|Chargers",
+      // Khacho — "eagles's Champion..." · nominates 6 · $142 committed, $58 left
+      "Khacho|Jakobi Meyers",
+      "Khacho|Quentin Johnston",
+      "Khacho|Khalil Shakir",
+      "Khacho|Michael Pittman Jr.",
+      "Khacho|Jalen Hurts",
+      "Khacho|Christian McCaffrey",
+      "Khacho|Chuba Hubbard",
+      "Khacho|Devaughn Vele",
+      "Khacho|Sam LaPorta",
+      // Gev — "ROTY" · nominates 7 · $104 committed, $96 left
+      "Gev|Justin Jefferson",
+      "Gev|Rashee Rice",
+      "Gev|Kyle Pitts Sr.",
+      "Gev|Jacory Croskey-Merritt",
+      "Gev|Jayden Reed",
+      "Gev|49ers",
+      // Gary — "Gary's Game-Chang..." · nominates 8 · $25 committed, $175 left
+      "Gary|Wan'Dale Robinson",
+      "Gary|Tre Tucker",
+      "Gary|Dallas Goedert",
+      "Gary|Bucky Irving",
+      "Gary|Trevor Lawrence",
+      "Gary|Caleb Williams",
+      // Aram — "Glendale Football..." · nominates 9 · $46 committed, $154 left
+      "Aram|Matthew Stafford",
+      "Aram|TreVeyon Henderson",
+      "Aram|Theo Johnson",
+      "Aram|Woody Marks",
+      "Aram|Jalen Coker",
+      "Aram|Parker Washington",
+      "Aram|Keon Coleman",
+      "Aram|AJ Barner",
+      "Aram|Seahawks",
+      // Chris H — "Step-Burrrrrow" · nominates 10 · $77 committed, $123 left
+      "Chris H|Joe Burrow",
+      "Chris H|Ladd McConkey",
+      "Chris H|Tee Higgins",
+      "Chris H|Javonte Williams",
+      "Chris H|Jaylen Waddle",
+      "Chris H|Texans",
+      // Hovo — "Stay off the WEEEED" · nominates 11 · $111 committed, $89 left
+      "Hovo|Jayden Daniels",
+      "Hovo|Jonathon Brooks",
+      "Hovo|Isaiah Likely",
+      "Hovo|Blake Corum",
+      "Hovo|Drake London",
+      "Hovo|Tyler Warren",
+      "Hovo|Jonathan Taylor",
+      "Hovo|Christian Watson",
+      // Art S — "Biscuits n Gravy ..." · nominates 12 · $142 committed, $58 left
+      "Art S|Josh Allen",
+      "Art S|Ja'Marr Chase",
+      "Art S|Michael Wilson",
+      "Art S|Kyren Williams",
+      "Art S|Darius Slayton",
+      "Art S|Dalton Kincaid",
+      "Art S|Rams",
+      // Lev — "SMASH BROS" · nominates 13 · $76 committed, $124 left
+      "Lev|Bhayshul Tuten",
+      "Lev|Cam Skattebo",
+      "Lev|Terrance Ferguson",
+      "Lev|Jalen McMillan",
+      "Lev|Colston Loveland",
+      "Lev|Jaxson Dart",
+      "Lev|Nico Collins",
+      "Lev|James Cook III",
+      // Edward — "Edward's Swag Team" · nominates 14 · $117 committed, $83 left
+      "Edward|Drake Maye",
+      "Edward|Brock Bowers",
+      "Edward|Luther Burden III",
+      "Edward|Emeka Egbuka",
+      "Edward|Omarion Hampton",
+      "Edward|Malik Nabers",
+    ],
     myLocked:[], myKeepers:[], rostersRaw:ROSTERS_RAW_FANTASTIC, playersCsv:PLAYERS_CSV_AEO+'\n'+AUCTION_EXTRA_PLAYERS_CSV,
   },
   'aeok-auction': {
@@ -1890,13 +2017,31 @@ function keeperCostFor(player){
   const hit=Object.keys(KEEPCOST).find(k=>normName(NAME_ALIASES[normName(k)]||k)===want);
   return hit!=null?KEEPCOST[hit]:null;
 }
+// "Owner|Player" of every keeper the league itself has locked in. These are facts
+// (a passed deadline), identical for everyone, so they live on the league profile
+// rather than in a single user's setup — a leaguemate signing in sees the same
+// board you do. Personal `assigned` picks stack on top for what-if modeling.
+function leagueKeeperKeys(){ return (LEAGUE.leagueKeepers||[]); }
+function isLeagueKeeper(owner,player){
+  const want=(owner+'|'+player).toLowerCase();
+  return leagueKeeperKeys().some(k=>k.toLowerCase()===want);
+}
 function rebuildKeepers(){
   KEEPERS=[];
   if(LEAGUE.leagueType==='dynasty')return; // no cost-round concept — see dynastyKeptRoster()
-  assigned.forEach(key=>{
-    const i=key.indexOf('|'); const owner=key.slice(0,i), player=key.slice(i+1);
+  const seen=new Set();
+  const add=(owner,player)=>{
+    const key=(owner+'|'+player).toLowerCase();
+    if(seen.has(key))return; seen.add(key);      // league-declared wins; no double-count
     const cost=keeperCostFor(player);
     if(cost!=null){KEEPERS.push({name:player, team:OWNER_SLOT[owner]||1, round:cost});}
+  };
+  leagueKeeperKeys().forEach(entry=>{
+    const i=entry.indexOf('|'); if(i<0)return;
+    add(entry.slice(0,i).trim(), entry.slice(i+1).trim());
+  });
+  assigned.forEach(key=>{
+    const i=key.indexOf('|'); add(key.slice(0,i), key.slice(i+1));
   });
 }
 function applyAndReset(){ rebuildKeepers(); applyKeepers(); resetDraft(); renderTeams(); if(typeof renderTrades==="function")renderTrades(); if(typeof saveSetup==="function")saveSetup(); }
@@ -2536,9 +2681,15 @@ function renderTeams(){
     head.innerHTML=isAuction?`${isMe?'★ ':''}${owner} <span class="muted">· ${chosen.length}/${max} kept · $${st.keeperSpend} keep $ · $${st.left} left · max bid $${st.maxBid}${isMe?' · you':''}</span>`:`${isMe?'★ ':''}${owner} <span class="muted">· slot ${OWNER_SLOT[owner]} · ${chosen.length}/${max} kept${isMe?' · you':''}</span>`;
     c.appendChild(head);
     eligible.forEach(r=>{
-      const key=owner+'|'+r.player, checked=assigned.has(key);
-      const row=document.createElement('label'); row.className='mypick-row'; row.style.cursor='pointer';
+      const key=owner+'|'+r.player;
+      // A keeper the league has already locked in is a fact, not a choice: show it
+      // checked and disabled so it can't be toggled off into a board that doesn't
+      // match reality. Everything else stays yours to model with.
+      const locked=isLeagueKeeper(owner,r.player);
+      const checked=locked||assigned.has(key);
+      const row=document.createElement('label'); row.className='mypick-row'; row.style.cursor=locked?'default':'pointer';
       const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=checked; cb.dataset.k=key;
+      if(locked){cb.disabled=true; cb.title='Locked in by the league at the keeper deadline';}
       const left=document.createElement('span');
       left.innerHTML=` <span class="pos ${r.pos}">${r.pos||'?'}</span> ${r.player}`;
       const right=document.createElement('span');
@@ -2549,6 +2700,7 @@ function renderTeams(){
             ? `cost $${r.keeper} · target ~$${r.keeper+r.val} · surplus ${r.val>=0?'+':''}$${r.val}`
             : `cost R${r.keeper} · val ${valText(r.val)}`);
       if(r.val===null)right.title='Not in the player pool — nothing to compare against';
+      if(locked){const lk=document.createElement('span'); lk.className='kchip'; lk.textContent='LOCKED'; left.appendChild(lk);}
       const wrapL=document.createElement('span'); wrapL.appendChild(cb); wrapL.appendChild(left);
       row.appendChild(wrapL); row.appendChild(right); c.appendChild(row);
     });
@@ -3404,6 +3556,7 @@ function applyLeagueProfile(id){
     starters:profile.starters||{}, flexEligible:profile.flexEligible||['RB','WR','TE'], myKeepers:profile.myKeepers||[],
     draftType:profile.draftType||'snake', leagueType:profile.leagueType||'keeper', superflex:!!profile.superflex,
     maxKeepers:(profile.maxKeepers!=null?profile.maxKeepers:null), keeperCostType:profile.keeperCostType||'round',
+    leagueKeepers:profile.leagueKeepers||[],   // keepers the league itself locked in
     auctionBudget:profile.auctionBudget||200,rosterSize:profile.rosterSize||profile.rounds||16,irSlots:profile.irSlots||0,minBid:profile.minBid||1,
     scoringLabel:profile.scoringLabel||'TBD', draftDateLabel:profile.draftDateLabel||'TBD', keeperDeadlineLabel:profile.keeperDeadlineLabel||'TBD',
   };
