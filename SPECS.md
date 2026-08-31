@@ -15,12 +15,20 @@ incomplete, not final.
 Single-page app (`public/index.html`), eight tabs:
 
 ### Draft Room
-Live mock draft UI — best-available player pool, a roster viewer, a queue of
-targeted picks, a full draft board (dashed cells = keepers), and my picks
-& projected availability below the board. Supports snake, linear, and
-(structurally, not the draft room itself) auction league types — see
-"League profiles" below. Auction-type leagues show a placeholder here
-instead of the pool/board — the auction draft engine isn't built yet.
+Live mock draft UI. Snake/linear leagues use the best-available pool, roster
+viewer, queue, full draft board (dashed cells = keepers), and projected
+availability. Auction leagues use a dedicated salary-cap room: editable
+player/winner/price sale entry, undo/reset, simulated market sales, a live
+best-available table with provisional market dollars, per-team keeper spend /
+draft spend / remaining budget / max bid, and the user's auction roster.
+Auction state is saved with mocks/setup just like snake picks.
+
+The auction simulator is deliberately an MVP rather than a claim of precise
+market forecasting: remaining league dollars are redistributed over the
+available player pool after keepers and sales, then opponent need/tendencies
+and noise influence simulated bids. The displayed market dollars are scenario
+estimates until the league-aware custom rankings/projections and auction-value
+engine replace them.
 
 The board is a genuine CSS grid (`grid-template-columns` set per league's
 team count, every header/cell a direct grid child in row-major order) so a
@@ -48,9 +56,17 @@ since the queue is a live filter over the pool's `drafted` flag rather than
 a one-time removal — nothing to manually re-add after backing up a pick.
 Persists via `/api/setup` alongside keepers/trades/tendencies.
 
+**Auction price layers**: auction leagues deliberately maintain two dollar concepts. **Market $** models what opponents are likely to pay; Yahoo league-specific default/Pre-Draft Value and Yahoo Average Salary are the preferred anchors when loaded, with market-source fallbacks. **Target $** is Hovo's independent bid ceiling/value layer and does not inherit Yahoo by default; it can blend FantasyPros, Draft Sharks, RotoWire, and the future custom league-aware valuation. Both are dynamically rescaled to the actual money and open roster slots remaining after projected/confirmed keepers and auction sales. If source columns are absent, each layer falls back to the existing rank/scarcity curve and is visibly labeled as an estimate. Supported optional player-CSV columns: `yahoo_default`, `yahoo_avg_salary`, `fp_value`, `ds_market`, `ds_value`, `rotowire_value`, `custom_value`.
+
 ### Teams & Keepers
 Rival roster view and keeper assignment/modeling across the league, plus
-the owner-tendency controls (see Opponent model below).
+the owner-tendency controls (see Opponent model below). For dollar-cost
+auction keeper leagues, every rostered player's keeper cost is shown and
+keepers can be toggled for every team. The UI enforces the auction budget and
+minimum-dollar reserve for each open draftable roster slot, and shows each
+team's selected keeper spend, money left, and maximum legal bid. Rival keepers
+can be auto-projected as a starting scenario and then manually adjusted; the
+user's own keeper selections are never cleared by "clear rival keepers."
 
 ### Trades
 Reassign a draft pick to another manager (by round), or move a player/keeper
@@ -64,8 +80,9 @@ gets overwritten by mistake.
 ### Mocks
 Cloud-saved mock draft history (KV-backed via `/api/mocks`), synced across
 devices. Save the current draft, list saved mocks newest-first, load or
-delete one. Falls back to local-only ("Save config" in the Data tab) when
-the cloud API isn't reachable.
+delete one. Snake/linear mocks persist pick state; auction mocks persist
+winning team + price for every completed sale. Falls back to local-only
+("Save config" in the Data tab) when the cloud API isn't reachable.
 
 ### Strategy Lab
 Compares draft paths/strategies side by side (`renderStratCards`). Rival picks
@@ -225,6 +242,49 @@ on — no separate in-app "conference" concept, no promotion/relegation
 movement between seasons modeled (that's a future season's problem, not
 this one's).
 
+
+## Cross-league retention, IR, and auction-keeper rules
+
+These are domain rules for the league-aware rankings/keeper engine, separate from the existing draft-room mechanics.
+
+### League-type semantics
+
+- **Redraft**: no player-retention element across seasons; the player pool is effectively a fresh start for the incoming draft. Draft capital/budget usually resets as well, but that is not required by the definition.
+- **Dynasty**: retained players have no explicit keeper price beyond using a roster slot. A dynasty league may still cap the roster/number retained; the defining point is that keeping a player does not consume a draft round, auction dollars, or another retention-specific resource.
+- **Keeper**: retaining a player consumes an explicit resource beyond the roster slot (draft pick/round, auction budget, etc.). The keeper count may be capped or effectively unlimited; the cost, not the number retained, is the main distinction from dynasty for this system.
+
+### IR-aware draft value
+
+IR capacity changes **ranking/decision value**, not the player's underlying projection. The league-aware rankings engine should therefore apply an IR-capacity modifier to injury-risk and currently-injured profiles:
+
+- **0 IR**: strongest downgrade; avoid carrying injury risk when possible because every unavailable player consumes a normal roster slot.
+- **1 IR**: injury remains a meaningful negative, but the roster can absorb one unavailable player.
+- **2+ IR**: tolerate more injury risk and lean further into discounted injured players than in a baseline league.
+
+This is intentionally a value/ranking overlay. Do not inflate projected games, points, efficiency, or other player-level projections because a league has more IR slots.
+
+### Fantastic Keeper Auction — confirmed 2026 profile
+
+- Yahoo league **835427**, 14 teams, full-PPR H2H, 6-point passing TDs.
+- **16 draftable roster spots + 2 IR**. The IR spots do **not** count against preseason keeper/budget accounting. Starting lineup: QB, 2 WR, 2 RB, TE, 2 W/R/T, DEF; 7 bench.
+- **$200 auction budget**; effectively unlimited keepers subject to the 16 draftable slots and budget.
+- Every unfilled draftable roster slot must reserve at least **$1**. Example: 5 keepers costing $60 leave $140 for 11 open slots, so the maximum legal first bid is $130.
+- Keeper salary is **prior auction/acquisition price + $1**. A kept salary becomes the next year's assumed prior price, so the player escalates another $1 each year.
+- Drafted-player cost provenance survives trades, drops, waivers, and reacquisition; those transactions do **not** reset cost.
+- An undrafted/free-agent player has a **$1 prior price**, so the first keeper salary is **$2**.
+- Keeper deadline: **Sunday, August 30, 2026 at 12:00am PDT** (the Saturday-night boundary). Yahoo lists this league's draft as Offline Draft; the exact offline draft date/time remains external/unconfirmed.
+- 2026 authoritative keeper-eligible roster/cost source: Google Sheet **Fantastic Football Auction Keeper League Tracker 2026**. Those costs were manually reconstructed from 2025 end-of-season rosters plus 2025 auction results and already include the +$1 escalation. Draft Lab should consume the calculated 2026 costs rather than re-derive 2025 history this season.
+
+### AEOK Auction League — confirmed 2026 profile
+
+- Yahoo league **868349**, 12 teams, full-PPR H2H, **Superflex**, Live Salary Cap Draft.
+- Draft: **Tuesday, September 8, 2026 at 9:00pm PDT**; $200 budget; 30-second nomination / 20-second bid timers. Keeper deadline: **Tuesday, September 8, 2026 at 12:00am PDT**.
+- **18 draftable roster spots + 2 IR**. Starting lineup: QB, 2 WR, 2 RB, TE, 2 W/R/T, Q/W/R/T; 9 bench. No K/DEF slot.
+- Uses the same $200-budget, $1-per-open-slot reserve, effectively unlimited keeper count, annual **prior price + $1** escalation, and persistent drafted-player cost provenance as Fantastic.
+- Special case: an **undrafted QB** has a $5 assumed prior price and therefore costs **$6** to keep the first time. Other undrafted players use the normal $1 → $2 rule.
+- Scoring includes 4-point pass TDs, -1 INT, +2 at 350 passing yards, +2 at 100 rushing/receiving yards, +2 for 40+ yard completions/runs/receptions, and 0.5 per rushing first down.
+- 2026 authoritative keeper-eligible roster/cost source: Google Sheet **AEOK Auction League Tracker 2026**. Use the individual manager-tab calculated costs: its hidden consolidated `Rosters` tab preserves raw $2 entries for some undrafted QBs, while the manager tabs correctly apply the league's $6 QB keeper rule.
+
 ## Target feature set (Draft Wizard baseline)
 
 FantasyPros' **Draft Wizard** is the agreed working baseline for where this
@@ -264,9 +324,10 @@ finish), not in the overall layout.
   tracking) — this league doesn't draft on a synced platform. (Sleeper is
   used for a one-time, review-before-save structure import — see "League
   profiles" — not live sync.)
-- Salary-cap/auction draft engine — multi-league support (see "League
-  profiles") added auction-type league profiles, but the auction draft
-  room itself isn't built yet; it shows a placeholder.
+- Advanced auction realism beyond the current MVP — exact nomination-order
+  strategy, live bid-timer behavior, price-enforcement against a real Yahoo
+  room, and calibrated custom auction values still depend on future ranking /
+  projection / live-draft work. The core salary-cap mock room itself is built.
 - Accounts, subscriptions, tiers of access — personal tool.
 
 ## Guest mode
