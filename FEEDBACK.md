@@ -20,6 +20,59 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🆕 2026-08-31 — **Carry the auction valuation work over to BASKETBALL auctions
+  in ~1-2 months.** User: the lessons here will translate — not identically, but
+  with a lot in common — and wants to leverage this work rather than restart
+  after football drafts wrap in a week. What should transfer, in priority order:
+  (1) **calibrate against the league's own realized prices** rather than any
+  synthetic curve — the single highest-value idea here, and it needs nothing but
+  a history of past winning bids; (2) **cap by observed share of budget**
+  (football league's realized ceiling was 32%, capped at 40%); (3) **price
+  retention as a break-even max bid** over a keeper horizon
+  (`keeperBreakEvenBid`), which is what stops you overpaying a young player past
+  the point he stays keepable; (4) **infer trajectory from age** via positional
+  aging curves. What must be re-derived for basketball: `AGE_PEAK` (NBA curves
+  differ — later peaks, longer primes), the position multipliers in
+  `auctionWeight()`, the decay constant, roster/format shape, and whether
+  categories-vs-points scoring changes positional scarcity. All of those are
+  already per-league settings rather than hardcoded, so a basketball league
+  should be a profile plus a recalibration, not a rewrite. See `SPECS.md` →
+  "Auction valuation".
+
+- ✅ 2026-08-31 — **Auction prices were absurd and Target $ = Market $.** User
+  flagged $119 Bijan / $91 Jeanty / $54 Jacobs in a $200 league, and that the
+  two dollar columns were identical.
+  *Two independent causes, both fixed.* **(1) Identical columns**: neither
+  layer had any source data — `auctionPriceSourceStatus()` returned false for
+  both, so `weightedDollar()` fell through to the same fallback curve twice.
+  **(2) Absurd prices**: the fallback decayed as `exp(-adp/35)`, far too
+  concentrated (top 10 available players claimed 26% of all remaining money),
+  with no ceiling, then got rescaled onto a keeper-thinned pool.
+  *Fix, following the user's own manual method:* calibrated the curve against
+  the **106 real keeper prices from this exact league** (real winning bids +
+  $1/yr escalation — max $64, median $6, 25.5% at $1-2). Fitting the decay
+  constant gives 50, which reproduces max $59 / median $6 / 25.9% at $1-2 in a
+  full auction. Added `auctionMaxPriceShare` (0.40 of budget) with
+  redistribution so totals still balance. Result: Bijan $119→$80, Jeanty
+  $91→$67, Jacobs $54→$48, Nacua $104→$73.
+  *Target $ now models keeper economics* via `keeperBreakEvenBid()` — the
+  highest price at which a player still returns value once next year's cost
+  (price + $1) is counted, over a 3-year horizon, with a cliff that kills the
+  premium once he stops being keepable. That's the Egbuka case ($23 paid, $24
+  keeper price, no longer worth keeping) expressed as math. Trajectory comes
+  from an explicit `trajectory` column, else inferred from `age` via positional
+  aging curves, else neutral.
+  *Investigated but rejected as sources:* FantasyPros auction values (403 —
+  paywalled; `type=auction` just returns ordinary PPR rankings, not dollars)
+  and VBD off projections (`proj` only 16% populated for this pool).
+  **Confirmed available and not yet wired in:** Sleeper's free player API
+  (`api.sleeper.app/v1/players/nfl`, no auth) carries `age` and `years_exp` for
+  all 12,225 players — Love 21, Jeanty 22, Bijan 24, Jacobs 28, Henry 32. With
+  ages attached the model already separates them correctly (Jeanty +$12 keeper
+  premium, Love +$6, Jacobs -$2). **Until that enrichment lands, Target $ and
+  Market $ still read identically**, since trajectory defaults to neutral with
+  no age data. Offered to the user as the next step.
+
 - ✅ 2026-08-31 — **Fantastic auction keepers loaded as league data.** User
   pasted the Yahoo keeper sheet (14 teams, nomination order, keepers, salaries,
   remaining budget) and asked to add it to the league data so kept players drop

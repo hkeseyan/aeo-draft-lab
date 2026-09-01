@@ -116,6 +116,78 @@ Steals/reaches exclude K and DST — everyone waits on them by convention, so
 they "fall" 20+ spots past ADP in every draft and would crowd out the real
 ones. Auction leagues show a placeholder here like the rest of the room.
 
+### Auction valuation
+
+**The market curve is calibrated against this league's own realized prices, not
+invented.** The 106 declared keepers are real winning bids (plus the league's
+$1/yr escalation) from the same 14 managers, budget and format — the best
+available ground truth. Their distribution: max $64 (32% of a $200 budget),
+median $6, 25.5% of kept players at $1-2.
+
+Price decays exponentially with ADP; the decay constant (`auctionDecay`,
+default 50) was fit to reproduce that distribution. In a full 14-team/$200
+auction it yields max $59, median $6, and 25.9% at $1-2 — three of four
+observed metrics within noise. The original value of 35 was far too
+concentrated: it put the top player at $81 in a *full* auction, 46% of the
+roster at $1-2, and after rescaling to a keeper-thinned pool produced $119 for
+the top available player, which no manager would ever bid.
+
+`auctionMaxPriceShare` (default 0.40) caps any single player at a share of the
+budget. The league's realized ceiling is 32%; 40% leaves headroom for genuine
+keeper-driven inflation while ruling out runaway values. Clipped dollars are
+redistributed across the rest of the pool (`applyAuctionCap`), never destroyed,
+so the priced pool still sums to the money that actually has to be spent.
+
+Rescaling to *remaining* money is deliberate and correct: those dollars do get
+spent, and a keeper league that locks up half its cash genuinely inflates
+what's left. In this league 52% of all money is committed to keepers, so
+elite players still on the board legitimately cost more than they would in a
+normal draft — the fix was the shape and the ceiling, not the inflation.
+
+**Target $ prices retention, which is what makes a keeper auction different.**
+The price you pay is also next year's cost basis (keeping costs price +
+`annualIncrease`), so overpaying doesn't merely cost money now — it destroys
+the retention value that made a young player worth chasing. The real case this
+models: a receiver bought at $23 when $18 was the number, whose $24 keeper
+price then exceeded his worth, turning a multi-year asset into a one-year
+rental.
+
+`keeperBreakEvenBid()` solves for the highest price at which he still returns
+value, over a horizon of `keeperHorizon` future seasons (default 3 for
+unlimited-keeper leagues; at horizon 1 the premium is a rounding error and
+doesn't reflect how these actually get bid up):
+
+```
+P = V + Σ(k=1..H) max(0, V·traj^k − (P + k·increase))
+```
+
+solved as a damped fixed point. The `max(0, …)` is the cliff: past the price
+where next year's cost exceeds his value, the retention premium is simply gone
+and the target stops rising. Note the asymmetry — an aging player isn't
+penalized below his one-year value, because a rental is still worth what he
+produces; the differentiation is that ascending players earn a premium.
+
+`traj` is the year-over-year value trend. An explicit `trajectory` CSV column
+wins; otherwise it's inferred from `age` via conventional positional aging
+curves (`AGE_PEAK` — RB 25, WR 27, TE 28, QB 30; running backs decay fastest),
+capped so age nudges rather than dominates; otherwise neutral. With real ages
+attached this separates a 21-year-old from a 28-year-old at the same market
+price, which is the whole point.
+
+**Both layers fall back to the same curve when no source data is loaded**, so
+Market $ and Target $ will read identically until either valuation columns
+(`fp_value`, `custom_value`, …) or `age`/`trajectory` are populated. That's
+honest rather than a manufactured difference, and the auction pool count is
+labeled "est." to say so.
+
+**Transferable to other sports.** The method here — calibrate the curve against
+the league's own realized prices, cap by observed share of budget, and price
+retention as a break-even bid over a keeper horizon — is sport-agnostic. Only
+the inputs change: positional aging peaks (`AGE_PEAK`), position multipliers in
+`auctionWeight()`, roster shape, and the decay constant, all of which are
+per-league settings rather than code. Basketball auctions are the next
+application (see FEEDBACK.md, 2026-08-31).
+
 **Auction price layers**: auction leagues deliberately maintain two dollar concepts. **Market $** models what opponents are likely to pay; Yahoo league-specific default/Pre-Draft Value and Yahoo Average Salary are the preferred anchors when loaded, with market-source fallbacks. **Target $** is Hovo's independent bid ceiling/value layer and does not inherit Yahoo by default; it can blend FantasyPros, Draft Sharks, RotoWire, and the future custom league-aware valuation. Both are dynamically rescaled to the actual money and open roster slots remaining after projected/confirmed keepers and auction sales. If source columns are absent, each layer falls back to the existing rank/scarcity curve and is visibly labeled as an estimate. Supported optional player-CSV columns: `yahoo_default`, `yahoo_avg_salary`, `fp_value`, `ds_market`, `ds_value`, `rotowire_value`, `custom_value`.
 ### Teams & Keepers
 Rival roster view and keeper assignment/modeling across the league, plus

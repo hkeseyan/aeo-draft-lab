@@ -1893,9 +1893,38 @@ function adpRoundOf(name){const p=findPlayer(name); return p?Math.ceil(p.adp/LEA
 // anchored to Yahoo/default-market prices, and (2) Hovo target value, which can
 // blend independent expert values + our model. The rank/scarcity curve is only a
 // fallback when sourced dollar columns are absent.
+// How steeply price falls with ADP. Calibrated against this league's own 106
+// realized keeper prices (real winning bids + $1/yr escalation): at decay 50 a
+// full 14-team/$200 auction reproduces max $59 (observed $64), median $6
+// (observed $6) and 25.9% of the roster at $1-2 (observed 25.5%). The original
+// 35 was far too concentrated — it put the top player at $81 in a full auction
+// and 46% of the roster at $1-2. Tunable per league (see auctionDecay) because
+// a different sport or format has a different shape.
+const AUCTION_DECAY_DEFAULT=50;
+// Nobody spends most of a budget on one player. This league's realized ceiling
+// is $64 = 32% of a $200 budget; 40% leaves headroom for genuine keeper-driven
+// inflation while still ruling out the runaway values an uncapped curve
+// produced. Money clipped here is redistributed, never destroyed.
+const AUCTION_MAX_PRICE_SHARE_DEFAULT=0.40;
+const auctionDecay=()=>LEAGUE.auctionDecay||AUCTION_DECAY_DEFAULT;
+const auctionPriceCap=()=>Math.max(2,Math.round((LEAGUE.auctionBudget||200)*(LEAGUE.auctionMaxPriceShare||AUCTION_MAX_PRICE_SHARE_DEFAULT)));
 function auctionWeight(p){
   const posMult={QB:LEAGUE.superflex?1.0:0.72,RB:1.08,WR:1.0,TE:0.88,K:0.12,DST:0.16};
-  return Math.exp(-Math.max(0,(p.adp||999)-1)/35)*(posMult[p.pos]||0.5);
+  return Math.exp(-Math.max(0,(p.adp||999)-1)/auctionDecay())*(posMult[p.pos]||0.5);
+}
+// Clip prices to the ceiling and push the clipped dollars back onto everyone
+// below it, so the pool still adds up to the money that actually has to be spent.
+function applyAuctionCap(entries,weights,cap,min){
+  for(let pass=0; pass<40; pass++){
+    let over=0;
+    entries.forEach((v,i)=>{ if(v>cap){over+=v-cap; entries[i]=cap;} });
+    if(over<=0)break;
+    const room=[]; let rw=0;
+    entries.forEach((v,i)=>{ if(v<cap){room.push(i); rw+=weights[i];} });
+    if(!room.length||rw<=0)break;
+    room.forEach(i=>{ entries[i]=Math.min(cap, entries[i]+Math.round(over*weights[i]/rw)); });
+  }
+  return entries.map(v=>Math.max(min,v));
 }
 function auctionEligible(p){
   if(p.pos==='K' && !(LEAGUE.starters.K||0))return false;
@@ -1907,8 +1936,10 @@ function auctionFallbackValues(){
   const min=LEAGUE.minBid||1, slots=(LEAGUE.rosterSize||LEAGUE.rounds||16)*LEAGUE.teams;
   const pool=PLAYERS.filter(auctionEligible).slice().sort((a,b)=>a.adp-b.adp).slice(0,slots);
   const extra=Math.max(0,(LEAGUE.auctionBudget||200)*LEAGUE.teams-slots*min);
-  const sum=pool.reduce((n,p)=>n+auctionWeight(p),0)||1;
-  pool.forEach(p=>out.set(p.id,Math.max(min,Math.round(min+extra*auctionWeight(p)/sum))));
+  const wts=pool.map(auctionWeight), sum=wts.reduce((n,w)=>n+w,0)||1;
+  let vals=pool.map((p,i)=>Math.max(min,Math.round(min+extra*wts[i]/sum)));
+  vals=applyAuctionCap(vals,wts,auctionPriceCap(),min);
+  pool.forEach((p,i)=>out.set(p.id,vals[i]));
   return out;
 }
 function weightedDollar(items,fallback){
@@ -1930,17 +1961,83 @@ function auctionOpponentBaseValues(){
   });
   return out;
 }
+// What a keeper is worth beyond this season.
+//
+// In a keeper auction the price you pay is also next year's cost basis: keeping
+// him costs price + annualIncrease. So overpaying doesn't just cost money now,
+// it destroys the retention value that made him worth chasing — the Egbuka
+// case, bought at $23 when $18 was the number, which made his $24 keeper price
+// worse than his worth and turned a multi-year asset into a one-year rental.
+//
+// Break-even max bid P over a horizon of H future years:
+//   P = V + Σ(k=1..H) max(0, V·traj^k − (P + k·increase))
+// with V the one-year value and traj the year-over-year value trend. Solved as
+// a fixed point (it converges in a handful of passes). The max(0, …) is the
+// cliff: past the price where next year's cost exceeds his value, the retention
+// premium is simply gone and the target stops rising.
+//
+// traj comes from an optional `trajectory` CSV column — 1.0 is neutral, >1 for
+// young/ascending, <1 for aging. Left at 1.0 a player's target lands on his
+// one-year value, which is the honest answer when we have no age or career data
+// (the FantasyPros feed carries none). This is the hook for the "adjust for
+// youth/ceiling/trajectory" judgement rather than a guess pretending to be data.
+function keeperBreakEvenBid(oneYearValue, traj, horizon, increase){
+  const V=Math.max(1,oneYearValue||1);
+  if(!(horizon>0))return V;
+  let P=V;
+  for(let pass=0; pass<25; pass++){
+    let extra=0;
+    for(let k=1;k<=horizon;k++) extra+=Math.max(0, V*Math.pow(traj,k) - (P + k*increase));
+    const next=V+extra;
+    if(Math.abs(next-P)<0.01){P=next;break;}
+    P=P*0.5+next*0.5;   // damped, so the fixed point can't oscillate
+  }
+  return P;
+}
+// Year-over-year value trend implied by age, since a keeper's worth is a
+// multi-year question. Peaks are the conventional positional aging curves —
+// running backs fall off earliest, quarterbacks hold value longest — and the
+// effect is deliberately capped so age nudges the number rather than dominating
+// it. An explicit `trajectory` column always overrides this.
+const AGE_PEAK={RB:25, WR:27, TE:28, QB:30, K:30, DST:27};
+function ageTrajectory(p){
+  const age=+p.age;
+  if(!Number.isFinite(age)||age<=0)return 1;               // no data -> neutral
+  const peak=AGE_PEAK[p.pos]||27;
+  if(age<peak){
+    // Still climbing. Rookies and second-year players carry the most upside,
+    // which is what makes them worth paying above one-year value to retain.
+    return 1+0.12*Math.min(1,(peak-age)/3);
+  }
+  // Past peak, decaying toward a floor. RBs fall fastest.
+  const steep=(p.pos==='RB')?3:4.5;
+  return 1-0.20*Math.min(1,(age-peak)/steep);
+}
 function auctionTargetBaseValues(){
   const fallback=auctionFallbackValues(), out=new Map();
+  const rules=LEAGUE.keeperRules||{};
+  const increase=rules.annualIncrease!=null?rules.annualIncrease:1;
+  // Only a keeper league has retention value to price in; a redraft auction's
+  // target is simply what the player is worth this season.
+  // How many future seasons of retention to price in. Both auction leagues here
+  // allow effectively unlimited keepers, so a genuinely ascending young player
+  // is a multi-year asset — at horizon 1 the premium is a rounding error ($3 on
+  // a $67 player) and doesn't reflect how these get bid up in practice. Three
+  // years separates a 21-year-old from a 28-year-old meaningfully without
+  // pretending we can forecast a decade.
+  const horizon=(LEAGUE.leagueType==='keeper' && LEAGUE.keeperCostType==='dollar')
+    ? (LEAGUE.keeperHorizon!=null?LEAGUE.keeperHorizon:3) : 0;
   PLAYERS.forEach(p=>{
     const fb=fallback.get(p.id)||1;
-    // Hovo's target deliberately does NOT inherit Yahoo by default. It blends
-    // independent valuation sources; our future custom auction model can be fed
-    // in via `custom_value` without changing simulation mechanics.
-    const v=weightedDollar([
+    // Target deliberately does NOT inherit Yahoo — Yahoo anchors what rivals pay,
+    // not what he's worth to us. Independent sources first, our own model via
+    // `custom_value`, falling back to the calibrated curve.
+    const oneYear=weightedDollar([
       {v:p.customValue,w:0.40},{v:p.fpValue,w:0.20},{v:p.dsValue,w:0.20},{v:p.rotowireValue,w:0.20}
     ],fb);
-    out.set(p.id,v);
+    // Explicit tag wins; otherwise infer from age; otherwise neutral.
+    const traj=Number.isFinite(+p.trajectory)&&+p.trajectory>0 ? +p.trajectory : ageTrajectory(p);
+    out.set(p.id, Math.max(1, Math.round(keeperBreakEvenBid(oneYear, traj, horizon, increase))));
   });
   return out;
 }
@@ -2265,7 +2362,14 @@ function scaleAuctionValuesToRemainingBudget(base){
   const pool=available().filter(auctionEligible).slice().sort((a,b)=>(base.get(b.id)||1)-(base.get(a.id)||1)).slice(0,slots);
   const extra=Math.max(0,money-slots*min), rawExtra=pool.reduce((n,p)=>n+Math.max(0,(base.get(p.id)||min)-min),0);
   const scale=rawExtra>0?extra/rawExtra:1;
-  pool.forEach(p=>out.set(p.id,Math.max(min,Math.round(min+Math.max(0,(base.get(p.id)||min)-min)*scale))));
+  // Rescaling to the money actually left is right — those dollars do get spent,
+  // and a keeper league that locks up half its cash really does inflate what's
+  // left. But it has to respect the same ceiling, or a thin pool with a lot of
+  // money chasing it produces prices no human would ever bid.
+  const wts=pool.map(p=>Math.max(0,(base.get(p.id)||min)-min));
+  let vals=pool.map((p,i)=>Math.max(min,Math.round(min+wts[i]*scale)));
+  vals=applyAuctionCap(vals,wts,auctionPriceCap(),min);
+  pool.forEach((p,i)=>out.set(p.id,vals[i]));
   return out;
 }
 function auctionMarketValues(){ return scaleAuctionValuesToRemainingBudget(auctionOpponentBaseValues()); }
@@ -2878,6 +2982,8 @@ function parsePlayers(txt){
       yahooDefault:num(at(c,'yahoo_default')), yahooAvgSalary:num(at(c,'yahoo_avg_salary')),
       fpValue:num(at(c,'fp_value')), dsMarket:num(at(c,'ds_market')), dsValue:num(at(c,'ds_value')),
       rotowireValue:num(at(c,'rotowire_value')), customValue:num(at(c,'custom_value')),
+      age:num(at(c,'age')),                 // drives ageTrajectory() when present
+      trajectory:num(at(c,'trajectory')),   // 1.0 neutral, >1 ascending, <1 aging
       drafted:false, keeper:null});
   }
   return arr;
@@ -2887,7 +2993,7 @@ function loadPlayersCSV(txt){
   if(loadPlayersData(txt)){ applyKeepers(); resetDraft(); setStatus('Loaded '+PLAYERS.length+' players.'); }
 }
 function exportText(txt,name){const b=new Blob([txt],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();}
-function poolToCSV(){return 'name,pos,team,adp,ecr,proj,tier,yahoo_default,yahoo_avg_salary,fp_value,ds_market,ds_value,rotowire_value,custom_value\n'+PLAYERS.map(p=>[p.name,p.pos,p.team,p.adp,p.ecr,p.proj,p.tier||'',p.yahooDefault||'',p.yahooAvgSalary||'',p.fpValue||'',p.dsMarket||'',p.dsValue||'',p.rotowireValue||'',p.customValue||''].join(',')).join('\n');}
+function poolToCSV(){return 'name,pos,team,adp,ecr,proj,tier,yahoo_default,yahoo_avg_salary,fp_value,ds_market,ds_value,rotowire_value,custom_value,age,trajectory\n'+PLAYERS.map(p=>[p.name,p.pos,p.team,p.adp,p.ecr,p.proj,p.tier||'',p.yahooDefault||'',p.yahooAvgSalary||'',p.fpValue||'',p.dsMarket||'',p.dsValue||'',p.rotowireValue||'',p.customValue||'',p.age||'',p.trajectory||''].join(',')).join('\n');}
 function loadKeepersCSV(txt){
   const lines=txt.trim().split(/\r?\n/).filter(l=>l.trim());
   lines.forEach(l=>{const c=l.split(',').map(x=>x.trim()); if(c.length>=3){
