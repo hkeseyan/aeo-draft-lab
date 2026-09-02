@@ -20,6 +20,20 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-09-02 — **Player headshots + rookie flag.** Both picked as the next
+  build. Sourced from Sleeper's free public player list
+  (`api.sleeper.app/v1/players/nfl`), matched to `players-2026.csv` by
+  normalized name — 235/235 non-DST players matched cleanly, no manual
+  crosswalk. Two new optional CSV columns, `sleeper_id` and `rookie`
+  (`years_exp===0` at pull time — so 2025 rookies like Jeanty/McMillan/Egbuka
+  correctly do *not* show RK for the 2026 season, only true 2026 rookies like
+  Jeremiyah Love and Fernando Mendoza do). Headshots hotlink
+  `sleepercdn.com/content/nfl/players/<id>.jpg` — no storage, no image
+  pipeline — with `onerror` hiding a broken/missing image instead of showing a
+  broken-image icon. Both now appear in Best Available, the auction pool
+  table, drafted picks on the snake board, and My Picks. `poolToCSV()` and the
+  Data-tab CSV format docs updated to round-trip both new columns.
+
 - ✅ 2026-09-02 — **Where do I connect Yahoo? Getting a 401
   `oauth_problem="additional_authorization_required"`.** The button is in the
   **Leagues** tab → *Connect Yahoo (in progress)* → **Connect Yahoo account**

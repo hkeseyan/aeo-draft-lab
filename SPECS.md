@@ -81,6 +81,18 @@ board just renders inline under the tier he fell into. `parsePlayers()` now
 keeps `tier`, and `poolToCSV()` exports it, so a load/export round-trip
 doesn't silently drop the column.
 
+**Headshots & rookie badge**: Best Available, the auction pool table, drafted
+picks on the board, and My Picks all show a player's headshot (a 20px circular
+`img`) and, where applicable, an `RK` badge. Both are sourced from Sleeper's
+free public player list (`api.sleeper.app/v1/players/nfl`), matched into
+`players-2026.csv` by normalized name at data-pull time — two optional CSV
+columns, `sleeper_id` and `rookie` (`years_exp===0` when pulled). Headshots
+hotlink `sleepercdn.com/content/nfl/players/<sleeper_id>.jpg` directly — no
+image storage, no ongoing crosswalk to maintain — and `onerror` hides a
+missing image rather than showing a broken-image icon, since coverage isn't
+guaranteed for every player. `parsePlayers()`/`poolToCSV()` round-trip both
+columns like every other optional field.
+
 **Runs & scarcity cues**: a strip under the draft controls (`#clockCues`)
 answers "what's happened since I last picked, and what won't survive to my
 next pick" — (1) positional counts of everything drafted since your most
