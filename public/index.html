@@ -214,21 +214,29 @@
           </div>
           <div class="card">
             <h2>Best available <span class="muted" id="auctionPoolCount"></span></h2>
+            <div class="row" style="margin-bottom:8px">
+              <select id="auctionPosFilter">
+                <option value="ALL">All positions</option>
+                <option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>K</option><option>DST</option>
+              </select>
+              <input type="text" id="auctionSearch" placeholder="search player…" style="flex:1;min-width:120px">
+              <span class="small muted" id="auctionPosCounts"></span>
+            </div>
             <div class="scroll">
-              <table id="auctionPoolTable"><thead><tr><th>Market $</th><th>Target $</th><th>ADP</th><th>Pos</th><th>Player</th><th>Team</th><th></th></tr></thead><tbody></tbody></table>
+              <table id="auctionPoolTable"><thead><tr><th>Market $</th><th>Target $</th><th>ECR</th><th>Pos</th><th>Player</th><th>Team</th><th></th></tr></thead><tbody></tbody></table>
             </div>
           </div>
         </div>
         <div>
           <div class="card">
-            <h2>Team budgets</h2>
-            <div class="scroll" style="max-height:430px">
-              <table id="auctionBudgetTable"><thead><tr><th>Team</th><th>Roster</th><th>Keep $</th><th>Draft $</th><th>Left</th><th>Max bid</th></tr></thead><tbody></tbody></table>
-            </div>
+            <h2>Roster <select id="auctionRosterOwner" style="margin-left:6px"></select></h2>
+            <div id="auctionMyRoster" class="small muted">—</div>
           </div>
           <div class="card">
-            <h2>My auction roster</h2>
-            <div id="auctionMyRoster" class="small muted">—</div>
+            <h2>Team budgets</h2>
+            <div class="scroll" style="max-height:430px">
+              <table id="auctionBudgetTable"><thead><tr><th>Team</th><th>Roster</th><th>Left</th><th>Max bid</th></tr></thead><tbody></tbody></table>
+            </div>
           </div>
         </div>
       </div>
@@ -1791,7 +1799,8 @@ const LEAGUES_DEFAULT = {
     // Costs live in rostersRaw's 4th field and were verified to match the sheet
     // exactly; 11 of 12 teams also reconciled against their stated salary/remaining
     // totals (team 12's totals row was missing from the source paste, so its $165
-    // committed / $35 left is computed from the keeper list itself).
+    // committed / $35 left is computed from the keeper list itself, and was
+    // confirmed correct by the user on 2026-09-02).
     leagueKeepers:[
       // Savada — "Riley Reid" · nominates 1 · $122 committed, $78 left
       "Savada|Justin Herbert",
@@ -2564,18 +2573,60 @@ function simAuctionSales(n){for(let i=0;i<n;i++){if(!simAuctionSale())break;}ren
 function renderAuctionRoom(){
   if(!el('auctionRoom'))return;
   if(!PLAYERS.length){el('auctionStatus').textContent='No player data loaded for this league yet.';return;}
-  const vals=auctionMarketValues(), targets=auctionTargetValues(), avail=available().filter(auctionEligible).sort((a,b)=>(vals.get(b.id)||0)-(vals.get(a.id)||0));
-  const src=auctionPriceSourceStatus(); el('auctionPoolCount').textContent=`(${avail.length})${src.market?'':' · market est.'}${src.target?'':' · target est.'}`;
+  const vals=auctionMarketValues(), targets=auctionTargetValues();
+  const allAvail=available().filter(auctionEligible).sort((a,b)=>(vals.get(b.id)||0)-(vals.get(a.id)||0));
+  // How many are left at each position — the "how urgently do I need to bid on a
+  // RB" read, which is the auction equivalent of the snake room's scarcity cues.
+  const counts={}; allAvail.forEach(p=>{counts[p.pos]=(counts[p.pos]||0)+1;});
+  const cEl=el('auctionPosCounts');
+  if(cEl)cEl.innerHTML=['QB','RB','WR','TE','K','DST'].filter(x=>counts[x])
+    .map(x=>`<span class="pos ${x}">${x}</span>&nbsp;${counts[x]}`).join(' &nbsp;');
+  const posF=(el('auctionPosFilter')&&el('auctionPosFilter').value)||'ALL';
+  const q=((el('auctionSearch')&&el('auctionSearch').value)||'').trim().toLowerCase();
+  let avail=allAvail;
+  if(posF!=='ALL')avail=avail.filter(p=>p.pos===posF);
+  if(q)avail=avail.filter(p=>p.name.toLowerCase().includes(q));
+  const src=auctionPriceSourceStatus();
+  el('auctionPoolCount').textContent=`(${avail.length}${posF!=='ALL'||q?` of ${allAvail.length}`:''})${src.market?'':' · market est.'}${src.target?'':' · target est.'}`;
   el('auctionPlayerList').innerHTML=avail.slice(0,160).map(p=>`<option value="${p.name}">`).join('');
   el('auctionWinner').innerHTML=OWNERS.map(o=>`<option value="${o}">${o}${o===ME_OWNER?' (me)':''}</option>`).join('');
   if(ME_OWNER)el('auctionWinner').value=ME_OWNER;
   const ptb=el('auctionPoolTable').querySelector('tbody');
-  ptb.innerHTML=avail.slice(0,100).map(p=>`<tr><td><b>$${vals.get(p.id)||1}</b></td><td class="val-good"><b>$${targets.get(p.id)||1}</b></td><td>${Math.round(p.adp||0)}</td><td><span class="pos ${p.pos}">${p.pos}</span></td><td>${p.name}</td><td class="muted">${p.team||''}</td><td><button class="pick-btn" data-aucbuy="${p.id}">select</button></td></tr>`).join('');
+  // ECR rather than ADP: Market $ already *is* the auction's draft-position
+  // signal, so ADP was a second version of the same thing taking up a column.
+  ptb.innerHTML=avail.slice(0,100).map(p=>`<tr><td><b>$${vals.get(p.id)||1}</b></td><td class="val-good"><b>$${targets.get(p.id)||1}</b></td><td>${p.ecr?Math.round(p.ecr):'—'}</td><td><span class="pos ${p.pos}">${p.pos}</span></td><td>${p.name}</td><td class="muted">${p.team||''}</td><td><button class="pick-btn" data-aucbuy="${p.id}">select</button></td></tr>`).join('');
   ptb.querySelectorAll('[data-aucbuy]').forEach(b=>b.onclick=()=>{const p=PLAYERS.find(x=>x.id===+b.dataset.aucbuy);if(p){el('auctionPlayerInput').value=p.name;el('auctionPrice').value=vals.get(p.id)||1;}});
   const btb=el('auctionBudgetTable').querySelector('tbody');
-  btb.innerHTML=Array.from({length:LEAGUE.teams},(_,i)=>i+1).map(slot=>{const st=auctionTeamState(slot),o=SLOT_OWNER[slot]||('T'+slot);return `<tr><td>${o}${o===ME_OWNER?' ★':''}</td><td>${st.used}/${st.rosterSize}</td><td>$${st.keeperSpend}</td><td>$${st.draftSpend}</td><td class="${st.valid?'':'val-bad'}">$${st.left}</td><td><b>$${st.maxBid}</b></td></tr>`;}).join('');
-  const mine=KEEPERS.filter(k=>k.team===mySlot).map(k=>({p:findPlayer(k.name),price:k.round,keeper:true})).concat(auctionPicks.filter(a=>a.owner===mySlot).map(a=>({p:PLAYERS.find(x=>x.id===a.playerId),price:a.price,keeper:false}))).filter(x=>x.p);
-  el('auctionMyRoster').innerHTML=mine.length?mine.map(x=>`<div class="mypick-row"><span><span class="pos ${x.p.pos}">${x.p.pos}</span> ${x.p.name}${x.keeper?' <span class="kchip">KEEP</span>':''}</span><b>$${x.price}</b></div>`).join(''):'—';
+  // Keeper-spend / draft-spend split removed deliberately: mid-auction the only
+  // things that change a bid are what a team has left and what it can still bid.
+  btb.innerHTML=Array.from({length:LEAGUE.teams},(_,i)=>i+1).map(slot=>{const st=auctionTeamState(slot),o=SLOT_OWNER[slot]||('T'+slot);return `<tr><td>${o}${o===ME_OWNER?' ★':''}</td><td>${st.used}/${st.rosterSize}</td><td class="${st.valid?'':'val-bad'}">$${st.left}</td><td><b>$${st.maxBid}</b></td></tr>`;}).join('');
+  // Same shape as the snake room's roster panel: pick any owner, see the starting
+  // slots laid out with players filled in best-ECR-first, then the bench.
+  const rsel=el('auctionRosterOwner');
+  if(rsel){
+    if(rsel.options.length!==LEAGUE.teams){
+      rsel.innerHTML=Array.from({length:LEAGUE.teams},(_,i)=>i+1)
+        .map(s=>`<option value="${s}">${SLOT_OWNER[s]||('T'+s)}${s===mySlot?' (me)':''}</option>`).join('');
+      if(mySlot!=null)rsel.value=mySlot;
+    }
+    const rslot=+rsel.value||mySlot;
+    const priced=new Map();
+    KEEPERS.filter(k=>k.team===rslot).forEach(k=>{const p=findPlayer(k.name); if(p)priced.set(p.id,{price:k.round,keeper:true});});
+    auctionPicks.filter(a=>a.owner===rslot).forEach(a=>priced.set(a.playerId,{price:a.price,keeper:false}));
+    const roster=rosterOf(rslot);
+    const {starterSlots,bench}=slotRosterPlayers(roster, LEAGUE.starters||{});
+    const tag=p=>{const m=priced.get(p.id); return m?`${m.keeper?' <span class="kchip">KEEP</span>':''}</span><b>$${m.price}</b>`:'</span>';};
+    const rows=starterSlots.map(sl=>sl.player
+      ? `<div class="mypick-row"><span class="muted small" style="min-width:52px;display:inline-block">${sl.label}</span><span><span class="pos ${sl.player.pos}">${sl.player.pos}</span> ${sl.player.name}${tag(sl.player)}</div>`
+      : `<div class="mypick-row"><span class="muted small" style="min-width:52px;display:inline-block">${sl.label}</span><span class="muted small">— empty —</span></div>`).join('');
+    const benchRows=bench.length
+      ? `<div class="small muted" style="margin-top:8px;margin-bottom:2px">Bench (${bench.length})</div>`+
+        bench.map(p=>`<div class="mypick-row"><span><span class="pos ${p.pos}">${p.pos}</span> ${p.name}${tag(p)}</div>`).join('')
+      : '';
+    const st=auctionTeamState(rslot);
+    const hdr=`<div class="small muted" style="margin-bottom:6px">$${st.left} left · max bid <b>$${st.maxBid}</b> · ${st.used}/${st.rosterSize} filled</div>`;
+    el('auctionMyRoster').innerHTML = hdr + ((rows+benchRows) || '—');
+  }
   const rtb=el('auctionResultsTable').querySelector('tbody');
   rtb.innerHTML=auctionPicks.length?auctionPicks.map((a,i)=>{const p=PLAYERS.find(x=>x.id===a.playerId);return `<tr><td>${i+1}</td><td>${p?p.name:'?'}</td><td>${p?`<span class="pos ${p.pos}">${p.pos}</span>`:''}</td><td>${SLOT_OWNER[a.owner]||('T'+a.owner)}</td><td>$${a.price}</td><td><button class="btn bad" style="padding:2px 7px" data-aucundo="${i}">×</button></td></tr>`;}).join(''):'<tr><td colspan="6" class="muted small">No auction sales yet.</td></tr>';
   rtb.querySelectorAll('[data-aucundo]').forEach(b=>b.onclick=()=>undoAuctionSale(+b.dataset.aucundo));
@@ -3533,6 +3584,9 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 });
 el('autoKeepers').onclick=autoKeepers;
 el('auctionAwardBtn').onclick=recordAuctionSale;
+if(el('auctionPosFilter'))el('auctionPosFilter').onchange=renderAuctionRoom;
+if(el('auctionSearch'))el('auctionSearch').oninput=renderAuctionRoom;
+if(el('auctionRosterOwner'))el('auctionRosterOwner').onchange=renderAuctionRoom;
 el('auctionSim1').onclick=()=>simAuctionSales(1);
 el('auctionSim5').onclick=()=>simAuctionSales(5);
 el('auctionResetBtn').onclick=()=>{if(confirm('Reset auction purchases but keep the selected keepers?')){resetDraft();saveSetup();}};

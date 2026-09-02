@@ -20,6 +20,49 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🆕 2026-09-02 — **Auction valuation: pause and rethink the approach.** User
+  pushed back on the % -of-budget ceilings: *"Just because I threw out a guess
+  that Bijan won't go for more than $72, doesn't mean either I was right or
+  that that's the market value. The market value can be something like $64 but
+  someone spends $71 on him, that's fine. I also am not sure we should be
+  setting these as a % from these arbitrary figures."* Wants to brainstorm the
+  approach together step by step another time rather than keep tuning it now.
+  **Important distinction he's drawing: market value ≠ what somebody actually
+  pays.** A model that predicts $64 isn't wrong because one manager pays $71 —
+  the sale price includes bidding-war noise the *value* shouldn't. Current
+  fitted curves and ceilings stay in place for now but should be treated as
+  provisional, not as the definitive method. Do not tune further unprompted.
+- 🆕 2026-09-02 — **Replicate Yahoo's Projected $ for our leagues.** User wants
+  Yahoo's projected auction cost as a column, because those numbers are on
+  screen in front of leaguemates while they bid and therefore anchor real
+  behavior. Explicitly: *find it and confirm it first, don't build the column
+  yet* — "so we don't have too many numbers that don't mean anything yet."
+  *Researched 2026-09-02.* Yahoo's projected/average auction cost lives in the
+  Fantasy Sports API under `players;out=draft_analysis`
+  (`average_auction_cost`), and there is **no public path to it**: the API
+  returns 401 without OAuth, the league player-list page is a login wall that
+  renders zero player names client-side, and the public editorial API carries
+  only NFL schedule metadata, no fantasy values. **The good news:**
+  `YAHOO_CLIENT_ID` is already configured in production — `/auth/yahoo/start`
+  returns 403 (the admin-only check) rather than 500 (missing credential), and
+  the credential check runs first. The OAuth scaffolding in `worker.js`
+  (`/auth/yahoo/start`, `/auth/yahoo/callback`, token refresh, KV storage) is
+  already built. So the remaining step is the admin completing the Yahoo
+  consent flow once, then adding a `draft_analysis` fetch. Blocked on the user
+  connecting the account; not built pending their confirmation.
+- ✅ 2026-09-02 — **Auction room layout pass.** Roster panel moved above Team
+  budgets; roster now has an owner dropdown and lays players into starting
+  slots best-ECR-first, matching the snake room (with a header showing money
+  left, max bid and slots filled). Pool table drops ADP for ECR — Market $ is
+  already the auction's version of draft position, so ADP was a duplicate
+  signal in a column. Added a position filter and search to the pool plus a
+  per-position remaining-count strip (the auction equivalent of the snake
+  room's scarcity cues), so "how many RBs are left and how hard should I bid"
+  is answerable at a glance. Team budgets drops the Keep $ / Draft $ split —
+  mid-auction only money left and max bid change a decision.
+- ✅ 2026-09-02 — **Edward's 165/35 split confirmed** by the user (its totals
+  row was missing from the source paste, so it had been computed).
+
 - ✅ 2026-09-01 — **AEOK keepers loaded; auction curves fitted per league.**
   User asked whether the new pricing was live in AEOK with correct values,
   flagged "$43 is too low" there, said Bijan at $80 in Fantastic was still high
