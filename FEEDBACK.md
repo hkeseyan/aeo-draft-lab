@@ -20,6 +20,43 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-09-01 — **AEOK keepers loaded; auction curves fitted per league.**
+  User asked whether the new pricing was live in AEOK with correct values,
+  flagged "$43 is too low" there, said Bijan at $80 in Fantastic was still high
+  (~$72 felt right) and asked whether that was driven by remaining budget, then
+  supplied AEOK's finalized keepers.
+  *AEOK keepers*: 93 across 12 teams, parsed and loaded as `leagueKeepers`.
+  Team names were Yahoo names again, mapped by roster content — all 12
+  unambiguous, zero cost mismatches, and 11 of 12 reconciled against their
+  stated salary/remaining totals. **Team 12 ("Edward's Victorious Team") had no
+  totals row in the paste**; its $165 committed / $35 left is computed from the
+  keeper list. `ownerSlot` set to the sheet's nomination order.
+  *The "$43 too low" was a real bug, not a judgment call.* AEOK was using
+  Fantastic's fitted decay (50), which put AEOK's top player at exactly $43
+  while that league's own history says $58. Two causes: (a) the auction settings
+  weren't in `applyLeagueProfile()`'s allow-list, so per-league values silently
+  fell back to defaults — same class of bug as `leagueKeepers` last time; and
+  (b) a one-parameter exponential can't fit both leagues. Fitting revealed they
+  are genuinely different markets: Fantastic max $64/median $6/25% at $1-2,
+  AEOK max $58/median $8/**11%** at $1-2 — AEOK is far flatter, since superflex
+  with 18 roster spots spreads money over more rosterable players.
+  *Fix*: added a second shape parameter (stretched exponential,
+  `exp(-(rank/decay)^shape)`), fitted per league against their own realized
+  prices — Fantastic decay 42/shape 0.90 (reproduces $66/$6/26.3%), AEOK decay
+  34/shape 0.70 ($53/$7/9.3%). Per-league ceilings too: Fantastic 36% ($72,
+  above its realized 32% to allow for the thinned elite tier), AEOK 32% ($64).
+  *The hard clip had to become a soft one*: clipping put four different players
+  at exactly $72, destroying the ordering that a bid decision actually turns on.
+  Replaced with a monotonic soft knee — and it must be applied **once**, since
+  iterating (squash → redistribute → squash) collapsed seven players onto $58.
+  *Answer to "is it the remaining budget?"* **No — the opposite.** Fantastic has
+  $1346 over 118 slots = $11.40/slot, slightly *less* than a full auction's
+  $12.50. The premium is scarcity: five of the top ten (Chase, Jefferson,
+  Gibbs, McCaffrey, Lamb) are kept, so whoever is best available absorbs a much
+  larger share of the curve. AEOK shows the same mechanic in reverse — $8.10 per
+  slot, well under normal, so its prices sit below the ceiling unaided.
+  Result: Bijan $119 → $80 → **$71**; AEOK top $43 → **$51**.
+
 - 🆕 2026-08-31 — **Carry the auction valuation work over to BASKETBALL auctions
   in ~1-2 months.** User: the lessons here will translate — not identically, but
   with a lot in common — and wants to leverage this work rather than restart

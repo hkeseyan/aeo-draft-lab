@@ -1614,6 +1614,15 @@ const LEAGUES_DEFAULT = {
     scoringLabel:'Full PPR · 6-pt pass TD', draftDateLabel:'TBD', keeperDeadlineLabel:'Aug 30 · 12:00 AM PDT',
     starters:{QB:1,RB:2,WR:2,TE:1,FLEX:2,DST:1}, flexEligible:['RB','WR','TE'],
     maxKeepers:null, keeperCostType:'dollar', auctionBudget:200, rosterSize:16, irSlots:2, minBid:1,
+    // Fitted to this league's own 106 realized keeper prices (max $64, median $6,
+    // 25.5% at $1-2): reproduces $66 / $6 / 26.3% in a full auction.
+    auctionDecay:42, auctionShape:0.90,
+    // Ceiling 36% of budget = $72. Realized history tops out at 32% ($64); the
+    // extra headroom covers the thinned elite tier (five of the top ten are kept,
+    // so whoever is best available draws a scarcity premium) without letting one
+    // player eat a share no manager here would actually commit — at $80 a team
+    // is left with roughly $16 for seven more slots.
+    auctionMaxPriceShare:0.36,
     yahooLeagueId:'835427', yahooLeagueUrl:'https://football.fantasysports.yahoo.com/league/fantasticauctiondynasty',
     sourceSheetUrl:'https://docs.google.com/spreadsheets/d/1iCk8oi6RtRgJd_gxPDST9k_tC1NBe2i54nWOVglg8e4/edit',
     keeperRules:{annualIncrease:1, undraftedFirstKeeperCost:2, costPersistsThroughTransactions:true, reservePerOpenRosterSpot:1, irCountsAtDraft:false},
@@ -1759,6 +1768,15 @@ const LEAGUES_DEFAULT = {
     scoringLabel:'Full PPR · Superflex · bonuses', draftDateLabel:'Sep 8 · 9:00 PM PDT', keeperDeadlineLabel:'Sep 8 · 12:00 AM PDT',
     starters:{QB:1,RB:2,WR:2,TE:1,FLEX:2,SUPERFLEX:1}, flexEligible:['RB','WR','TE'],
     maxKeepers:null, keeperCostType:'dollar', auctionBudget:200, rosterSize:18, irSlots:2, minBid:1, nominationSeconds:30, bidSeconds:20,
+    // Fitted to this league's own 93 realized keeper prices (max $58, median $8,
+    // 11% at $1-2): reproduces $53 / $7 / 9.3%. Flatter than Fantastic — superflex
+    // with 18 roster spots spreads money over more genuinely rosterable players,
+    // so there is far less $1-2 filler.
+    auctionDecay:34, auctionShape:0.70,
+    // Ceiling 32% of budget = $64, just above this league's realized max of $58
+    // (29%). Not currently binding — the money left per slot is below a normal
+    // auction, so prices sit under it anyway — but it guards the same failure.
+    auctionMaxPriceShare:0.32,
     yahooLeagueId:'868349', yahooLeagueUrl:'https://football.fantasysports.yahoo.com/league/aeokauction',
     sourceSheetUrl:'https://docs.google.com/spreadsheets/d/1HUgdOEbgPfLoYgiSLWzSE6xyzrOmJyb531ULm5mWfjo/edit',
     keeperRules:{annualIncrease:1, undraftedFirstKeeperCost:2, undraftedQbFirstKeeperCost:6, costPersistsThroughTransactions:true, reservePerOpenRosterSpot:1, irCountsAtDraft:false},
@@ -1767,7 +1785,120 @@ const LEAGUES_DEFAULT = {
     rankSourceLabel:'2026 Superflex market ADP overrides + PPR baseline',
     superflexAdpOverrides:{'Josh Allen':3.0,'Drake Maye':10.7,'Lamar Jackson':9.6,'Joe Burrow':14.5,'Jayden Daniels':17.9,'Caleb Williams':24.2,'Jalen Hurts':28.5,'Justin Herbert':32.0,'Jaxson Dart':37.2,'Dak Prescott':40.0,'Trevor Lawrence':41.7,'Patrick Mahomes II':43.2,'Bo Nix':46.8,'Brock Purdy':53.5,'Jared Goff':61.9,'Matthew Stafford':64.3,'Jordan Love':67.6,'Baker Mayfield':71.9,'Kyler Murray':82.3,'Tyler Shough':84.2,'Sam Darnold':85.5,'C.J. Stroud':95.8,'Cam Ward':98.9,'Fernando Mendoza':103.8,'Malik Willis':106.2,'Daniel Jones':109.9,'Bryce Young':114.2,'Jacoby Brissett':143.1,'Aaron Rodgers':143.6,'Geno Smith':145.3,'Tua Tagovailoa':179.1,'Shedeur Sanders':184.3,'Kirk Cousins':185.4,'Deshaun Watson':210.6,'Michael Penix Jr.':215.8,'Garrett Nussmeier':216.2,'Carson Beck':220.2,'Ty Simpson':226.8,'Will Howard':240.9,'J.J. McCarthy':245.4},
     owners:['Jiro','Sako','Savada','Haik','Robert','David','Aren','Edward','Nick','Taron','Mher','Hovo'],
-    meOwner:'Hovo', ownerSlot:{Jiro:1,Sako:2,Savada:3,Haik:4,Robert:5,David:6,Aren:7,Edward:8,Nick:9,Taron:10,Mher:11,Hovo:12},
+    meOwner:'Hovo', // Slots are the league's real auction nomination order, per the keeper sheet.
+    ownerSlot:{Savada:1,Nick:2,David:3,Sako:4,Taron:5,Jiro:6,Mher:7,Hovo:8,Haik:9,Aren:10,Robert:11,Edward:12},
+    // Keepers locked in for 2026 (Yahoo keeper sheet): 93 across all 12 teams.
+    // Costs live in rostersRaw's 4th field and were verified to match the sheet
+    // exactly; 11 of 12 teams also reconciled against their stated salary/remaining
+    // totals (team 12's totals row was missing from the source paste, so its $165
+    // committed / $35 left is computed from the keeper list itself).
+    leagueKeepers:[
+      // Savada — "Riley Reid" · nominates 1 · $122 committed, $78 left
+      "Savada|Justin Herbert",
+      "Savada|Rhamondre Stevenson",
+      "Savada|Jakobi Meyers",
+      "Savada|DeVonta Smith",
+      "Savada|Brock Purdy",
+      "Savada|Mark Andrews",
+      "Savada|Travis Etienne Jr.",
+      "Savada|Bijan Robinson",
+      "Savada|Stefon Diggs",
+      // Nick — "Tight End U" · nominates 2 · $168 committed, $32 left
+      "Nick|Sam Darnold",
+      "Nick|Sam LaPorta",
+      "Nick|Shedeur Sanders",
+      "Nick|Ja'Marr Chase",
+      "Nick|Aaron Rodgers",
+      "Nick|Kyle Pitts Sr.",
+      "Nick|Zach Charbonnet",
+      "Nick|David Montgomery",
+      "Nick|Michael Wilson",
+      "Nick|Malik Nabers",
+      // David — "Apush Lakotner" · nominates 3 · $64 committed, $136 left
+      "David|J.K. Dobbins",
+      "David|Chris Godwin Jr.",
+      "David|Breece Hall",
+      "David|Kyren Williams",
+      // Sako — "SeñorMarquez" · nominates 4 · $147 committed, $53 left
+      "Sako|Tyler Shough",
+      "Sako|Marvin Harrison Jr.",
+      "Sako|Christian McCaffrey",
+      "Sako|Ashton Jeanty",
+      "Sako|Patrick Mahomes",
+      // Taron — "Constant Consonant" · nominates 5 · $111 committed, $89 left
+      "Taron|Lamar Jackson",
+      "Taron|Colston Loveland",
+      "Taron|Rachaad White",
+      "Taron|Jared Goff",
+      "Taron|A.J. Brown",
+      "Taron|Javonte Williams",
+      "Taron|Cam Skattebo",
+      // Jiro — "Zetas ese pt. 2" · nominates 6 · $88 committed, $112 left
+      "Jiro|Jordan Love",
+      "Jiro|Jayden Daniels",
+      "Jiro|Rome Odunze",
+      "Jiro|Daniel Jones",
+      "Jiro|Bryce Young",
+      "Jiro|Terry McLaurin",
+      "Jiro|Brian Thomas Jr.",
+      "Jiro|Bucky Irving",
+      "Jiro|Ladd McConkey",
+      "Jiro|Tucker Kraft",
+      // Mher — "GIBbs me a BO job" · nominates 7 · $167 committed, $33 left
+      "Mher|Michael Penix Jr.",
+      "Mher|Geno Smith",
+      "Mher|Jaylen Waddle",
+      "Mher|Bo Nix",
+      "Mher|Christian Watson",
+      "Mher|Tyler Warren",
+      "Mher|Kenneth Walker III",
+      "Mher|Jahmyr Gibbs",
+      "Mher|Tetairoa McMillan",
+      "Mher|Garrett Wilson",
+      // Hovo — "Pennybags" · nominates 8 · $107 committed, $93 left
+      "Hovo|Josh Allen",
+      "Hovo|Malik Willis",
+      "Hovo|Nico Collins",
+      "Hovo|De'Von Achane",
+      // Haik — "Rub my Chubb" · nominates 9 · $19 committed, $181 left
+      "Haik|Blake Corum",
+      "Haik|AJ Barner",
+      "Haik|Chris Olave",
+      "Haik|Baker Mayfield",
+      // Aren — "dolla dolla bling bling yall" · nominates 10 · $160 committed, $40 left
+      "Aren|Drake Maye",
+      "Aren|Kayshon Boutte",
+      "Aren|Tyler Allgeier",
+      "Aren|Rashee Rice",
+      "Aren|Amon-Ra St. Brown",
+      "Aren|Brock Bowers",
+      "Aren|Jaxson Dart",
+      "Aren|Jaxon Smith-Njigba",
+      "Aren|Chase Brown",
+      "Aren|Jaylen Warren",
+      "Aren|Zay Flowers",
+      // Robert — "Pickle Rick" · nominates 11 · $89 committed, $111 left
+      "Robert|Dak Prescott",
+      "Robert|Jonathon Brooks",
+      "Robert|Luther Burden III",
+      "Robert|Jameson Williams",
+      "Robert|George Kittle",
+      "Robert|Matthew Stafford",
+      "Robert|James Cook III",
+      "Robert|Harold Fannin Jr.",
+      "Robert|D'Andre Swift",
+      // Edward — "Edward's Victorious Team" · nominates 12 · $165 committed, $35 left
+      "Edward|Trevor Lawrence",
+      "Edward|Kyle Monangai",
+      "Edward|Quinshon Judkins",
+      "Edward|Puka Nacua",
+      "Edward|Bhayshul Tuten",
+      "Edward|Joe Burrow",
+      "Edward|Tee Higgins",
+      "Edward|Trey McBride",
+      "Edward|Omarion Hampton",
+      "Edward|George Pickens",
+    ],
     myLocked:[], myKeepers:[], rostersRaw:ROSTERS_RAW_AEOK_AUCTION, playersCsv:PLAYERS_CSV_AEO+'\n'+AUCTION_EXTRA_PLAYERS_CSV,
   },
 };
@@ -1901,30 +2032,55 @@ function adpRoundOf(name){const p=findPlayer(name); return p?Math.ceil(p.adp/LEA
 // and 46% of the roster at $1-2. Tunable per league (see auctionDecay) because
 // a different sport or format has a different shape.
 const AUCTION_DECAY_DEFAULT=50;
+// Curve shape. A plain exponential (shape 1) has only one knob, and one knob
+// can't hit both a sharp peak and a fat middle: fitting AEOK's median forced its
+// top player to $43 when that league's own history says $58. A stretched
+// exponential, exp(-(rank/decay)^shape), separates the two — below 1 it drops
+// hard at the very top and then flattens, which is what a real auction looks
+// like. Fitted per league against their own realized prices; 1 keeps the old
+// pure-exponential behavior for any league without a fit.
+const AUCTION_SHAPE_DEFAULT=1;
 // Nobody spends most of a budget on one player. This league's realized ceiling
 // is $64 = 32% of a $200 budget; 40% leaves headroom for genuine keeper-driven
 // inflation while still ruling out the runaway values an uncapped curve
 // produced. Money clipped here is redistributed, never destroyed.
 const AUCTION_MAX_PRICE_SHARE_DEFAULT=0.40;
 const auctionDecay=()=>LEAGUE.auctionDecay||AUCTION_DECAY_DEFAULT;
+const auctionShape=()=>LEAGUE.auctionShape||AUCTION_SHAPE_DEFAULT;
 const auctionPriceCap=()=>Math.max(2,Math.round((LEAGUE.auctionBudget||200)*(LEAGUE.auctionMaxPriceShare||AUCTION_MAX_PRICE_SHARE_DEFAULT)));
 function auctionWeight(p){
   const posMult={QB:LEAGUE.superflex?1.0:0.72,RB:1.08,WR:1.0,TE:0.88,K:0.12,DST:0.16};
-  return Math.exp(-Math.max(0,(p.adp||999)-1)/auctionDecay())*(posMult[p.pos]||0.5);
+  return Math.exp(-Math.pow(Math.max(0,(p.adp||999)-1)/auctionDecay(), auctionShape()))*(posMult[p.pos]||0.5);
 }
-// Clip prices to the ceiling and push the clipped dollars back onto everyone
-// below it, so the pool still adds up to the money that actually has to be spent.
+// Squash prices toward the ceiling and push the freed dollars back onto everyone
+// below it, so the pool still sums to the money that actually has to be spent.
+//
+// The squash is soft, not a clip. A hard clip put four different players at
+// exactly $72 — it enforced the ceiling but destroyed the ordering among the
+// very players a bid decision is about. Below the knee nothing moves; above it
+// values compress smoothly and approach the cap without reaching it, so the top
+// tier stays ranked and distinct.
+function softCeiling(v,cap){
+  const knee=cap*0.75;
+  if(v<=knee)return v;
+  return knee+(cap-knee)*Math.tanh((v-knee)/(cap-knee));
+}
 function applyAuctionCap(entries,weights,cap,min){
-  for(let pass=0; pass<40; pass++){
-    let over=0;
-    entries.forEach((v,i)=>{ if(v>cap){over+=v-cap; entries[i]=cap;} });
-    if(over<=0)break;
+  // Deliberately a single pass. Iterating — squash, redistribute, squash again —
+  // pushes each redistribution back over the knee and re-compresses it, and the
+  // whole top tier converges onto one number (seven players at $58). softCeiling
+  // is monotonic, so applied once it preserves the ordering entirely.
+  const knee=cap*0.75;
+  let freed=0;
+  const out=entries.map(v=>{ const sv=softCeiling(v,cap); freed+=v-sv; return sv; });
+  if(freed>0.5){
+    // The freed dollars go only to players below the knee, who are nowhere near
+    // the ceiling and can absorb them without needing to be squashed in turn.
     const room=[]; let rw=0;
-    entries.forEach((v,i)=>{ if(v<cap){room.push(i); rw+=weights[i];} });
-    if(!room.length||rw<=0)break;
-    room.forEach(i=>{ entries[i]=Math.min(cap, entries[i]+Math.round(over*weights[i]/rw)); });
+    out.forEach((v,i)=>{ if(v<knee){room.push(i); rw+=weights[i];} });
+    if(room.length&&rw>0) room.forEach(i=>{ out[i]+=freed*weights[i]/rw; });
   }
-  return entries.map(v=>Math.max(min,v));
+  return out.map(v=>Math.max(min,Math.round(v)));
 }
 function auctionEligible(p){
   if(p.pos==='K' && !(LEAGUE.starters.K||0))return false;
@@ -3665,6 +3821,13 @@ function applyLeagueProfile(id){
     draftType:profile.draftType||'snake', leagueType:profile.leagueType||'keeper', superflex:!!profile.superflex,
     maxKeepers:(profile.maxKeepers!=null?profile.maxKeepers:null), keeperCostType:profile.keeperCostType||'round',
     leagueKeepers:profile.leagueKeepers||[],   // keepers the league itself locked in
+    // Auction valuation settings. These are per-league on purpose — each league's
+    // curve is fitted to its own realized prices — so they must be carried through
+    // here or the fitted values silently fall back to the generic defaults.
+    auctionDecay:profile.auctionDecay||null, auctionShape:profile.auctionShape||null,
+    auctionMaxPriceShare:profile.auctionMaxPriceShare||null,
+    keeperHorizon:(profile.keeperHorizon!=null?profile.keeperHorizon:null),
+    keeperRules:profile.keeperRules||{},
     auctionBudget:profile.auctionBudget||200,rosterSize:profile.rosterSize||profile.rounds||16,irSlots:profile.irSlots||0,minBid:profile.minBid||1,
     scoringLabel:profile.scoringLabel||'TBD', draftDateLabel:profile.draftDateLabel||'TBD', keeperDeadlineLabel:profile.keeperDeadlineLabel||'TBD',
   };

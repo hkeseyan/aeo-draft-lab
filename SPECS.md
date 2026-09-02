@@ -124,19 +124,56 @@ $1/yr escalation) from the same 14 managers, budget and format — the best
 available ground truth. Their distribution: max $64 (32% of a $200 budget),
 median $6, 25.5% of kept players at $1-2.
 
-Price decays exponentially with ADP; the decay constant (`auctionDecay`,
-default 50) was fit to reproduce that distribution. In a full 14-team/$200
+Price decays with ADP as a **stretched exponential**,
+`exp(-(rank/auctionDecay)^auctionShape)`. The second parameter matters: a plain
+exponential has one knob, and one knob cannot produce both a sharp peak and a
+fat middle. Fitting AEOK's median with a single knob forced its top player to
+$43 when that league's own history says $58. Both parameters are fitted per
+league against its own realized prices, because the two leagues are genuinely
+different markets — Fantastic peaks at $64 with a median of $6 and 25% of the
+roster at $1-2, while AEOK peaks at $58 with a median of $8 and only 11% at
+$1-2, since superflex with 18 roster spots spreads money across more genuinely
+rosterable players and leaves far less $1-2 filler.
+
+| league | decay | shape | fitted max / median / $1-2 | observed |
+|---|---|---|---|---|
+| Fantastic | 42 | 0.90 | $66 / $6 / 26.3% | $64 / $6 / 25.5% |
+| AEOK | 34 | 0.70 | $53 / $7 / 9.3% | $58 / $8 / 11.0% |
+
+A league with no fit falls back to decay 50, shape 1 (plain exponential).
+
+The historical note: the decay constant (`auctionDecay`, default 50) was first
+fit alone to reproduce Fantastic's distribution. In a full 14-team/$200
 auction it yields max $59, median $6, and 25.9% at $1-2 — three of four
 observed metrics within noise. The original value of 35 was far too
 concentrated: it put the top player at $81 in a *full* auction, 46% of the
 roster at $1-2, and after rescaling to a keeper-thinned pool produced $119 for
 the top available player, which no manager would ever bid.
 
-`auctionMaxPriceShare` (default 0.40) caps any single player at a share of the
-budget. The league's realized ceiling is 32%; 40% leaves headroom for genuine
+`auctionMaxPriceShare` caps any single player at a share of the budget, set per
+league from its own history: Fantastic 0.36 ($72, above its realized 32% to
+allow for a thinned elite tier), AEOK 0.32 ($64, just above its realized 29%).
+
+The cap is a **soft knee, not a clip**, and is applied exactly once. Clipping
+put four different players at exactly $72 — it enforced the ceiling but
+destroyed the ordering among precisely the players a bid decision turns on.
+`softCeiling()` is monotonic, so values above the knee compress smoothly toward
+the cap while staying ranked and distinct. It must not be iterated: squash →
+redistribute → squash pushes each redistribution back over the knee and
+converges the whole top tier onto one number (seven players at $58 in testing).
+Freed dollars go once to players below the knee, who can absorb them without
+needing to be squashed in turn. The league's realized ceiling is 32%; 40% leaves headroom for genuine
 keeper-driven inflation while ruling out runaway values. Clipped dollars are
 redistributed across the rest of the pool (`applyAuctionCap`), never destroyed,
 so the priced pool still sums to the money that actually has to be spent.
+
+**Scarcity, not budget, drives the keeper-league premium** — worth knowing
+because the intuition runs the other way. Fantastic has $1,346 left over 118
+slots, $11.40 per slot, slightly *less* than a full auction's $12.50. Prices at
+the top are nonetheless higher than a full auction's because five of the top ten
+players are kept, so whoever is best available absorbs a much larger share of
+the curve. AEOK demonstrates the same mechanic in reverse: $8.10 per slot, well
+under normal, and its prices sit below the ceiling without it ever binding.
 
 Rescaling to *remaining* money is deliberate and correct: those dollars do get
 spent, and a keeper league that locks up half its cash genuinely inflates
