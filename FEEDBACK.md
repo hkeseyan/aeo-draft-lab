@@ -20,6 +20,50 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-09-02 — **Where do I connect Yahoo? Getting a 401
+  `oauth_problem="additional_authorization_required"`.** The button is in the
+  **Leagues** tab → *Connect Yahoo (in progress)* → **Connect Yahoo account**
+  (admin only). That error is *not* a missing or expired token — it means the
+  Yahoo app itself was never granted fantasy access. Fix it in the Yahoo
+  Developer console: open the app, tick **Fantasy Sports → Read** under API
+  Permissions, save, then Connect again to re-consent. The app now says this in
+  the Leagues tab, and `/api/yahoo/leagues` detects that specific Yahoo error
+  and returns the remedy instead of a bare 502.
+- ✅ 2026-09-02 — **Auction values need to fall off sooner and reach $1-3
+  faster.** *"No one is going to be bidding $9 on Cam Ward or $4 on Jacoby
+  Brissett in a single starting QB league. Brian Robinson Jr, Kamara, Pacheco
+  should be in the $2 range already, with Emmett Johnson, Jaydon Blue, Emmanuel
+  Wilson tier being definitely no more than $1."* Root cause was structural, not
+  a knob: the price curve read overall ADP only, so the 25th quarterback in a
+  1-QB league still looked like the ~150th player overall and drew real money.
+  Prices are now **value over replacement** — each position's shelf is derived
+  from the league's own starters/flex/superflex/bench, and everything at or past
+  it is worth the minimum bid. Fantastic now prices Cam Ward, Brissett, Tre'
+  Harris and Colby Parkinson at $1, Emmett Johnson/Jaydon Blue at $2, and its
+  $4-9 band shrank from 46 players to 21. Two caveats to check: Brian Robinson
+  Jr. and Kamara land at $5 rather than $2, and **AEOK is superflex**, where
+  Cam Ward at $10 is arguably right — the $9 you saw was probably Fantastic on
+  production running the *generic* curve, because its fitted settings never
+  reached the cloud profile (see next entry).
+- ✅ 2026-09-02 — **Fitted auction settings never reached production.** Cloud
+  league profiles are deliberately never overwritten by code defaults, so
+  `auctionDecay`/`auctionShape`/`auctionMaxPriceShare`/`keeperHorizon`/
+  `keeperRules` — all added after both auction profiles were first seeded into
+  KV — were silently absent live, and production was pricing off the generic
+  defaults. Same class of bug as `leagueKeepers` on 2026-08-31. The one-time
+  backfill is now field-by-field over a list rather than special-cased to one
+  field, and still only fills a value the cloud copy doesn't have.
+- ✅ 2026-09-02 — **Three-tier green/yellow/red positional counts.** The
+  "how many left" strip in the auction room now reads *top tier / still
+  rosterable / past replacement*. Boundaries are detected, never fixed dollars,
+  per the explicit ask (*"if I say $30+ is green, then I don't want to leave a
+  guy out that is $29"*): **red** is everyone past the position's replacement
+  level given who's already rostered, **green** is everyone above the single
+  biggest price cliff in the top half of what remains, **yellow** is the middle.
+  It re-reads the live pool, so green narrows on its own — Fantastic currently
+  shows RB green as exactly the Bijan/Barkley/Jeanty/Achane/Walker/Jacobs/Love/
+  Hall tier, and QB green as Dak alone.
+
 - 🆕 2026-09-02 — **Auction valuation: pause and rethink the approach.** User
   pushed back on the % -of-budget ceilings: *"Just because I threw out a guess
   that Bijan won't go for more than $72, doesn't mean either I was right or

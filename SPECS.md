@@ -142,6 +142,49 @@ rosterable players and leaves far less $1-2 filler.
 
 A league with no fit falls back to decay 50, shape 1 (plain exponential).
 
+**Prices are value over replacement, not raw rank.** The curve above sets the
+*shape*, but a rank curve alone has no idea that a league only rosters so many
+players at a position: in a one-QB league the 25th quarterback still looked like
+the ~150th player overall and drew real money, which nobody would ever bid.
+Every price is therefore the player's curve weight **minus the curve weight of
+the last rosterable player at his position**, floored at zero — so everything at
+or past replacement is worth exactly the minimum bid, and the tier just above it
+compresses into $1-3 instead of tapering gently through a fat $4-9 middle.
+
+Replacement level comes from the league's own settings, not a tuning knob
+(`auctionRosterDemand`): `teams x starters` at each position, plus flex slots
+split RB .42 / WR .46 / TE .12 among the flex-eligible positions, plus superflex
+slots going 85% to quarterbacks, plus every bench spot divided among QB/RB/WR/TE
+(a superflex league leans more of it to QB). Kickers and defenses get exactly one
+per team — nobody benches them. For Fantastic that is 26 QB / 76 RB / 82 WR /
+26 TE / 14 DST, which sums to the league's 224 roster spots.
+
+The effect on Fantastic: Cam Ward, Jacoby Brissett, Tre' Harris and Colby
+Parkinson all price at $1; Emmett Johnson and Jaydon Blue at $2; the $4-9 band
+fell from 46 players to 21. Money is conserved, so the top tier rises slightly
+and the ceiling does more of the work than before.
+
+### Auction scarcity tiers (green / yellow / red)
+
+The auction room's per-position "how many left" strip reads **top tier / still
+rosterable / past replacement**. The boundaries are read off the remaining pool
+rather than set at fixed dollar amounts — deliberately, because a $29 player
+sitting next to a cluster of $30s belongs with them, not with the $4-16 group
+below (`auctionPosTiers`):
+
+- **red** — past this position's replacement level once everyone already
+  rostered there is subtracted. The literal waiver-wire tail.
+- **green** — above the single biggest price drop in the *top half* of what
+  remains. Only the top half is searched, because the largest raw drop across
+  the whole list is almost always the $2 -> $1 step at the very bottom, which
+  says nothing about who the premium players are.
+- **yellow** — everything in between.
+
+Because it re-reads the live pool on every render, green narrows on its own as
+the elite tier is bought, until eventually one player is green by himself. As of
+the current Fantastic board, green at RB is exactly the Bijan / Barkley / Jeanty
+/ Achane / Walker / Jacobs / Love / Hall tier, and green at QB is Dak alone.
+
 The historical note: the decay constant (`auctionDecay`, default 50) was first
 fit alone to reproduce Fantastic's distribution. In a full 14-team/$200
 auction it yields max $59, median $6, and 25.9% at $1-2 — three of four

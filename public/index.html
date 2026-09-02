@@ -49,6 +49,10 @@
   .pos.QB{background:var(--qb)} .pos.RB{background:var(--rb)} .pos.WR{background:var(--wr)}
   .pos.TE{background:var(--te)} .pos.K{background:var(--k)} .pos.DST{background:var(--dst)}
   .val-good{color:var(--accent2);font-weight:700} .val-bad{color:var(--bad)}
+  /* Auction scarcity tiers: how much of the position that is left is still worth
+     real money. Boundaries are detected from the remaining pool, never fixed
+     dollar thresholds — see auctionPosTiers(). */
+  .tier-g{color:var(--accent2);font-weight:700} .tier-y{color:var(--warn);font-weight:700} .tier-r{color:var(--bad);font-weight:700}
   .pick-btn{background:var(--accent2);color:#04210f;border:none;border-radius:6px;padding:4px 8px;font-weight:700;cursor:pointer;font-size:12px}
   .kchip{font-size:10px;color:var(--warn);border:1px solid var(--warn);border-radius:10px;padding:0 5px;margin-left:4px}
   /* grid-template-columns is set inline per-league (team count varies); every
@@ -222,6 +226,10 @@
               <input type="text" id="auctionSearch" placeholder="search player…" style="flex:1;min-width:120px">
               <span class="small muted" id="auctionPosCounts"></span>
             </div>
+            <p class="small muted" style="margin:-4px 0 8px">Counts left at each position:
+              <span class="tier-g">top tier</span> / <span class="tier-y">still rosterable</span> /
+              <span class="tier-r">past replacement</span>. The split is read off the remaining
+              pool's own price cliffs, so it moves as players come off the board.</p>
             <div class="scroll">
               <table id="auctionPoolTable"><thead><tr><th>Market $</th><th>Target $</th><th>ECR</th><th>Pos</th><th>Player</th><th>Team</th><th></th></tr></thead><tbody></tbody></table>
             </div>
@@ -429,7 +437,8 @@
     </div>
     <div class="card">
       <h2>Connect Yahoo (in progress)</h2>
-      <p class="small muted">OAuth handshake works; the roster-import mapping isn't built yet. "List my leagues" is a diagnostic to see what Yahoo returns.</p>
+      <p class="small muted">This is where Yahoo gets connected — admin only, one grant covers every Yahoo league. Click <b>Connect Yahoo account</b>, approve in the tab that opens, then come back and click <b>List my leagues</b> (a diagnostic to see what Yahoo returns; the roster-import mapping isn't built yet).</p>
+      <p class="small muted">If listing fails with <code>additional_authorization_required</code>, the token is fine but the Yahoo app itself was never granted fantasy access: open the app in the Yahoo Developer console, tick <b>Fantasy Sports → Read</b> under API Permissions, save, then Connect again to re-consent.</p>
       <div class="row">
         <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account</button>
         <button class="btn ghost" id="yahooListBtn">List my leagues</button>
@@ -2091,6 +2100,55 @@ function applyAuctionCap(entries,weights,cap,min){
   }
   return out.map(v=>Math.max(min,Math.round(v)));
 }
+// How many players at each position the league as a whole will actually roster.
+// This is the auction's replacement level, and it is the thing that was missing:
+// a pure rank curve gives the 25th quarterback in a one-QB league real money
+// because his overall ADP is only ~150, when in fact nobody bids on him at all.
+// Demand is derived from the league's own settings — starters, flex, superflex,
+// bench — not from a tuning knob, so it moves correctly between formats.
+const AUCTION_FLEX_SHARE={RB:0.42,WR:0.46,TE:0.12};
+const AUCTION_SUPERFLEX_SHARE={QB:0.85,RB:0.06,WR:0.07,TE:0.02};
+function auctionRosterDemand(){
+  const T=LEAGUE.teams||12, S=LEAGUE.starters||{};
+  const need={QB:0,RB:0,WR:0,TE:0,K:0,DST:0};
+  Object.keys(need).forEach(pos=>{ need[pos]=T*(+S[pos]||0); });
+  const flex=T*(+S.FLEX||0);
+  if(flex>0){
+    const elig=(LEAGUE.flexEligible||['RB','WR','TE']).filter(p=>AUCTION_FLEX_SHARE[p]);
+    const tot=elig.reduce((n,p)=>n+AUCTION_FLEX_SHARE[p],0);
+    if(tot>0)elig.forEach(p=>{ need[p]+=flex*AUCTION_FLEX_SHARE[p]/tot; });
+  }
+  const sflex=T*(+S.SUPERFLEX||0);
+  if(sflex>0)Object.keys(AUCTION_SUPERFLEX_SHARE).forEach(p=>{ need[p]+=sflex*AUCTION_SUPERFLEX_SHARE[p]; });
+  // Bench. Kickers and defenses get exactly one each — nobody benches them — so
+  // every bench spot goes to the four positions people actually stockpile.
+  const startersPerTeam=Object.values(S).reduce((n,v)=>n+(+v||0),0);
+  const bench=T*Math.max(0,(LEAGUE.rosterSize||LEAGUE.rounds||16)-startersPerTeam);
+  const share=LEAGUE.superflex?{QB:0.14,RB:0.35,WR:0.41,TE:0.10}:{QB:0.12,RB:0.37,WR:0.42,TE:0.09};
+  if(bench>0)Object.keys(share).forEach(p=>{ need[p]+=bench*share[p]; });
+  Object.keys(need).forEach(p=>{ need[p]=Math.round(need[p]); });
+  return need;
+}
+// The weight of the last rosterable player at each position — everything at or
+// below it is worth the minimum bid and nothing more.
+function auctionReplacementWeights(){
+  const need=auctionRosterDemand(), out={};
+  const byPos={};
+  PLAYERS.filter(auctionEligible).forEach(p=>{ (byPos[p.pos]=byPos[p.pos]||[]).push(p); });
+  Object.keys(need).forEach(pos=>{
+    const list=(byPos[pos]||[]).slice().sort((a,b)=>(a.adp||999)-(b.adp||999));
+    const n=need[pos];
+    // Past the end of the list there is no replacement player to subtract, so
+    // the shelf sits at the worst player we know about.
+    const repl=list.length?list[Math.min(list.length-1,Math.max(0,n-1))]:null;
+    out[pos]=repl?auctionWeight(repl):0;
+  });
+  return out;
+}
+// Value above replacement, which is what a dollar in an auction actually buys.
+// Subtracting the shelf is why prices now fall off a cliff near the end of the
+// rosterable pool instead of tapering gently through a fat $4-9 middle.
+function auctionSurplus(p,repl){ return Math.max(0, auctionWeight(p)-(repl[p.pos]||0)); }
 function auctionEligible(p){
   if(p.pos==='K' && !(LEAGUE.starters.K||0))return false;
   if(p.pos==='DST' && !(LEAGUE.starters.DST||0))return false;
@@ -2101,7 +2159,8 @@ function auctionFallbackValues(){
   const min=LEAGUE.minBid||1, slots=(LEAGUE.rosterSize||LEAGUE.rounds||16)*LEAGUE.teams;
   const pool=PLAYERS.filter(auctionEligible).slice().sort((a,b)=>a.adp-b.adp).slice(0,slots);
   const extra=Math.max(0,(LEAGUE.auctionBudget||200)*LEAGUE.teams-slots*min);
-  const wts=pool.map(auctionWeight), sum=wts.reduce((n,w)=>n+w,0)||1;
+  const repl=auctionReplacementWeights();
+  const wts=pool.map(p=>auctionSurplus(p,repl)), sum=wts.reduce((n,w)=>n+w,0)||1;
   let vals=pool.map((p,i)=>Math.max(min,Math.round(min+extra*wts[i]/sum)));
   vals=applyAuctionCap(vals,wts,auctionPriceCap(),min);
   pool.forEach((p,i)=>out.set(p.id,vals[i]));
@@ -2570,6 +2629,43 @@ function simAuctionSale(){
   auctionPicks.push({playerId:p.id,owner:winner.slot,price});p.drafted=true;return true;
 }
 function simAuctionSales(n){for(let i=0;i<n;i++){if(!simAuctionSale())break;}renderAuctionRoom();saveSetup();}
+// Split what's left at a position into three tiers, from the shape of the
+// remaining pool rather than from fixed dollar cut-offs — a $29 player next to a
+// cluster of $30s belongs with them, not with the $4-16 group below.
+//
+//  red    — past the point where the league will still roster this position at
+//           all. That's replacement level (auctionRosterDemand) minus everyone
+//           already rostered there, so it's the literal waiver-wire tail.
+//  green  — above the biggest price cliff in the top half of what remains. As
+//           the elite tier gets bought this narrows on its own, which is the
+//           point: eventually one player is green by himself.
+//  yellow — everything between.
+function auctionPosTiers(availByPos, valOf){
+  const need=auctionRosterDemand(), out={};
+  const taken={};
+  KEEPERS.forEach(k=>{const p=findPlayer(k.name); if(p)taken[p.pos]=(taken[p.pos]||0)+1;});
+  auctionPicks.forEach(a=>{const p=PLAYERS.find(x=>x.id===a.playerId); if(p)taken[p.pos]=(taken[p.pos]||0)+1;});
+  Object.keys(availByPos).forEach(pos=>{
+    const list=availByPos[pos].slice().sort((a,b)=>(valOf(b)||0)-(valOf(a)||0));
+    const rosterable=Math.max(0,Math.min(list.length,(need[pos]||0)-(taken[pos]||0)));
+    const live=list.slice(0,rosterable);
+    let green=live.length;
+    if(live.length>1){
+      // Look for the cliff only in the top half — the biggest raw drop in the
+      // whole list is usually the $2 -> $1 step at the very bottom, which says
+      // nothing about who the premium players are.
+      const limit=Math.max(1,Math.ceil(live.length/2));
+      let best=-1;
+      for(let i=1;i<=Math.min(limit,live.length-1);i++){
+        const d=(valOf(live[i-1])||0)-(valOf(live[i])||0);
+        if(d>best){best=d;green=i;}
+      }
+      if(best<=0)green=live.length;   // no cliff at all: it's one flat tier
+    }
+    out[pos]={green, yellow:Math.max(0,live.length-green), red:list.length-live.length};
+  });
+  return out;
+}
 function renderAuctionRoom(){
   if(!el('auctionRoom'))return;
   if(!PLAYERS.length){el('auctionStatus').textContent='No player data loaded for this league yet.';return;}
@@ -2577,10 +2673,13 @@ function renderAuctionRoom(){
   const allAvail=available().filter(auctionEligible).sort((a,b)=>(vals.get(b.id)||0)-(vals.get(a.id)||0));
   // How many are left at each position — the "how urgently do I need to bid on a
   // RB" read, which is the auction equivalent of the snake room's scarcity cues.
-  const counts={}; allAvail.forEach(p=>{counts[p.pos]=(counts[p.pos]||0)+1;});
+  const byPos={}; allAvail.forEach(p=>{(byPos[p.pos]=byPos[p.pos]||[]).push(p);});
+  const tiers=auctionPosTiers(byPos, p=>vals.get(p.id)||0);
   const cEl=el('auctionPosCounts');
-  if(cEl)cEl.innerHTML=['QB','RB','WR','TE','K','DST'].filter(x=>counts[x])
-    .map(x=>`<span class="pos ${x}">${x}</span>&nbsp;${counts[x]}`).join(' &nbsp;');
+  if(cEl)cEl.innerHTML=['QB','RB','WR','TE','K','DST'].filter(x=>byPos[x])
+    .map(x=>{const t=tiers[x]||{green:0,yellow:0,red:byPos[x].length};
+      return `<span class="pos ${x}">${x}</span>&nbsp;<span class="tier-g" title="top tier left">${t.green}</span>/<span class="tier-y" title="still rosterable">${t.yellow}</span>/<span class="tier-r" title="past replacement level">${t.red}</span>`;})
+    .join(' &nbsp;');
   const posF=(el('auctionPosFilter')&&el('auctionPosFilter').value)||'ALL';
   const q=((el('auctionSearch')&&el('auctionSearch').value)||'').trim().toLowerCase();
   let avail=allAvail;
@@ -3557,7 +3656,7 @@ async function listYahooLeagues(){
     const r=await fetch('/api/yahoo/leagues');
     const data=await r.json();
     if(!r.ok){
-      el('yahooStatus').textContent='⚠ '+(data.error||('HTTP '+r.status));
+      el('yahooStatus').textContent='⚠ '+(data.error||('HTTP '+r.status))+(data.hint?' — '+data.hint:'');
       if(data.body)el('yahooRaw').textContent=data.body;
       return;
     }
@@ -3957,11 +4056,21 @@ async function fetchCloudLeagues(){
       // seeded (leagueKeepers, added 2026-08-31) never reaches an already-seeded
       // cloud copy on its own. Backfill it once, only when the cloud copy has
       // none at all, so a real (even empty-on-purpose) edit is never clobbered.
+      //
+      // Same story for any built-in field the Leagues tab has no editor for: the
+      // fitted auction curve settings shipped after both auction profiles were
+      // already in KV, so production kept running the generic defaults and priced
+      // a backup quarterback at $9. Backfill each such field independently, and
+      // only where the cloud copy has no value at all.
+      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules'];
+      const isEmpty=v=>v==null||v===''||(Array.isArray(v)&&!v.length)||(typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length);
       const toPatch=[];
       Object.values(LEAGUES_DEFAULT).forEach(def=>{
-        const cur=map[def.id];
-        if(cur && (!cur.leagueKeepers||!cur.leagueKeepers.length) && def.leagueKeepers && def.leagueKeepers.length){
-          const merged={...cur, leagueKeepers:def.leagueKeepers};
+        const cur=map[def.id]; if(!cur)return;
+        const add={};
+        BACKFILL.forEach(f=>{ if(isEmpty(cur[f]) && !isEmpty(def[f])) add[f]=def[f]; });
+        if(Object.keys(add).length){
+          const merged={...cur, ...add};
           map[def.id]=merged; toPatch.push(merged);
         }
       });

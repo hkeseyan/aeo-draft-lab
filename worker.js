@@ -829,7 +829,22 @@ export default {
             { headers: { Authorization: `Bearer ${token}` } }
           );
           const text = await r.text();
-          if (!r.ok) return J({ error: "Yahoo API returned " + r.status, body: text.slice(0, 1000) }, 502);
+          if (!r.ok) {
+            // Yahoo's own wording for "the token is valid but this app was never
+            // granted Fantasy Sports access". It is not a token problem, so
+            // re-running the consent flow alone won't fix it — the app's API
+            // Permissions have to include Fantasy Sports (Read) first.
+            const needsPerm = /additional_authorization_required/.test(text);
+            return J({
+              error: needsPerm
+                ? "Yahoo says this app isn't authorized for Fantasy Sports data."
+                : "Yahoo API returned " + r.status,
+              hint: needsPerm
+                ? "In the Yahoo Developer console, open this app, tick Fantasy Sports \u2192 Read under API Permissions, save, then click Connect Yahoo account again to re-consent."
+                : undefined,
+              body: text.slice(0, 1000),
+            }, 502);
+          }
           let raw; try { raw = JSON.parse(text); } catch { return J({ error: "Yahoo response wasn't valid JSON", body: text.slice(0, 1000) }, 502); }
           let leagues = [];
           try {
