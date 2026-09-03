@@ -20,6 +20,25 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🔧 2026-09-02 — **Yahoo: Fantasy Sports · Read was already ticked, so the
+  permission wasn't the problem.** My earlier diagnosis was wrong — the user's
+  screenshot of the `discord-bot` app shows the box already checked. The real
+  mechanism: **a refresh token cannot gain a scope it was never granted**, and
+  `getYahooAccessToken()` refreshes the stored grant indefinitely. Worse,
+  clicking Connect again doesn't necessarily fix it — Yahoo skips the consent
+  screen for an app you've already approved and reissues on the *same* grant.
+  So if the grant was ever made before that permission existed (or against a
+  different app), it stays permission-less forever. Two candidates remain and
+  they're now distinguishable: (a) the client id in Cloudflare belongs to a
+  different Yahoo app than the one being edited — plausible, the app is named
+  `discord-bot`; (b) the grant predates the permission. Shipped the tooling to
+  tell them apart rather than guessing again: `/api/yahoo/status` now returns
+  `client_id_hint` (ends + length of the client id this Worker actually holds,
+  public by construction and admin-gated anyway) and `connected_at`; a new
+  `POST /api/yahoo/disconnect` drops the stored grant; the Leagues tab gains
+  **Check status** and **Disconnect** buttons and explains the revoke-then-
+  reconnect sequence. Still 🔧 until the user reports which cause it was.
+
 - ✅ 2026-09-02 — **Player headshots + rookie flag.** Both picked as the next
   build. Sourced from Sleeper's free public player list
   (`api.sleeper.app/v1/players/nfl`), matched to `players-2026.csv` by

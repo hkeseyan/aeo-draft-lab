@@ -440,10 +440,12 @@
     <div class="card">
       <h2>Connect Yahoo (in progress)</h2>
       <p class="small muted">This is where Yahoo gets connected — admin only, one grant covers every Yahoo league. Click <b>Connect Yahoo account</b>, approve in the tab that opens, then come back and click <b>List my leagues</b> (a diagnostic to see what Yahoo returns; the roster-import mapping isn't built yet).</p>
-      <p class="small muted">If listing fails with <code>additional_authorization_required</code>, the token is fine but the Yahoo app itself was never granted fantasy access: open the app in the Yahoo Developer console, tick <b>Fantasy Sports → Read</b> under API Permissions, save, then Connect again to re-consent.</p>
+      <p class="small muted">If listing fails with <code>additional_authorization_required</code>, Yahoo is saying the <i>grant this token was issued under</i> has no fantasy access. A refresh token can never gain a permission it wasn't granted, so refreshing or reconnecting on top of the old grant won't help — and Yahoo skips the consent screen for an app you've already approved, quietly reissuing on the same grant. Two things to check, in order: (1) <b>Check status</b> below shows which client id this Worker actually holds — confirm it matches the app you edited in the Yahoo Developer console; (2) if it matches, revoke the app at <a href="https://login.yahoo.com/account/security" target="_blank" rel="noopener">Yahoo account security → apps</a>, click <b>Disconnect</b> here, then Connect again so Yahoo has to ask you fresh.</p>
       <div class="row">
         <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account</button>
         <button class="btn ghost" id="yahooListBtn">List my leagues</button>
+        <button class="btn ghost" id="yahooStatusBtn">Check status</button>
+        <button class="btn ghost" id="yahooDisconnectBtn">Disconnect</button>
       </div>
       <div class="small muted" id="yahooStatus" style="margin-top:6px"></div>
       <pre id="yahooRaw" class="small muted" style="margin-top:6px;white-space:pre-wrap;max-height:240px;overflow:auto"></pre>
@@ -3663,6 +3665,29 @@ async function importFromMfl(){
 // yet (Yahoo's JSON shape is easy to get wrong un-tested). "List my leagues" is
 // a diagnostic to confirm the connection and see the raw shape.
 function connectYahoo(){ window.open('/auth/yahoo/start','_blank'); el('yahooStatus').textContent='Opened Yahoo sign-in in a new tab — come back here once you approve access.'; }
+// Diagnostics for the "permission is on but Yahoo still says no" case: which
+// credential this deploy actually holds, and how old the grant behind the
+// stored token is (a grant older than the permission change can never work,
+// however many times it is refreshed).
+async function yahooStatusCheck(){
+  el('yahooStatus').textContent='Checking…'; el('yahooRaw').textContent='';
+  try{
+    const r=await fetch('/api/yahoo/status'); const d=await r.json();
+    if(!r.ok){ el('yahooStatus').textContent='⚠ '+(d.error||('HTTP '+r.status)); return; }
+    const when=d.connected_at?new Date(d.connected_at).toLocaleString():'unknown (connected before this was tracked)';
+    el('yahooStatus').textContent=d.connected
+      ? `Connected · grant made ${when} · this Worker's client id: ${d.client_id_hint||'not configured'}`
+      : `Not connected · this Worker's client id: ${d.client_id_hint||'not configured'}`;
+  }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
+}
+async function yahooDisconnect(){
+  if(!confirm('Drop the stored Yahoo grant? You will need to connect again — which is the point if the old grant is missing fantasy permission.'))return;
+  el('yahooStatus').textContent='Disconnecting…'; el('yahooRaw').textContent='';
+  try{
+    const r=await fetch('/api/yahoo/disconnect',{method:'POST'}); const d=await r.json();
+    el('yahooStatus').textContent=r.ok?'Disconnected. Revoke the app at Yahoo account security too, then click Connect Yahoo account.':'⚠ '+(d.error||('HTTP '+r.status));
+  }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
+}
 async function listYahooLeagues(){
   el('yahooStatus').textContent='Checking…'; el('yahooRaw').textContent='';
   try{
@@ -3737,6 +3762,8 @@ el('saveLeagueBtn').onclick=saveLeagueForm;
 el('importSleeperBtn').onclick=importFromSleeper;
 el('importMflBtn').onclick=importFromMfl;
 el('yahooConnectBtn').onclick=connectYahoo;
+el('yahooStatusBtn').onclick=yahooStatusCheck;
+el('yahooDisconnectBtn').onclick=yahooDisconnect;
 el('yahooListBtn').onclick=listYahooLeagues;
 el('lgOpenRosterBuilderBtn').onclick=openRosterBuilder;
 el('lgOwners').oninput=()=>{

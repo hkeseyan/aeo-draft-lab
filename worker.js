@@ -26,7 +26,10 @@
 //   GET     /auth/google/callback  -> OAuth code exchange, creates/loads the user,
 //                                     sets the signed session cookie
 //   GET     /auth/signout          -> clears the session cookie
-//   GET     /api/yahoo/status      -> is a Yahoo account connected?
+//   GET     /api/yahoo/status      -> is a Yahoo account connected, since when,
+//                                     and against which client id
+//   POST    /api/yahoo/disconnect  -> drop the stored grant so the next connect
+//                                     re-consents from scratch
 //   GET     /api/yahoo/leagues     -> diagnostic: list the connected account's
 //                                     NFL leagues (raw Yahoo JSON + best-effort
 //                                     parse; roster import isn't built yet)
@@ -230,6 +233,7 @@ async function getYahooAccessToken(env, kv, url) {
     access_token: tok.access_token,
     refresh_token: tok.refresh_token || auth.refresh_token,
     expires_at: Date.now() + tok.expires_in * 1000,
+    connected_at: auth.connected_at || null,   // survives refreshes; see the callback
   };
   await kv.put(YAHOO_AUTH_KEY, JSON.stringify(updated));
   return updated.access_token;
@@ -340,6 +344,12 @@ export default {
           access_token: tok.access_token,
           refresh_token: tok.refresh_token,
           expires_at: Date.now() + tok.expires_in * 1000,
+          // When the *grant* was made, not when the token was last refreshed. A
+          // refresh preserves the scopes of the original consent, so a grant
+          // made before the Yahoo app had Fantasy Sports permission stays
+          // permission-less no matter how many times it is refreshed. This
+          // timestamp is what tells us to stop refreshing and re-consent.
+          connected_at: Date.now(),
         }));
         return new Response("Yahoo account connected. You can close this tab and go back to the app's Leagues tab.", { headers: { "Content-Type": "text/plain" } });
       } catch (e) {
@@ -804,12 +814,34 @@ export default {
         }
       }
 
-      // ---- /api/yahoo/status : is a Yahoo account connected? ----
+      // ---- /api/yahoo/status : is a Yahoo account connected, and to which app? ----
+      // `client_id_hint` exists so a mismatch between the Yahoo app you are
+      // looking at in the developer console and the credential this Worker
+      // actually holds is visible without guessing. A client id is public by
+      // construction (it rides in the consent redirect URL), and this route is
+      // admin-only regardless, so showing its ends leaks nothing.
       if (path === "/api/yahoo/status") {
         const denied = requireAdmin(); if (denied) return denied;
         if (request.method !== "GET") return J({ error: "method" }, 405);
         const auth = await kv.get(YAHOO_AUTH_KEY, { type: "json" });
-        return J({ connected: !!auth });
+        const cid = env.YAHOO_CLIENT_ID || "";
+        return J({
+          connected: !!auth,
+          connected_at: auth ? auth.connected_at || null : null,
+          expires_at: auth ? auth.expires_at || null : null,
+          client_id_hint: cid ? `${cid.slice(0, 12)}…${cid.slice(-8)} (${cid.length} chars)` : null,
+        });
+      }
+
+      // ---- /api/yahoo/disconnect : drop the stored grant ----
+      // Needed because a refresh token cannot gain scopes it was not granted.
+      // Once the Yahoo app's permissions change, the only way forward is to stop
+      // refreshing the old grant and consent again from scratch.
+      if (path === "/api/yahoo/disconnect") {
+        const denied = requireAdmin(); if (denied) return denied;
+        if (request.method !== "POST") return J({ error: "method" }, 405);
+        await kv.delete(YAHOO_AUTH_KEY);
+        return J({ ok: true });
       }
 
       // ---- /api/yahoo/leagues : diagnostic — list the connected account's NFL
