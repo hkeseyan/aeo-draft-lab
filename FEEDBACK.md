@@ -20,6 +20,20 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🔧 2026-09-03 — **Resubmitted the Yahoo Fantasy Sports API access
+  application under a new dedicated app.** Created a fresh Yahoo app ("AEO
+  Draft Lab", homepage `https://aeo-draft-lab.hkeseyan.workers.dev/`,
+  redirect `.../auth/yahoo/callback`) rather than reusing `discord-bot` or
+  `Kyos Fantasy Manager` — separates this project's Yahoo credentials from
+  unrelated apps. Submitted the manual-review access application at
+  `sports.yahoo.com/developer/access/` under this new app's Client ID.
+  **Now genuinely waiting on Yahoo's review** — nothing to do on our end
+  until they respond. Once approved: swap `YAHOO_CLIENT_ID`/
+  `YAHOO_CLIENT_SECRET` in Cloudflare to this new app's credentials (they
+  aren't yet — the deployed Worker still holds whatever was configured
+  before), then Disconnect + Connect fresh in the Leagues tab so the OAuth
+  grant is made under the newly-approved app rather than an old one.
+
 - 🆕 2026-09-03 — **Yahoo Fantasy Sports API now requires a manual approval
   application — the developer-console checkbox no longer does anything.**
   Ground truth after actually reproducing the failure with a *fresh* grant
