@@ -1536,6 +1536,60 @@ Hovo|Sean Tucker|SHEET|2
 Hovo|Joe Mixon|SHEET|4
 Hovo|Travis Hunter|SHEET|14`;
 
+// Final Fantastic 2026 keeper declaration, normalized from Yahoo's nomination-
+// order table. `manager` is the stable roster key used by Draft Lab; `teamName`
+// is the current Yahoo display name. Costs are the already-escalated 2026 keeper
+// salaries from the league tracker, not values to recalculate here.
+const FANTASTIC_KEEPER_DATA_REVISION='fantastic-2026-final-2026-08-31';
+const FANTASTIC_FINAL_TEAMS=[
+  {manager:'Savada',teamName:'Abella Danger',nominationOrder:1,startingBudget:200,keeperSalary:92,remainingBudget:108,keepers:[['Justin Herbert',5],['Chris Olave',16],['Travis Etienne Jr.',17],["D'Andre Swift",24],['Rachaad White',5],['Baker Mayfield',3],['Quinshon Judkins',19],['Tucker Kraft',3]]},
+  {manager:'Art M',teamName:"It's Always Sunny in Philly",nominationOrder:2,startingBudget:200,keeperSalary:148,remainingBudget:52,keepers:[['Brock Purdy',4],['Zay Flowers',23],['A.J. Brown',39],['Chase Brown',7],['David Montgomery',16],['DeVonta Smith',29],['Jameson Williams',6],['George Kittle',11],['Harold Fannin Jr.',2],['J.K. Dobbins',3],['Broncos',3],['Eagles',5]]},
+  {manager:'Avo',teamName:'Hock Tua',nominationOrder:3,startingBudget:200,keeperSalary:187,remainingBudget:13,keepers:[['Bo Nix',3],['CeeDee Lamb',63],['Rico Dowdle',5],['Kenny Gainwell',2],['Trey McBride',23],['Chris Godwin Jr.',5],['DK Metcalf',32],['Jake Ferguson',2],['Isiah Pacheco',47],['Dontayvion Wicks',2],['Vikings',3]]},
+  {manager:'Hakop',teamName:'Հայաստանի ազգային հավաքական',nominationOrder:4,startingBudget:200,keeperSalary:26,remainingBudget:174,keepers:[['George Pickens',19],['Jaxon Smith-Njigba',7]]},
+  {manager:'Gugo',teamName:'Flock Nation!!',nominationOrder:5,startingBudget:200,keeperSalary:161,remainingBudget:39,keepers:[['Lamar Jackson',25],['Deebo Samuel Sr.',12],['Derrick Henry',40],['Jahmyr Gibbs',61],['Mark Andrews',8],['Keenan Allen',5],['Rhamondre Stevenson',7],['Chargers',3]]},
+  {manager:'Khacho',teamName:"eagles's Champion Team",nominationOrder:6,startingBudget:200,keeperSalary:142,remainingBudget:58,keepers:[['Jakobi Meyers',7],['Quentin Johnston',2],['Khalil Shakir',6],['Michael Pittman Jr.',9],['Jalen Hurts',32],['Christian McCaffrey',64],['Chuba Hubbard',7],['Devaughn Vele',2],['Sam LaPorta',13]]},
+  {manager:'Gev',teamName:'ROTY',nominationOrder:7,startingBudget:200,keeperSalary:104,remainingBudget:96,keepers:[['Justin Jefferson',62],['Rashee Rice',21],['Kyle Pitts Sr.',3],['Jacory Croskey-Merritt',8],['Jayden Reed',8],['49ers',2]]},
+  {manager:'Gary',teamName:"Gary's Game-Chang...",nominationOrder:8,startingBudget:200,keeperSalary:25,remainingBudget:175,keepers:[["Wan'Dale Robinson",4],['Tre Tucker',2],['Dallas Goedert',6],['Bucky Irving',3],['Trevor Lawrence',4],['Caleb Williams',6]]},
+  {manager:'Aram',teamName:'Glendale Football...',nominationOrder:9,startingBudget:200,keeperSalary:46,remainingBudget:154,keepers:[['Matthew Stafford',2],['TreVeyon Henderson',27],['Theo Johnson',2],['Woody Marks',2],['Jalen Coker',2],['Parker Washington',2],['Keon Coleman',5],['AJ Barner',2],['Seahawks',2]]},
+  {manager:'Chris H',teamName:'Step-Burrrrrow',nominationOrder:10,startingBudget:200,keeperSalary:77,remainingBudget:123,keepers:[['Joe Burrow',17],['Ladd McConkey',6],['Tee Higgins',24],['Javonte Williams',6],['Jaylen Waddle',22],['Texans',2]]},
+  {manager:'Hovo',teamName:'Stay off the WEEEED',nominationOrder:11,startingBudget:200,keeperSalary:111,remainingBudget:89,keepers:[['Jayden Daniels',9],['Jonathon Brooks',2],['Isaiah Likely',2],['Blake Corum',2],['Drake London',41],['Tyler Warren',8],['Jonathan Taylor',45],['Christian Watson',2]]},
+  {manager:'Art S',teamName:'Biscuits n Gravy ...',nominationOrder:12,startingBudget:200,keeperSalary:142,remainingBudget:58,keepers:[['Josh Allen',29],["Ja'Marr Chase",63],['Michael Wilson',2],['Kyren Williams',39],['Darius Slayton',2],['Dalton Kincaid',5],['Rams',2]]},
+  {manager:'Lev',teamName:'SMASH BROS',nominationOrder:13,startingBudget:200,keeperSalary:76,remainingBudget:124,keepers:[['Bhayshul Tuten',10],['Cam Skattebo',6],['Terrance Ferguson',2],['Jalen McMillan',2],['Colston Loveland',5],['Jaxson Dart',2],['Nico Collins',21],['James Cook III',28]]},
+  {manager:'Edward',teamName:"Edward's Swag Team",nominationOrder:14,startingBudget:200,keeperSalary:117,remainingBudget:83,keepers:[['Drake Maye',3],['Brock Bowers',18],['Luther Burden III',2],['Emeka Egbuka',23],['Omarion Hampton',39],['Malik Nabers',32]]},
+];
+const FANTASTIC_DEFAULT_ASSIGNED=FANTASTIC_FINAL_TEAMS.flatMap(t=>t.keepers.map(([name])=>t.manager+'|'+name));
+const FANTASTIC_MY_KEEPERS=FANTASTIC_FINAL_TEAMS.find(t=>t.manager==='Hovo').keepers.map(([name,cost])=>({name,round:cost}));
+
+// User-authored portfolio constraints. These are intentionally separate from
+// Market $ and intrinsic player value: target is the preferred acquisition
+// price; max is Hovo's roster-fit stop for the current $89 / eight-open-slot
+// build. The Draft Room can consume these when richer bid guidance is added.
+const FANTASTIC_2026_STRATEGY={
+  budgetAtDraft:89,openRosterSpots:8,
+  preferredBuild:[40,25,10,10],avoidBuild:[65,15,5,5],
+  premiumLockRule:'If an approved RB5-15 target reaches the preset target range before a second premium player is secured, bid to the preset ceiling instead of waiting for a hypothetical later bargain.',
+  priceConcepts:['market','intrinsicValue','target','rosterFitMax','breakGlassMax'],
+  targets:[
+    {player:'Bijan Robinson',target:54,rosterFitMax:57,intrinsicValueMax:62,note:'Only stretch after the other premium options are gone.'},
+    {player:'Puka Nacua',target:51,rosterFitMax:54,note:'Less structural need than premium RB because London is kept.'},
+    {player:'Amon-Ra St. Brown',target:46,rosterFitMax:49,note:'Premium WR pivot when RB prices are pushed too far.'},
+    {player:'Saquon Barkley',target:46,rosterFitMax:46},
+    {player:"De'Von Achane",target:43,rosterFitMax:43},
+    {player:'Kenneth Walker III',target:40,rosterFitMax:45,note:'At $40, act; do not wait for Achane or Breece.'},
+    {player:'Ashton Jeanty',target:42,rosterFitMax:42,conditionalTarget:36,condition:'Use the lower number if health remains questionable.'},
+    {player:'Jeremiyah Love',target:33,rosterFitMax:38,note:'Multi-year star bet; willing to absorb an injured/slow rookie season.'},
+    {player:'Breece Hall',target:30,rosterFitMax:30},
+    {player:'Josh Jacobs',target:26,rosterFitMax:26,conditionalTarget:18,condition:'Lower ceiling if suspended/unavailable.'},
+    {player:'Tetairoa McMillan',target:28,rosterFitMax:28},{player:'Davante Adams',target:21,rosterFitMax:21},
+    {player:'Rome Odunze',target:21,rosterFitMax:21},{player:'Terry McLaurin',target:18,rosterFitMax:18},
+    {player:'Marvin Harrison Jr.',target:12,rosterFitMax:12},{player:'Courtland Sutton',target:8,rosterFitMax:8},
+    {player:'Brian Thomas Jr.',target:12,rosterFitMax:12},{player:'Josh Downs',target:5,rosterFitMax:5},
+    {player:'Jadarian Price',target:10,rosterFitMax:13}
+  ],
+  qb2:{preferredBid:1,targetRange:[1,2],max:3,shortlist:['Tyler Shough','Fernando Mendoza','Kyler Murray'],skipAtAuction:['Sam Darnold','Daniel Jones','Bryce Young'],rule:'Only spend a roster spot on upside that could challenge a healthy Daniels or create keeper value.'},
+  defense:{preferred:'Ravens',target:1,max:1,rule:'Bid $1 only for Baltimore; otherwise take a remaining $1 defense.'}
+};
+
 // ---------- LEAGUE PROFILES ----------
 // Hardcoded defaults — the offline/first-run fallback. Once /api/leagues has data,
 // the cloud copy (fetched + mutated at runtime into `LEAGUES` below) is authoritative;
@@ -1563,7 +1617,7 @@ const LEAGUES_DEFAULT = {
   },
   'fantastic-auction': {
     id:'fantastic-auction', name:'Fantastic Keeper Auction', leagueType:'keeper',
-    teams:14, rounds:16, mySlot:10, draftType:'auction', superflex:false,
+    teams:14, rounds:16, mySlot:11, draftType:'auction', superflex:false,
     scoringLabel:'Full PPR · 6-pt pass TD', draftDateLabel:'Sep 7 · 7:00 PM PDT', keeperDeadlineLabel:'Aug 30 · 12:00 AM PDT',
     starters:{QB:1,RB:2,WR:2,TE:1,FLEX:2,DST:1}, flexEligible:['RB','WR','TE'],
     maxKeepers:null, keeperCostType:'dollar', auctionBudget:200, rosterSize:16, irSlots:2, minBid:1,
@@ -1573,9 +1627,15 @@ const LEAGUES_DEFAULT = {
     scoringRules:{passYardsPerPoint:25,passTd:6,interception:-2,rushYardsPerPoint:10,rushTd:6,reception:1,recYardsPerPoint:10,recTd:6,returnTd:6,twoPointConversion:2,fumbleLost:-2,offensiveFumbleReturnTd:6},
     settings:{waiverType:'FAB w/ continual rolling list tiebreak',weeklyWaivers:'Game Time - Tuesday',postDraftPlayers:'Free Agents',playoffs:'6 teams · Weeks 15-17',tradeDeadline:'Nov 28, 2026'},
     rankSourceLabel:'2026 PPR baseline + keeper-sheet coverage',
-    owners:['Gev','Hakop','Gary','Avo','Gugo','Khacho','Edward','Art M','Lev','Hovo','Chris H','Aram','Savada','Art S'],
-    meOwner:'Hovo', ownerSlot:{Gev:1,Hakop:2,Gary:3,Avo:4,Gugo:5,Khacho:6,Edward:7,'Art M':8,Lev:9,Hovo:10,'Chris H':11,Aram:12,Savada:13,'Art S':14},
-    myLocked:[], myKeepers:[], rostersRaw:ROSTERS_RAW_FANTASTIC, playersCsv:PLAYERS_CSV_FANTASTIC,
+    owners:FANTASTIC_FINAL_TEAMS.map(t=>t.manager),
+    meOwner:'Hovo', ownerSlot:Object.fromEntries(FANTASTIC_FINAL_TEAMS.map(t=>[t.manager,t.nominationOrder])),
+    teamNames:Object.fromEntries(FANTASTIC_FINAL_TEAMS.map(t=>[t.manager,t.teamName])),
+    keeperDataRevision:FANTASTIC_KEEPER_DATA_REVISION,
+    confirmedKeeperSnapshot:FANTASTIC_FINAL_TEAMS,
+    defaultAssigned:FANTASTIC_DEFAULT_ASSIGNED,
+    myLocked:FANTASTIC_MY_KEEPERS.map(k=>k.name), myKeepers:FANTASTIC_MY_KEEPERS,
+    auctionStrategy:FANTASTIC_2026_STRATEGY,
+    rostersRaw:ROSTERS_RAW_FANTASTIC, playersCsv:PLAYERS_CSV_FANTASTIC,
   },
   'aeok-auction': {
     id:'aeok-auction', name:'AEOK Auction League', leagueType:'keeper',
@@ -1627,7 +1687,8 @@ let curPick=1;  // next overall pick to make
 let totalPicks; // LEAGUE.teams*LEAGUE.rounds, set by applyLeagueProfile()
 
 // identity/data for the active league profile — set by applyLeagueProfile()
-let OWNERS=[], ME_OWNER='', OWNER_SLOT={}, MY_LOCKED=[];
+let OWNERS=[], ME_OWNER='', OWNER_SLOT={}, TEAM_NAMES={}, MY_LOCKED=[], DEFAULT_ASSIGNED=[];
+let KEEPER_DATA_REVISION='';
 let ROSTERS_RAW='', PLAYERS_CSV='';
 let CURRENT_LEAGUE_ID='aeo-keepers';
 
@@ -1986,17 +2047,17 @@ function renderAuctionRoom(){
   const vals=auctionMarketValues(), targets=auctionTargetValues(), avail=available().filter(auctionEligible).sort((a,b)=>(vals.get(b.id)||0)-(vals.get(a.id)||0));
   const src=auctionPriceSourceStatus(); el('auctionPoolCount').textContent=`(${avail.length})${src.market?'':' · market est.'}${src.target?'':' · target est.'}`;
   el('auctionPlayerList').innerHTML=avail.slice(0,160).map(p=>`<option value="${p.name}">`).join('');
-  el('auctionWinner').innerHTML=OWNERS.map(o=>`<option value="${o}">${o}${o===ME_OWNER?' (me)':''}</option>`).join('');
+  el('auctionWinner').innerHTML=OWNERS.map(o=>`<option value="${o}">${teamLabel(o)}${o===ME_OWNER?' · me':''}</option>`).join('');
   if(ME_OWNER)el('auctionWinner').value=ME_OWNER;
   const ptb=el('auctionPoolTable').querySelector('tbody');
   ptb.innerHTML=avail.slice(0,100).map(p=>`<tr><td><b>$${vals.get(p.id)||1}</b></td><td class="val-good"><b>$${targets.get(p.id)||1}</b></td><td>${Math.round(p.adp||0)}</td><td><span class="pos ${p.pos}">${p.pos}</span></td><td>${p.name}</td><td class="muted">${p.team||''}</td><td><button class="pick-btn" data-aucbuy="${p.id}">select</button></td></tr>`).join('');
   ptb.querySelectorAll('[data-aucbuy]').forEach(b=>b.onclick=()=>{const p=PLAYERS.find(x=>x.id===+b.dataset.aucbuy);if(p){el('auctionPlayerInput').value=p.name;el('auctionPrice').value=vals.get(p.id)||1;}});
   const btb=el('auctionBudgetTable').querySelector('tbody');
-  btb.innerHTML=Array.from({length:LEAGUE.teams},(_,i)=>i+1).map(slot=>{const st=auctionTeamState(slot),o=SLOT_OWNER[slot]||('T'+slot);return `<tr><td>${o}${o===ME_OWNER?' ★':''}</td><td>${st.used}/${st.rosterSize}</td><td>$${st.keeperSpend}</td><td>$${st.draftSpend}</td><td class="${st.valid?'':'val-bad'}">$${st.left}</td><td><b>$${st.maxBid}</b></td></tr>`;}).join('');
+  btb.innerHTML=Array.from({length:LEAGUE.teams},(_,i)=>i+1).map(slot=>{const st=auctionTeamState(slot),o=SLOT_OWNER[slot]||('T'+slot);return `<tr><td>${slot}. ${o.startsWith('T')?o:teamLabel(o)}${o===ME_OWNER?' ★':''}</td><td>${st.used}/${st.rosterSize}</td><td>$${st.keeperSpend}</td><td>$${st.draftSpend}</td><td class="${st.valid?'':'val-bad'}">$${st.left}</td><td><b>$${st.maxBid}</b></td></tr>`;}).join('');
   const mine=KEEPERS.filter(k=>k.team===mySlot).map(k=>({p:findPlayer(k.name),price:k.round,keeper:true})).concat(auctionPicks.filter(a=>a.owner===mySlot).map(a=>({p:PLAYERS.find(x=>x.id===a.playerId),price:a.price,keeper:false}))).filter(x=>x.p);
   el('auctionMyRoster').innerHTML=mine.length?mine.map(x=>`<div class="mypick-row"><span><span class="pos ${x.p.pos}">${x.p.pos}</span> ${x.p.name}${x.keeper?' <span class="kchip">KEEP</span>':''}</span><b>$${x.price}</b></div>`).join(''):'—';
   const rtb=el('auctionResultsTable').querySelector('tbody');
-  rtb.innerHTML=auctionPicks.length?auctionPicks.map((a,i)=>{const p=PLAYERS.find(x=>x.id===a.playerId);return `<tr><td>${i+1}</td><td>${p?p.name:'?'}</td><td>${p?`<span class="pos ${p.pos}">${p.pos}</span>`:''}</td><td>${SLOT_OWNER[a.owner]||('T'+a.owner)}</td><td>$${a.price}</td><td><button class="btn bad" style="padding:2px 7px" data-aucundo="${i}">×</button></td></tr>`;}).join(''):'<tr><td colspan="6" class="muted small">No auction sales yet.</td></tr>';
+  rtb.innerHTML=auctionPicks.length?auctionPicks.map((a,i)=>{const p=PLAYERS.find(x=>x.id===a.playerId);return `<tr><td>${i+1}</td><td>${p?p.name:'?'}</td><td>${p?`<span class="pos ${p.pos}">${p.pos}</span>`:''}</td><td>${ownerLabel(a.owner)}</td><td>$${a.price}</td><td><button class="btn bad" style="padding:2px 7px" data-aucundo="${i}">×</button></td></tr>`;}).join(''):'<tr><td colspan="6" class="muted small">No auction sales yet.</td></tr>';
   rtb.querySelectorAll('[data-aucundo]').forEach(b=>b.onclick=()=>undoAuctionSale(+b.dataset.aucundo));
 }
 function _unusedAuctionPlaceholderLegacy(){
@@ -2061,7 +2122,14 @@ function renderQueue(){
     e.preventDefault(); queued.delete(a.dataset.qrm); renderQueue(); saveSetup();
   });
 }
-function ownerLabel(slot){ return (SLOT_OWNER&&SLOT_OWNER[slot]) || ('T'+slot); }
+function teamLabel(owner){
+  const team=TEAM_NAMES[owner];
+  return team ? `${team} (${owner})` : owner;
+}
+function ownerLabel(slot){
+  const owner=(SLOT_OWNER&&SLOT_OWNER[slot]);
+  return owner ? teamLabel(owner) : ('T'+slot);
+}
 function renderBoard(){
   const g=el('boardGrid'); g.innerHTML='';
   g.style.gridTemplateColumns=`repeat(${LEAGUE.teams}, minmax(120px,1fr))`;
@@ -2125,7 +2193,7 @@ function slotRosterPlayers(roster,starters){
 function fillRosterOwnerSelect(){
   const sel=el('rosterOwnerSelect'); if(!sel)return;
   const slots=[]; for(let s=1;s<=LEAGUE.teams;s++)slots.push(s);
-  sel.innerHTML=slots.map(s=>`<option value="${s}">${(SLOT_OWNER&&SLOT_OWNER[s])||('T'+s)}${s===mySlot?' (me)':''}</option>`).join('');
+  sel.innerHTML=slots.map(s=>`<option value="${s}">${ownerLabel(s)}${s===mySlot?' · me':''}</option>`).join('');
   if(mySlot!=null)sel.value=mySlot;
 }
 function renderRoster(){
@@ -2217,10 +2285,10 @@ function renderTeams(){
     const slot=OWNER_SLOT[owner]||1;
     const max=isAuction?(LEAGUE.rosterSize||LEAGUE.rounds||16):(LEAGUE.maxKeepers!=null?LEAGUE.maxKeepers:'?');
     const st=isAuction?auctionTeamState(slot):null;
-    tally.push(isAuction?`${owner} ${chosen.length}/${max} · $${st.keeperSpend}`:`${owner} ${chosen.length}/${max}`);
+    tally.push(isAuction?`${teamLabel(owner)} ${chosen.length}/${max} · $${st.keeperSpend}`:`${teamLabel(owner)} ${chosen.length}/${max}`);
     const c=document.createElement('div'); c.className='card';
     const head=document.createElement('h2');
-    head.innerHTML=isAuction?`${isMe?'★ ':''}${owner} <span class="muted">· ${chosen.length}/${max} kept · $${st.keeperSpend} keep $ · $${st.left} left · max bid $${st.maxBid}${isMe?' · you':''}</span>`:`${isMe?'★ ':''}${owner} <span class="muted">· slot ${OWNER_SLOT[owner]} · ${chosen.length}/${max} kept${isMe?' · you':''}</span>`;
+    head.innerHTML=isAuction?`${isMe?'★ ':''}${teamLabel(owner)} <span class="muted">· nomination ${OWNER_SLOT[owner]} · ${chosen.length}/${max} kept · $${st.keeperSpend} keep $ · $${st.left} left · max bid $${st.maxBid}${isMe?' · you':''}</span>`:`${isMe?'★ ':''}${teamLabel(owner)} <span class="muted">· slot ${OWNER_SLOT[owner]} · ${chosen.length}/${max} kept${isMe?' · you':''}</span>`;
     c.appendChild(head);
     eligible.forEach(r=>{
       const key=owner+'|'+r.player, checked=assigned.has(key);
@@ -2275,7 +2343,7 @@ function renderTendencies(){
     const t=TENDENCIES[owner]; if(!t)return;
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><input type="checkbox" data-tend-on="${owner}" ${t.enabled?'checked':''}></td>
-      <td>${owner}</td>`+
+      <td>${teamLabel(owner)}</td>`+
       TEND_POS.map(pos=>`<td><input type="number" data-tend-bias="${owner}" data-pos="${pos}"
         value="${t.bias[pos]}" min="-3" max="3" step="1" style="width:56px"></td>`).join('');
     body.appendChild(tr);
@@ -2439,15 +2507,16 @@ function setStatus(s){el('saveStatus').textContent=s; setTimeout(()=>el('saveSta
 // config persistence
 // Full backup, independent of the cloud KV store — includes keepers/trades/picks
 // so "Export config JSON" is a real point-in-time snapshot you can keep as a file.
-function getConfig(){return {league:CURRENT_LEAGUE_ID,PLAYERS,KEEPERS,picks,auctionPicks,curPick,
+function getConfig(){return {league:CURRENT_LEAGUE_ID,keeperDataRevision:KEEPER_DATA_REVISION,PLAYERS,KEEPERS,picks,auctionPicks,curPick,
   assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],seed:el('seedWarn').style.display};}
-function applyConfig(cfg){PLAYERS=cfg.PLAYERS;KEEPERS=cfg.KEEPERS;picks=cfg.picks||[];auctionPicks=cfg.auctionPicks||[];curPick=cfg.curPick;
-  if(Array.isArray(cfg.assigned))assigned=new Set(cfg.assigned);
+function applyConfig(cfg){const keeperRevisionChanged=!!KEEPER_DATA_REVISION&&cfg.keeperDataRevision!==KEEPER_DATA_REVISION;PLAYERS=cfg.PLAYERS;KEEPERS=keeperRevisionChanged?[]:cfg.KEEPERS;picks=keeperRevisionChanged?[]:(cfg.picks||[]);auctionPicks=keeperRevisionChanged?[]:(cfg.auctionPicks||[]);curPick=keeperRevisionChanged?1:cfg.curPick;
+  if(keeperRevisionChanged)assigned=new Set(DEFAULT_ASSIGNED); else if(Array.isArray(cfg.assigned))assigned=new Set(cfg.assigned);
   if(Array.isArray(cfg.cutPlayers))cutPlayers=new Set(cfg.cutPlayers);
   if(Array.isArray(cfg.queued))queued=new Set(cfg.queued);
   pickOwnerOverride=cfg.pickOwnerOverride||{}; playerTrades=cfg.playerTrades||{};
   if(cfg.tendencies)OWNERS.forEach(o=>{const t=cfg.tendencies[o]; if(t)TENDENCIES[o]={enabled:!!t.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},t.bias||{})};});
   if(cfg.seed==='none')el('seedWarn').style.display='none';
+  if(keeperRevisionChanged){rebuildKeepers();applyKeepers();resetDraft();}
   render(); if(el('teamsWrap')){renderTeams();renderTendencies();} renderTrades(); saveSetup();}
 function saveLocal(){try{localStorage.setItem('aeoDraft',JSON.stringify(getConfig()));setStatus('Saved to browser.');}catch(e){setStatus('Save failed: '+e.message);}}
 function loadLocal(){try{const s=localStorage.getItem('aeoDraft');if(!s){setStatus('No saved config.');return;}applyConfig(JSON.parse(s));setStatus('Loaded saved config.');}catch(e){setStatus('Load failed.');}}
@@ -2839,9 +2908,10 @@ el('lgOwners').oninput=()=>{
 };
 
 // ---------- MOCK HISTORY (cloud via /api/mocks, KV-backed) ----------
-function getMock(){return {picks,auctionPicks,curPick,assigned:[...assigned]};}
+function getMock(){return {keeperDataRevision:KEEPER_DATA_REVISION,picks,auctionPicks,curPick,assigned:[...assigned]};}
 function applyMock(m){
-  picks=(m.picks||[]).slice();auctionPicks=(m.auctionPicks||[]).slice();curPick=m.curPick||1;assigned=new Set(m.assigned||[]);
+  const keeperRevisionChanged=!!KEEPER_DATA_REVISION && m.keeperDataRevision!==KEEPER_DATA_REVISION;
+  picks=keeperRevisionChanged?[]:(m.picks||[]).slice();auctionPicks=keeperRevisionChanged?[]:(m.auctionPicks||[]).slice();curPick=keeperRevisionChanged?1:(m.curPick||1);assigned=keeperRevisionChanged?new Set(DEFAULT_ASSIGNED):new Set(m.assigned||[]);
   rebuildKeepers(); applyKeepers();
   PLAYERS.forEach(p=>p.drafted=false);
   picks.forEach(pk=>{const pl=PLAYERS.find(x=>x.id===pk.playerId); if(pl)pl.drafted=true;});
@@ -2995,18 +3065,22 @@ async function loadCommish(){
 let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
-function saveSetup(){if(GUEST_MODE)return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
+function saveSetup(){if(GUEST_MODE)return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{keeperDataRevision:KEEPER_DATA_REVISION,assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
 function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},v.bias||{})};}); }
 async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||(Array.isArray(s.picks)&&s.picks.length)||(Array.isArray(s.auctionPicks)&&s.auctionPicks.length))){
-  if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
+  const keeperRevisionChanged=!!KEEPER_DATA_REVISION && s.keeperDataRevision!==KEEPER_DATA_REVISION;
+  if(!keeperRevisionChanged && Array.isArray(s.assigned))assigned=new Set(s.assigned);
   if(Array.isArray(s.cutPlayers))cutPlayers=new Set(s.cutPlayers);
   if(Array.isArray(s.queued))queued=new Set(s.queued);
-  auctionPicks=Array.isArray(s.auctionPicks)?s.auctionPicks.slice():[];
+  // A finalized keeper snapshot changes both the available pool and team slot
+  // accounting, so stale in-progress sales cannot be replayed safely. Preserve
+  // independent setup (tendencies, trades, queue), but start the mock itself clean.
+  auctionPicks=keeperRevisionChanged?[]:(Array.isArray(s.auctionPicks)?s.auctionPicks.slice():[]);
   pickOwnerOverride=s.pickOwnerOverride||{}; playerTrades=s.playerTrades||{};
   applyTendencies(s.tendencies);
   rebuildKeepers(); applyKeepers();
-  if((Array.isArray(s.picks)&&s.picks.length)||(LEAGUE.draftType==='auction'&&auctionPicks.length)){
-    picks=Array.isArray(s.picks)?s.picks.slice():[]; curPick=s.curPick||1;
+  if((!keeperRevisionChanged&&Array.isArray(s.picks)&&s.picks.length)||(LEAGUE.draftType==='auction'&&auctionPicks.length)){
+    picks=keeperRevisionChanged?[]:(Array.isArray(s.picks)?s.picks.slice():[]); curPick=keeperRevisionChanged?1:(s.curPick||1);
     PLAYERS.forEach(p=>p.drafted=false);
     picks.forEach(pk=>{const pl=PLAYERS.find(x=>x.id===pk.playerId); if(pl)pl.drafted=true;});
     auctionPicks.forEach(pk=>{const pl=PLAYERS.find(x=>x.id===pk.playerId); if(pl)pl.drafted=true;});
@@ -3017,7 +3091,8 @@ async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||
     render();
   } else { resetDraft(); }
   if(el('teamsWrap')){renderTeams();renderTendencies();} renderTrades();
-  const st=el('setupStatus');if(st)st.textContent='☁ Loaded saved setup from cloud.';
+  if(keeperRevisionChanged)saveSetup();
+  const st=el('setupStatus');if(st)st.textContent=keeperRevisionChanged?'☁ Final keeper snapshot loaded; stale mock picks were cleared.':'☁ Loaded saved setup from cloud.';
 }}catch(e){}}
 
 // ---------- HEADER / LEAGUE SELECTOR ----------
@@ -3053,13 +3128,16 @@ function applyLeagueProfile(id){
   OWNERS=(profile.owners||[]).slice();
   ME_OWNER=profile.meOwner||'';
   OWNER_SLOT={...(profile.ownerSlot||{})};
+  TEAM_NAMES={...(profile.teamNames||{})};
   MY_LOCKED=(profile.myLocked||[]).slice();
+  DEFAULT_ASSIGNED=(profile.defaultAssigned||[]).slice();
+  KEEPER_DATA_REVISION=profile.keeperDataRevision||'';
   ROSTERS_RAW=profile.rostersRaw||'';
   PLAYERS_CSV=profile.playersCsv||'';
   parseRosters();
   rebuildSlotOwner(); rebuildTendencies(); fillRosterOwnerSelect();
 
-  assigned=new Set(); cutPlayers=new Set(); pickOwnerOverride={}; playerTrades={}; queued=new Set(); KEEPERS=[]; picks=[]; auctionPicks=[]; curPick=1;
+  assigned=new Set(DEFAULT_ASSIGNED); cutPlayers=new Set(); pickOwnerOverride={}; playerTrades={}; queued=new Set(); KEEPERS=[]; picks=[]; auctionPicks=[]; curPick=1;
 
   const w=el('seedWarn');
   if(PLAYERS_CSV && PLAYERS_CSV.indexOf('__PLAYERS')!==0 && PLAYERS_CSV.trim().length>20){
@@ -3099,6 +3177,21 @@ function switchLeague(id){
   try{localStorage.setItem('league',id);}catch(e){}
   applyLeagueProfile(id);
 }
+const BUILT_IN_DATA_FIELDS={
+  'fantastic-auction':['teams','rounds','rosterSize','mySlot','owners','meOwner','ownerSlot','teamNames','keeperDataRevision','confirmedKeeperSnapshot','defaultAssigned','myLocked','myKeepers','auctionStrategy']
+};
+async function refreshBuiltInLeagueData(map){
+  for(const [id,fields] of Object.entries(BUILT_IN_DATA_FIELDS)){
+    const local=LEAGUES_DEFAULT[id], cloud=map[id];
+    if(!local||!cloud||cloud.keeperDataRevision===local.keeperDataRevision)continue;
+    const merged={...cloud}; fields.forEach(k=>{merged[k]=local[k];});
+    map[id]=merged;
+    // Only the versioned, authoritative season-data fields above are replaced;
+    // cloud-edited settings and unrelated profile fields stay intact.
+    try{await fetch('/api/leagues/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(merged)});}catch(e){}
+  }
+  return map;
+}
 // Cloud-backed league list. Falls back to (and, on a truly first run, seeds the
 // cloud with) LEAGUES_DEFAULT so the app still works offline or before the API
 // has ever been reached — see the LEAGUES_DEFAULT comment above for why.
@@ -3113,7 +3206,7 @@ async function fetchCloudLeagues(){
       const missing=Object.values(LEAGUES_DEFAULT).filter(p=>!map[p.id]);
       await Promise.all(missing.map(p=>fetch('/api/leagues/'+encodeURIComponent(p.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}).catch(()=>{})));
       missing.forEach(p=>map[p.id]=p);
-      return map;
+      return await refreshBuiltInLeagueData(map);
     }
     // Empty cloud (first run ever) — seed it with the defaults verbatim. Uses PUT
     // (writes the exact id given) rather than POST (which slugifies the name and

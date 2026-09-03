@@ -2,6 +2,8 @@
 
 Interactive keeper-league draft tool (12-team, Half-PPR, snake) with rival rosters, keeper modeling, a mock-draft simulator, and **cloud-saved mock history** that syncs across your phone and laptop.
 
+The built-in **Fantastic Keeper Auction 2026** profile includes the finalized 14-team keeper declaration and Yahoo nomination order. See [`docs/FANTASTIC_2026.md`](docs/FANTASTIC_2026.md) for validated totals, persistence behavior, and the current auction strategy layer.
+
 - `public/index.html` — the whole app (self-contained; player data embedded).
 - `worker.js` + `wrangler.toml` — a Cloudflare Worker that serves the app and a KV-backed API for mock history.
 - `players-2026.csv` — the source player data (also embedded in `index.html`).
