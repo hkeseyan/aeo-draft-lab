@@ -58,6 +58,8 @@ Persists via `/api/setup` alongside keepers/trades/tendencies.
 
 **Auction price layers**: auction leagues deliberately maintain two dollar concepts. **Market $** models what opponents are likely to pay; Yahoo league-specific default/Pre-Draft Value and Yahoo Average Salary are the preferred anchors when loaded, with market-source fallbacks. **Target $** is Hovo's independent bid ceiling/value layer and does not inherit Yahoo by default; it can blend FantasyPros, Draft Sharks, RotoWire, and the future custom league-aware valuation. Both are dynamically rescaled to the actual money and open roster slots remaining after projected/confirmed keepers and auction sales. If source columns are absent, each layer falls back to the existing rank/scarcity curve and is visibly labeled as an estimate. Supported optional player-CSV columns: `yahoo_default`, `yahoo_avg_salary`, `fp_value`, `ds_market`, `ds_value`, `rotowire_value`, `custom_value`.
 
+The 2026 embedded inputs are league-specific: Yahoo League Value/Average Salary were captured independently for each Yahoo league, while FantasyPros was calculated as 14 teams/$200/16 slots/2 flex for Fantastic and 12 teams/$200/18 slots/2 flex/1 superflex for AEOK. FantasyPros Custom Scoring is not available on the authenticated account, so the FantasyPros component uses default full PPR rather than claiming exact support for Fantastic's 6-point passing TDs or AEOK's bonuses. RotoWire values are absent rather than estimated without access.
+
 ### Teams & Keepers
 Rival roster view and keeper assignment/modeling across the league, plus
 the owner-tendency controls (see Opponent model below). For dollar-cost
