@@ -20,7 +20,16 @@
 //   GET     /api/import/mfl/:mflLeagueId          -> best-effort structure import (?year=)
 //   GET/POST /api/mocks            -> list / save mock drafts
 //   GET/DELETE /api/mocks/:id      -> load / delete a mock
-//   GET     /api/yahoo/status      -> is a Yahoo account connected?
+//   GET     /api/me                -> {accountsEnabled, signedIn, admin, user}
+//   GET     /api/users             -> account list (admin only)
+//   GET     /auth/google/start     -> redirect to Google's sign-in consent screen
+//   GET     /auth/google/callback  -> OAuth code exchange, creates/loads the user,
+//                                     sets the signed session cookie
+//   GET     /auth/signout          -> clears the session cookie
+//   GET     /api/yahoo/status      -> is a Yahoo account connected, since when,
+//                                     and against which client id
+//   POST    /api/yahoo/disconnect  -> drop the stored grant so the next connect
+//                                     re-consents from scratch
 //   GET     /api/yahoo/leagues     -> diagnostic: list the connected account's
 //                                     NFL leagues (raw Yahoo JSON + best-effort
 //                                     parse; roster import isn't built yet)
@@ -36,6 +45,19 @@
 // directly and can't attach custom headers to). Yahoo OAuth needs YAHOO_CLIENT_ID
 // and YAHOO_CLIENT_SECRET secrets (npx wrangler secret put ...) — not set in
 // wrangler.toml, never committed.
+//
+// ACCOUNTS. Google sign-in gates the app once GOOGLE_CLIENT_ID and
+// GOOGLE_CLIENT_SECRET are set (plus an optional SESSION_SECRET for signing
+// session cookies; GOOGLE_CLIENT_SECRET is used if it's absent). Until those
+// secrets exist the app runs exactly as it did before accounts: every caller is
+// treated as the owner. The FIRST account to sign in becomes the admin.
+//
+//   admin      -> everything, and keeps the original unprefixed KV keys so the
+//                 owner's existing setup/mocks carry over with zero migration
+//   signed in  -> own private setup + mocks (:u:<id> keys), read-only on shared
+//                 league profiles; no Commish, no league editing, no imports
+//   signed out -> nothing under /api/ except /api/me (the UI falls back to the
+//                 same Draft-Room-only view guest links get)
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -75,6 +97,111 @@ function slugify(s) {
     .slice(0, 40) || "league";
 }
 
+// ---- ACCOUNTS: Google sign-in, sessions, per-user data ----------------------
+// Identity comes from Google OAuth (authorization-code flow). We store a user
+// record per Google account and a signed session cookie; there are no passwords
+// here to store, leak, or reset.
+//
+// Dormant until configured: with no GOOGLE_CLIENT_ID/SECRET set, ACCOUNTS_ON is
+// false and every request is treated as the owner — i.e. exactly how the app
+// behaved before accounts existed. That's a deployment prerequisite (you can't
+// run OAuth without an OAuth app), not a security posture, and the UI says so
+// out loud rather than looking like a login that isn't one.
+const ACCOUNTS_ON = (env) => !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+const SESSION_COOKIE = "aeo_session";
+const OAUTH_STATE_COOKIE = "aeo_oauth_state";
+const SESSION_DAYS = 30;
+const userKey = (uid) => `user:${uid}`;
+const USERS_INDEX = "users:index";
+const googleRedirectUri = (url) => `${url.origin}/auth/google/callback`;
+// Sessions are signed with SESSION_SECRET; falling back to GOOGLE_CLIENT_SECRET
+// keeps setup to two secrets instead of three (it's an equally strong value that
+// never leaves the Worker).
+const sessionSecret = (env) => env.SESSION_SECRET || env.GOOGLE_CLIENT_SECRET || "";
+
+function b64urlEncode(str) {
+  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64urlDecode(str) {
+  const pad = str.replace(/-/g, "+").replace(/_/g, "/");
+  return atob(pad + "=".repeat((4 - (pad.length % 4)) % 4));
+}
+async function hmacHex(secret, msg) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(msg));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+// Constant-time-ish compare so a signature check can't be narrowed byte by byte.
+function safeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+async function signSession(env, uid) {
+  const exp = Date.now() + SESSION_DAYS * 86400000;
+  const body = `${b64urlEncode(uid)}.${exp}`;
+  return `${body}.${await hmacHex(sessionSecret(env), body)}`;
+}
+async function verifySession(env, value) {
+  const parts = String(value || "").split(".");
+  if (parts.length !== 3) return null;
+  const [uidPart, expPart, sig] = parts;
+  const expected = await hmacHex(sessionSecret(env), `${uidPart}.${expPart}`);
+  if (!safeEqual(sig, expected)) return null;
+  if (Date.now() > Number(expPart)) return null;
+  try { return b64urlDecode(uidPart); } catch { return null; }
+}
+function readCookie(request, name) {
+  const raw = request.headers.get("Cookie") || "";
+  for (const part of raw.split(";")) {
+    const [k, ...v] = part.trim().split("=");
+    if (k === name) return decodeURIComponent(v.join("="));
+  }
+  return null;
+}
+function setCookie(name, value, maxAgeSeconds) {
+  return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
+}
+
+// Resolves the caller. Returns a synthetic owner when accounts are off, null
+// when accounts are on but nobody is signed in.
+async function currentUser(request, env, kv) {
+  if (!ACCOUNTS_ON(env)) return { id: "owner", name: "Owner", admin: true, accountsOff: true };
+  const raw = readCookie(request, SESSION_COOKIE);
+  if (!raw) return null;
+  const uid = await verifySession(env, raw);
+  if (!uid) return null;
+  return (await kv.get(userKey(uid), { type: "json" })) || null;
+}
+
+// First account to ever sign in becomes the admin; everyone after is a regular
+// user. Re-signing in refreshes the display fields but never re-grants admin.
+async function upsertUser(kv, profile) {
+  const existing = await kv.get(userKey(profile.id), { type: "json" });
+  if (existing) {
+    const updated = { ...existing, email: profile.email, name: profile.name, picture: profile.picture };
+    await kv.put(userKey(profile.id), JSON.stringify(updated));
+    return updated;
+  }
+  const idx = (await kv.get(USERS_INDEX, { type: "json" })) || [];
+  const rec = {
+    id: profile.id, email: profile.email, name: profile.name, picture: profile.picture,
+    admin: idx.length === 0, createdAt: Date.now(),
+  };
+  await kv.put(userKey(rec.id), JSON.stringify(rec));
+  idx.push({ id: rec.id, email: rec.email, name: rec.name, admin: rec.admin, createdAt: rec.createdAt });
+  await kv.put(USERS_INDEX, JSON.stringify(idx));
+  return rec;
+}
+
+// Per-user KV scoping. The admin keeps the original unprefixed keys so the
+// owner's existing keepers/trades/picks/mocks carry over with zero migration —
+// the same trick aeo-keepers already uses to keep its pre-multi-league data
+// (see leagueId() above). Everyone else gets their own :u:<id> namespace.
+const scoped = (base, me) => (me && me.admin ? base : `${base}:u:${me.id}`);
+
 // ---- Yahoo OAuth (single connected account — this is a personal tool, not
 // multi-tenant, so one stored grant covers whichever Yahoo leagues you import) ----
 const YAHOO_AUTH_KEY = "yahooAuth:default";
@@ -106,6 +233,7 @@ async function getYahooAccessToken(env, kv, url) {
     access_token: tok.access_token,
     refresh_token: tok.refresh_token || auth.refresh_token,
     expires_at: Date.now() + tok.expires_in * 1000,
+    connected_at: auth.connected_at || null,   // survives refreshes; see the callback
   };
   await kv.put(YAHOO_AUTH_KEY, JSON.stringify(updated));
   return updated.access_token;
@@ -116,10 +244,84 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    // ---- /auth/google/* : sign-in handshake. Outside /api/ because Google's
+    // redirect lands here as a plain browser navigation. ----
+    if (path === "/auth/google/start") {
+      if (!ACCOUNTS_ON(env)) return new Response("Accounts aren't configured (missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET secrets).", { status: 500 });
+      // Random state, echoed back by Google and checked against a cookie, so a
+      // third party can't hand you a pre-baked callback URL (CSRF on login).
+      const state = crypto.randomUUID();
+      const authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" + new URLSearchParams({
+        client_id: env.GOOGLE_CLIENT_ID,
+        redirect_uri: googleRedirectUri(url),
+        response_type: "code",
+        scope: "openid email profile",
+        state,
+        prompt: "select_account",
+      }).toString();
+      return new Response(null, {
+        status: 302,
+        headers: { Location: authUrl, "Set-Cookie": setCookie(OAUTH_STATE_COOKIE, state, 600) },
+      });
+    }
+    if (path === "/auth/google/callback") {
+      if (!ACCOUNTS_ON(env)) return new Response("Accounts aren't configured.", { status: 500 });
+      if (!env.MOCKS) return new Response("KV namespace 'MOCKS' is not bound.", { status: 500 });
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state");
+      const expectedState = readCookie(request, OAUTH_STATE_COOKIE);
+      if (!code) return new Response("Missing ?code from Google.", { status: 400 });
+      if (!state || !expectedState || !safeEqual(state, expectedState)) {
+        return new Response("Sign-in state mismatch — start again from the app.", { status: 400 });
+      }
+      try {
+        const r = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            code,
+            client_id: env.GOOGLE_CLIENT_ID,
+            client_secret: env.GOOGLE_CLIENT_SECRET,
+            redirect_uri: googleRedirectUri(url),
+            grant_type: "authorization_code",
+          }).toString(),
+        });
+        if (!r.ok) throw new Error("Google token endpoint returned " + r.status + ": " + (await r.text()).slice(0, 300));
+        const tok = await r.json();
+        // The id_token came straight from Google's token endpoint over TLS in a
+        // server-to-server call we initiated, so its payload is trustworthy as-is;
+        // signature verification matters for tokens received from a client, which
+        // this isn't.
+        const payload = JSON.parse(b64urlDecode(String(tok.id_token || "").split(".")[1] || ""));
+        if (!payload.sub) throw new Error("Google id_token had no subject claim.");
+        const me = await upsertUser(env.MOCKS, {
+          id: payload.sub,
+          email: payload.email || "",
+          name: payload.name || payload.email || "User",
+          picture: payload.picture || "",
+        });
+        const headers = new Headers({ Location: "/" });
+        headers.append("Set-Cookie", setCookie(SESSION_COOKIE, await signSession(env, me.id), SESSION_DAYS * 86400));
+        headers.append("Set-Cookie", setCookie(OAUTH_STATE_COOKIE, "", 0)); // one-shot, clear it
+        return new Response(null, { status: 302, headers });
+      } catch (e) {
+        return new Response("Google sign-in failed: " + e.message, { status: 500 });
+      }
+    }
+    if (path === "/auth/signout") {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "/", "Set-Cookie": setCookie(SESSION_COOKIE, "", 0) },
+      });
+    }
+
     // ---- /auth/yahoo/* : OAuth handshake, outside /api/ (Yahoo's redirect can't
     // carry our x-auth-token header, so this must not be gated by authed()) ----
     if (path === "/auth/yahoo/start") {
       if (!env.YAHOO_CLIENT_ID) return new Response("Yahoo OAuth isn't configured (missing YAHOO_CLIENT_ID secret).", { status: 500 });
+      // One shared Yahoo grant for the whole app, so only the admin may bind it.
+      const yme = env.MOCKS ? await currentUser(request, env, env.MOCKS) : null;
+      if (!yme || !yme.admin) return new Response("Only the admin can connect a Yahoo account.", { status: 403 });
       const authUrl = "https://api.login.yahoo.com/oauth2/request_auth?" + new URLSearchParams({
         client_id: env.YAHOO_CLIENT_ID,
         redirect_uri: yahooRedirectUri(url),
@@ -142,6 +344,12 @@ export default {
           access_token: tok.access_token,
           refresh_token: tok.refresh_token,
           expires_at: Date.now() + tok.expires_in * 1000,
+          // When the *grant* was made, not when the token was last refreshed. A
+          // refresh preserves the scopes of the original consent, so a grant
+          // made before the Yahoo app had Fantasy Sports permission stays
+          // permission-less no matter how many times it is refreshed. This
+          // timestamp is what tells us to stop refreshing and re-consent.
+          connected_at: Date.now(),
         }));
         return new Response("Yahoo account connected. You can close this tab and go back to the app's Leagues tab.", { headers: { "Content-Type": "text/plain" } });
       } catch (e) {
@@ -155,24 +363,52 @@ export default {
       if (!env.MOCKS) return J({ error: "KV namespace 'MOCKS' is not bound." }, 500);
       const kv = env.MOCKS;
       const lg = leagueId(url);
+      const me = await currentUser(request, env, kv);
+
+      // ---- /api/me : who's signed in, and is accounts mode even on? Answered
+      // for signed-out callers too (that's the point), so it sits ahead of the
+      // sign-in requirement below. ----
+      if (path === "/api/me") {
+        if (request.method === "GET") {
+          return J({
+            accountsEnabled: ACCOUNTS_ON(env),
+            signedIn: !!me && !me.accountsOff,
+            admin: !!(me && me.admin),
+            user: me && !me.accountsOff ? { id: me.id, email: me.email, name: me.name, picture: me.picture } : null,
+          });
+        }
+        return J({ error: "method" }, 405);
+      }
+
+      // Everything past here needs a caller. When accounts are off, currentUser()
+      // returns the synthetic owner, so this never fires and behavior is unchanged.
+      if (!me) return J({ error: "sign-in required" }, 401);
+      const requireAdmin = () => (me.admin ? null : J({ error: "admin only" }, 403));
+
+      // ---- /api/users : the account list (admin only) ----
+      if (path === "/api/users") {
+        const denied = requireAdmin(); if (denied) return denied;
+        if (request.method === "GET") return J((await kv.get(USERS_INDEX, { type: "json" })) || []);
+        return J({ error: "method" }, 405);
+      }
 
       // ---- /api/setup : persistent league setup (keepers + trades + tendencies + in-progress picks) ----
       if (path === "/api/setup") {
         if (request.method === "GET") {
-          const s = await kv.get(setupKey(lg), { type: "json" });
+          const s = await kv.get(scoped(setupKey(lg), me), { type: "json" });
           return J(s || {});
         }
         if (request.method === "PUT") {
           let b; try { b = await request.json(); } catch { return J({ error: "bad json" }, 400); }
           // Keep a rolling backup of whatever this PUT is about to overwrite, so a bad
           // write (bug, fat-fingered import, etc.) can be rolled back via /api/setup/restore.
-          const prev = await kv.get(setupKey(lg), { type: "json" });
+          const prev = await kv.get(scoped(setupKey(lg), me), { type: "json" });
           if (prev) {
-            const hist = (await kv.get(historyKey(lg), { type: "json" })) || [];
+            const hist = (await kv.get(scoped(historyKey(lg), me), { type: "json" })) || [];
             hist.unshift({ ts: Date.now(), data: prev });
-            await kv.put(historyKey(lg), JSON.stringify(hist.slice(0, 30)));
+            await kv.put(scoped(historyKey(lg), me), JSON.stringify(hist.slice(0, 30)));
           }
-          await kv.put(setupKey(lg), JSON.stringify(b));
+          await kv.put(scoped(setupKey(lg), me), JSON.stringify(b));
           return J({ ok: true });
         }
         return J({ error: "method" }, 405);
@@ -181,7 +417,7 @@ export default {
       // ---- /api/setup/history : list backup snapshots ----
       if (path === "/api/setup/history") {
         if (request.method === "GET") {
-          return J((await kv.get(historyKey(lg), { type: "json" })) || []);
+          return J((await kv.get(scoped(historyKey(lg), me), { type: "json" })) || []);
         }
         return J({ error: "method" }, 405);
       }
@@ -190,13 +426,13 @@ export default {
       if (path === "/api/setup/restore") {
         if (request.method === "POST") {
           let b; try { b = await request.json(); } catch { return J({ error: "bad json" }, 400); }
-          const hist = (await kv.get(historyKey(lg), { type: "json" })) || [];
+          const hist = (await kv.get(scoped(historyKey(lg), me), { type: "json" })) || [];
           const entry = hist.find((h) => h.ts === b.ts);
           if (!entry) return J({ error: "snapshot not found" }, 404);
-          const current = await kv.get(setupKey(lg), { type: "json" });
+          const current = await kv.get(scoped(setupKey(lg), me), { type: "json" });
           if (current) hist.unshift({ ts: Date.now(), data: current });
-          await kv.put(historyKey(lg), JSON.stringify(hist.slice(0, 30)));
-          await kv.put(setupKey(lg), JSON.stringify(entry.data));
+          await kv.put(scoped(historyKey(lg), me), JSON.stringify(hist.slice(0, 30)));
+          await kv.put(scoped(setupKey(lg), me), JSON.stringify(entry.data));
           return J(entry.data);
         }
         return J({ error: "method" }, 405);
@@ -208,6 +444,7 @@ export default {
       // state, and shouldn't get mixed into keeper/trade backups or wiped by
       // a league-profile restore. Same versioned-backup pattern as /api/setup.
       if (path === "/api/commish") {
+        const denied = requireAdmin(); if (denied) return denied;
         if (request.method === "GET") {
           const s = await kv.get(commishKey(lg), { type: "json" });
           return J(s || {});
@@ -228,6 +465,7 @@ export default {
 
       // ---- /api/commish/history : list backup snapshots ----
       if (path === "/api/commish/history") {
+        const denied = requireAdmin(); if (denied) return denied;
         if (request.method === "GET") {
           return J((await kv.get(commishHistoryKey(lg), { type: "json" })) || []);
         }
@@ -236,6 +474,7 @@ export default {
 
       // ---- /api/commish/restore : roll back to a snapshot ----
       if (path === "/api/commish/restore") {
+        const denied = requireAdmin(); if (denied) return denied;
         if (request.method === "POST") {
           let b; try { b = await request.json(); } catch { return J({ error: "bad json" }, 400); }
           const hist = (await kv.get(commishHistoryKey(lg), { type: "json" })) || [];
@@ -253,7 +492,7 @@ export default {
       // ---- /api/mocks : list / create ----
       if (path === "/api/mocks") {
         if (request.method === "GET") {
-          return J((await kv.get(mocksIndexKey(lg), { type: "json" })) || []);
+          return J((await kv.get(scoped(mocksIndexKey(lg), me), { type: "json" })) || []);
         }
         if (request.method === "POST") {
           let b; try { b = await request.json(); } catch { return J({ error: "bad json" }, 400); }
@@ -263,10 +502,10 @@ export default {
             "Mock " + new Date(ts).toISOString().slice(0, 16).replace("T", " ");
           const summary = (b.summary && String(b.summary).slice(0, 300)) || "";
           const rec = { id, name, ts, summary, data: b.data || {} };
-          await kv.put(mockRecordKey(lg, id), JSON.stringify(rec));
-          const idx = (await kv.get(mocksIndexKey(lg), { type: "json" })) || [];
+          await kv.put(scoped(mockRecordKey(lg, id), me), JSON.stringify(rec));
+          const idx = (await kv.get(scoped(mocksIndexKey(lg), me), { type: "json" })) || [];
           idx.unshift({ id, name, ts, summary });
-          await kv.put(mocksIndexKey(lg), JSON.stringify(idx.slice(0, 500)));
+          await kv.put(scoped(mocksIndexKey(lg), me), JSON.stringify(idx.slice(0, 500)));
           return J({ ok: true, id, name, ts, summary });
         }
         return J({ error: "method" }, 405);
@@ -276,13 +515,13 @@ export default {
       if (path.startsWith("/api/mocks/")) {
         const id = path.split("/").pop();
         if (request.method === "GET") {
-          const rec = await kv.get(mockRecordKey(lg, id), { type: "json" });
+          const rec = await kv.get(scoped(mockRecordKey(lg, id), me), { type: "json" });
           return rec ? J(rec) : J({ error: "not found" }, 404);
         }
         if (request.method === "DELETE") {
-          await kv.delete(mockRecordKey(lg, id));
-          const idx = ((await kv.get(mocksIndexKey(lg), { type: "json" })) || []).filter((x) => x.id !== id);
-          await kv.put(mocksIndexKey(lg), JSON.stringify(idx));
+          await kv.delete(scoped(mockRecordKey(lg, id), me));
+          const idx = ((await kv.get(scoped(mocksIndexKey(lg), me), { type: "json" })) || []).filter((x) => x.id !== id);
+          await kv.put(scoped(mocksIndexKey(lg), me), JSON.stringify(idx));
           return J({ ok: true });
         }
         return J({ error: "method" }, 405);
@@ -290,6 +529,9 @@ export default {
 
       // ---- /api/leagues : list all league profiles / create one ----
       if (path === "/api/leagues") {
+        // GET stays open to any signed-in user — the league's structure (owners,
+        // draft order, player pool) is what their Draft Room is built from.
+        if (request.method !== "GET") { const denied = requireAdmin(); if (denied) return denied; }
         if (request.method === "GET") {
           const list = await kv.list({ prefix: "league:" });
           const profiles = await Promise.all(list.keys.map((k) => kv.get(k.name, { type: "json" })));
@@ -335,6 +577,9 @@ export default {
 
       // ---- /api/leagues/:id : update / delete a league profile ----
       if (path.startsWith("/api/leagues/")) {
+        // Everything under here mutates or exposes a shared league profile
+        // (PUT/DELETE/history/restore) — admin only.
+        const denied = requireAdmin(); if (denied) return denied;
         const id = decodeURIComponent(path.split("/").pop());
         if (request.method === "PUT") {
           let b; try { b = await request.json(); } catch { return J({ error: "bad json" }, 400); }
@@ -371,6 +616,7 @@ export default {
       // reliable draft-type/superflex flag, so those aren't guessed here; the user fills
       // them in and hits Save (POST/PUT /api/leagues) same as a manual entry.
       if (path.startsWith("/api/import/sleeper/")) {
+        const denied = requireAdmin(); if (denied) return denied;
         if (request.method !== "GET") return J({ error: "method" }, 405);
         const sleeperId = decodeURIComponent(path.split("/").pop());
         try {
@@ -436,6 +682,7 @@ export default {
       // this export, so every rostered player comes back FA/NONE, same as Sleeper's
       // fallback, for the user to fill in on Teams & Keepers after saving.
       if (path.startsWith("/api/import/mfl/")) {
+        const denied = requireAdmin(); if (denied) return denied;
         if (request.method !== "GET") return J({ error: "method" }, 405);
         const mflId = decodeURIComponent(path.split("/").pop());
         const year = url.searchParams.get("year") || String(new Date().getFullYear());
@@ -567,11 +814,34 @@ export default {
         }
       }
 
-      // ---- /api/yahoo/status : is a Yahoo account connected? ----
+      // ---- /api/yahoo/status : is a Yahoo account connected, and to which app? ----
+      // `client_id_hint` exists so a mismatch between the Yahoo app you are
+      // looking at in the developer console and the credential this Worker
+      // actually holds is visible without guessing. A client id is public by
+      // construction (it rides in the consent redirect URL), and this route is
+      // admin-only regardless, so showing its ends leaks nothing.
       if (path === "/api/yahoo/status") {
+        const denied = requireAdmin(); if (denied) return denied;
         if (request.method !== "GET") return J({ error: "method" }, 405);
         const auth = await kv.get(YAHOO_AUTH_KEY, { type: "json" });
-        return J({ connected: !!auth });
+        const cid = env.YAHOO_CLIENT_ID || "";
+        return J({
+          connected: !!auth,
+          connected_at: auth ? auth.connected_at || null : null,
+          expires_at: auth ? auth.expires_at || null : null,
+          client_id_hint: cid ? `${cid.slice(0, 12)}…${cid.slice(-8)} (${cid.length} chars)` : null,
+        });
+      }
+
+      // ---- /api/yahoo/disconnect : drop the stored grant ----
+      // Needed because a refresh token cannot gain scopes it was not granted.
+      // Once the Yahoo app's permissions change, the only way forward is to stop
+      // refreshing the old grant and consent again from scratch.
+      if (path === "/api/yahoo/disconnect") {
+        const denied = requireAdmin(); if (denied) return denied;
+        if (request.method !== "POST") return J({ error: "method" }, 405);
+        await kv.delete(YAHOO_AUTH_KEY);
+        return J({ ok: true });
       }
 
       // ---- /api/yahoo/leagues : diagnostic — list the connected account's NFL
@@ -581,6 +851,7 @@ export default {
       // roster-import mapping (see /api/import/sleeper/:id for that pattern once
       // this is confirmed working end-to-end).
       if (path === "/api/yahoo/leagues") {
+        const denied = requireAdmin(); if (denied) return denied;
         if (request.method !== "GET") return J({ error: "method" }, 405);
         try {
           const token = await getYahooAccessToken(env, kv, url);
@@ -590,7 +861,22 @@ export default {
             { headers: { Authorization: `Bearer ${token}` } }
           );
           const text = await r.text();
-          if (!r.ok) return J({ error: "Yahoo API returned " + r.status, body: text.slice(0, 1000) }, 502);
+          if (!r.ok) {
+            // Yahoo's own wording for "the token is valid but this app was never
+            // granted Fantasy Sports access". It is not a token problem, so
+            // re-running the consent flow alone won't fix it — the app's API
+            // Permissions have to include Fantasy Sports (Read) first.
+            const needsPerm = /additional_authorization_required/.test(text);
+            return J({
+              error: needsPerm
+                ? "Yahoo says this app isn't authorized for Fantasy Sports data."
+                : "Yahoo API returned " + r.status,
+              hint: needsPerm
+                ? "In the Yahoo Developer console, open this app, tick Fantasy Sports \u2192 Read under API Permissions, save, then click Connect Yahoo account again to re-consent."
+                : undefined,
+              body: text.slice(0, 1000),
+            }, 502);
+          }
           let raw; try { raw = JSON.parse(text); } catch { return J({ error: "Yahoo response wasn't valid JSON", body: text.slice(0, 1000) }, 502); }
           let leagues = [];
           try {

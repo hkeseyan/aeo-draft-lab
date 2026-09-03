@@ -30,14 +30,28 @@ and noise influence simulated bids. The displayed market dollars are scenario
 estimates until the league-aware custom rankings/projections and auction-value
 engine replace them.
 
-The board is a genuine CSS grid (`grid-template-columns` set per league's
-team count, every header/cell a direct grid child in row-major order) so a
-row's height is shared across every column — a wrapped long name doesn't
+The board sits directly under the draft controls, above the player list — it's
+the thing you read first on the clock. It's capped at roughly six rounds tall
+and scrolls for the rest, with `position:sticky` team headers so you always
+know whose column you're in. Column tracks come from a `--teams` CSS custom
+property set by `renderBoard()` rather than an inline `grid-template-columns`,
+which is what lets a `max-width:760px` media query swap to fixed 104px columns
+on mobile; with inline styles (and `minmax(120px,1fr)` tracks that collapse on
+a narrow viewport) the rightmost teams were unreachable.
+
+The board is a genuine CSS grid (every header/cell a direct grid child in
+row-major order) so a row's height is shared across every column — a wrapped long name doesn't
 push just its own column out of alignment with its neighbors, which a
 per-column block-stacked layout couldn't guarantee. Column headers and
 traded-pick tags show the real owner name (`ownerLabel(slot)`, falling back
 to `T<slot>` only if a slot genuinely has no owner name), not a bare `T1`/
 `T2`/`→T4`.
+
+The board is capped at six rounds tall and scrolls for the rest. That cap is
+`--board-rows` × `--board-row-h`, with the row height stated explicitly (60px
+desktop, 74px mobile) rather than inferred from `.cell`'s 34px `min-height` — a
+populated cell carries a pick label plus a wrapped player name and runs far
+taller, so sizing off the minimum showed four rounds instead of six.
 
 **Roster**: next to Best Available, a dropdown (defaulting to you) shows any
 owner's roster slotted into starters — one row per starting slot in
@@ -56,8 +70,217 @@ since the queue is a live filter over the pool's `drafted` flag rather than
 a one-time removal — nothing to manually re-add after backing up a pick.
 Persists via `/api/setup` alongside keepers/trades/tendencies.
 
-**Auction price layers**: auction leagues deliberately maintain two dollar concepts. **Market $** models what opponents are likely to pay; Yahoo league-specific default/Pre-Draft Value and Yahoo Average Salary are the preferred anchors when loaded, with market-source fallbacks. **Target $** is Hovo's independent bid ceiling/value layer and does not inherit Yahoo by default; it can blend FantasyPros, Draft Sharks, RotoWire, and the future custom league-aware valuation. Both are dynamically rescaled to the actual money and open roster slots remaining after projected/confirmed keepers and auction sales. If source columns are absent, each layer falls back to the existing rank/scarcity curve and is visibly labeled as an estimate. Supported optional player-CSV columns: `yahoo_default`, `yahoo_avg_salary`, `fp_value`, `ds_market`, `ds_value`, `rotowire_value`, `custom_value`.
+**Tiers**: Best Available shows a tier separator row (`Tier 3 · 7 left`) from
+the players CSV's `tier` column, and the count turns red at 3 or fewer left.
+Counts are computed over the *filtered* rows, so with the position filter on
+"RB" the break reads "7 left at RB" — the scarcity question you actually ask
+on the clock. Breaks only fire when crossing into a deeper tier: the pool is
+ADP-sorted while tiers come from ECR, so reacting to every tier change would
+litter the list with headers; a better-tier player who's slipped down the ADP
+board just renders inline under the tier he fell into. `parsePlayers()` now
+keeps `tier`, and `poolToCSV()` exports it, so a load/export round-trip
+doesn't silently drop the column.
 
+**Headshots & rookie badge**: Best Available, the auction pool table, drafted
+picks on the board, and My Picks all show a player's headshot (a 20px circular
+`img`) and, where applicable, an `RK` badge. Both are sourced from Sleeper's
+free public player list (`api.sleeper.app/v1/players/nfl`), matched into
+`players-2026.csv` by normalized name at data-pull time — two optional CSV
+columns, `sleeper_id` and `rookie` (`years_exp===0` when pulled). Headshots
+hotlink `sleepercdn.com/content/nfl/players/<sleeper_id>.jpg` directly — no
+image storage, no ongoing crosswalk to maintain — and `onerror` hides a
+missing image rather than showing a broken-image icon, since coverage isn't
+guaranteed for every player. `parsePlayers()`/`poolToCSV()` round-trip both
+columns like every other optional field.
+
+**Runs & scarcity cues**: a strip under the draft controls (`#clockCues`)
+answers "what's happened since I last picked, and what won't survive to my
+next pick" — (1) positional counts of everything drafted since your most
+recent pick ("Since your last pick (9): RB 4 · WR 3 · QB 1"), (2) the top
+tier still on the board at each of QB/RB/WR/TE with its remaining count,
+reddening at 3 or fewer (best remaining *tier*, not best ADP — a tier-2
+player who's slipped down the ADP board is still tier 2), and (3) how many
+available players have an ADP ahead of your pick *after* the one on the
+clock, with the first three named (★ marks queued players). Re-rendered with
+every pick, undo, and rewind.
+
+**Rewind to any pick**: clicking any non-keeper cell on the board — or the
+`↩` on a filled row of "My picks" — rewinds the draft to that pick after a
+confirm, dropping it and everything after it and putting the clock back
+there (`rewindTo(ov)`). Keepers are pre-placed and never rewound. This is
+the branch-testing tool: re-run a mock down a different path from round 3
+without resetting the whole draft. Single-step `undo()` still exists.
+
+**Draft analysis**: a card at the bottom of the Draft Room, run on demand via
+"Grade the draft as it stands" — works mid-draft, not just at the end. It
+ranks all 12 teams by roster value with a letter grade, starter slots filled,
+and per-position ranks (QB/RB/WR/TE), highlighting your row; then lists the
+five biggest steals and five biggest reaches by `ADP − overall pick`.
+
+Value is ECR-based, not projection-based: `proj` is only populated for the
+players FantasyPros exposes without a login, so grading on it would score
+half the board as zero. The curve (`valuePoints`) is steep at the top and
+flattens out, so one stud outweighs two mid-round starters. Team value =
+starters + 30% of the bench (depth counts, but far less). Grades are relative
+to that draft's own field: a z-score against the 12-team mean/σ mapped to
+A+ … F, so grades describe *this* draft rather than an absolute standard.
+Steals/reaches exclude K and DST — everyone waits on them by convention, so
+they "fall" 20+ spots past ADP in every draft and would crowd out the real
+ones. Auction leagues show a placeholder here like the rest of the room.
+
+### Auction valuation
+
+**The market curve is calibrated against this league's own realized prices, not
+invented.** The 106 declared keepers are real winning bids (plus the league's
+$1/yr escalation) from the same 14 managers, budget and format — the best
+available ground truth. Their distribution: max $64 (32% of a $200 budget),
+median $6, 25.5% of kept players at $1-2.
+
+Price decays with ADP as a **stretched exponential**,
+`exp(-(rank/auctionDecay)^auctionShape)`. The second parameter matters: a plain
+exponential has one knob, and one knob cannot produce both a sharp peak and a
+fat middle. Fitting AEOK's median with a single knob forced its top player to
+$43 when that league's own history says $58. Both parameters are fitted per
+league against its own realized prices, because the two leagues are genuinely
+different markets — Fantastic peaks at $64 with a median of $6 and 25% of the
+roster at $1-2, while AEOK peaks at $58 with a median of $8 and only 11% at
+$1-2, since superflex with 18 roster spots spreads money across more genuinely
+rosterable players and leaves far less $1-2 filler.
+
+| league | decay | shape | fitted max / median / $1-2 | observed |
+|---|---|---|---|---|
+| Fantastic | 42 | 0.90 | $66 / $6 / 26.3% | $64 / $6 / 25.5% |
+| AEOK | 34 | 0.70 | $53 / $7 / 9.3% | $58 / $8 / 11.0% |
+
+A league with no fit falls back to decay 50, shape 1 (plain exponential).
+
+**Prices are value over replacement, not raw rank.** The curve above sets the
+*shape*, but a rank curve alone has no idea that a league only rosters so many
+players at a position: in a one-QB league the 25th quarterback still looked like
+the ~150th player overall and drew real money, which nobody would ever bid.
+Every price is therefore the player's curve weight **minus the curve weight of
+the last rosterable player at his position**, floored at zero — so everything at
+or past replacement is worth exactly the minimum bid, and the tier just above it
+compresses into $1-3 instead of tapering gently through a fat $4-9 middle.
+
+Replacement level comes from the league's own settings, not a tuning knob
+(`auctionRosterDemand`): `teams x starters` at each position, plus flex slots
+split RB .42 / WR .46 / TE .12 among the flex-eligible positions, plus superflex
+slots going 85% to quarterbacks, plus every bench spot divided among QB/RB/WR/TE
+(a superflex league leans more of it to QB). Kickers and defenses get exactly one
+per team — nobody benches them. For Fantastic that is 26 QB / 76 RB / 82 WR /
+26 TE / 14 DST, which sums to the league's 224 roster spots.
+
+The effect on Fantastic: Cam Ward, Jacoby Brissett, Tre' Harris and Colby
+Parkinson all price at $1; Emmett Johnson and Jaydon Blue at $2; the $4-9 band
+fell from 46 players to 21. Money is conserved, so the top tier rises slightly
+and the ceiling does more of the work than before.
+
+### Auction scarcity tiers (green / yellow / red)
+
+The auction room's per-position "how many left" strip reads **top tier / still
+rosterable / past replacement**. The boundaries are read off the remaining pool
+rather than set at fixed dollar amounts — deliberately, because a $29 player
+sitting next to a cluster of $30s belongs with them, not with the $4-16 group
+below (`auctionPosTiers`):
+
+- **red** — past this position's replacement level once everyone already
+  rostered there is subtracted. The literal waiver-wire tail.
+- **green** — above the single biggest price drop in the *top half* of what
+  remains. Only the top half is searched, because the largest raw drop across
+  the whole list is almost always the $2 -> $1 step at the very bottom, which
+  says nothing about who the premium players are.
+- **yellow** — everything in between.
+
+Because it re-reads the live pool on every render, green narrows on its own as
+the elite tier is bought, until eventually one player is green by himself. As of
+the current Fantastic board, green at RB is exactly the Bijan / Barkley / Jeanty
+/ Achane / Walker / Jacobs / Love / Hall tier, and green at QB is Dak alone.
+
+The historical note: the decay constant (`auctionDecay`, default 50) was first
+fit alone to reproduce Fantastic's distribution. In a full 14-team/$200
+auction it yields max $59, median $6, and 25.9% at $1-2 — three of four
+observed metrics within noise. The original value of 35 was far too
+concentrated: it put the top player at $81 in a *full* auction, 46% of the
+roster at $1-2, and after rescaling to a keeper-thinned pool produced $119 for
+the top available player, which no manager would ever bid.
+
+`auctionMaxPriceShare` caps any single player at a share of the budget, set per
+league from its own history: Fantastic 0.36 ($72, above its realized 32% to
+allow for a thinned elite tier), AEOK 0.32 ($64, just above its realized 29%).
+
+The cap is a **soft knee, not a clip**, and is applied exactly once. Clipping
+put four different players at exactly $72 — it enforced the ceiling but
+destroyed the ordering among precisely the players a bid decision turns on.
+`softCeiling()` is monotonic, so values above the knee compress smoothly toward
+the cap while staying ranked and distinct. It must not be iterated: squash →
+redistribute → squash pushes each redistribution back over the knee and
+converges the whole top tier onto one number (seven players at $58 in testing).
+Freed dollars go once to players below the knee, who can absorb them without
+needing to be squashed in turn. The league's realized ceiling is 32%; 40% leaves headroom for genuine
+keeper-driven inflation while ruling out runaway values. Clipped dollars are
+redistributed across the rest of the pool (`applyAuctionCap`), never destroyed,
+so the priced pool still sums to the money that actually has to be spent.
+
+**Scarcity, not budget, drives the keeper-league premium** — worth knowing
+because the intuition runs the other way. Fantastic has $1,346 left over 118
+slots, $11.40 per slot, slightly *less* than a full auction's $12.50. Prices at
+the top are nonetheless higher than a full auction's because five of the top ten
+players are kept, so whoever is best available absorbs a much larger share of
+the curve. AEOK demonstrates the same mechanic in reverse: $8.10 per slot, well
+under normal, and its prices sit below the ceiling without it ever binding.
+
+Rescaling to *remaining* money is deliberate and correct: those dollars do get
+spent, and a keeper league that locks up half its cash genuinely inflates
+what's left. In this league 52% of all money is committed to keepers, so
+elite players still on the board legitimately cost more than they would in a
+normal draft — the fix was the shape and the ceiling, not the inflation.
+
+**Target $ prices retention, which is what makes a keeper auction different.**
+The price you pay is also next year's cost basis (keeping costs price +
+`annualIncrease`), so overpaying doesn't merely cost money now — it destroys
+the retention value that made a young player worth chasing. The real case this
+models: a receiver bought at $23 when $18 was the number, whose $24 keeper
+price then exceeded his worth, turning a multi-year asset into a one-year
+rental.
+
+`keeperBreakEvenBid()` solves for the highest price at which he still returns
+value, over a horizon of `keeperHorizon` future seasons (default 3 for
+unlimited-keeper leagues; at horizon 1 the premium is a rounding error and
+doesn't reflect how these actually get bid up):
+
+```
+P = V + Σ(k=1..H) max(0, V·traj^k − (P + k·increase))
+```
+
+solved as a damped fixed point. The `max(0, …)` is the cliff: past the price
+where next year's cost exceeds his value, the retention premium is simply gone
+and the target stops rising. Note the asymmetry — an aging player isn't
+penalized below his one-year value, because a rental is still worth what he
+produces; the differentiation is that ascending players earn a premium.
+
+`traj` is the year-over-year value trend. An explicit `trajectory` CSV column
+wins; otherwise it's inferred from `age` via conventional positional aging
+curves (`AGE_PEAK` — RB 25, WR 27, TE 28, QB 30; running backs decay fastest),
+capped so age nudges rather than dominates; otherwise neutral. With real ages
+attached this separates a 21-year-old from a 28-year-old at the same market
+price, which is the whole point.
+
+**Both layers fall back to the same curve when no source data is loaded**, so
+Market $ and Target $ will read identically until either valuation columns
+(`fp_value`, `custom_value`, …) or `age`/`trajectory` are populated. That's
+honest rather than a manufactured difference, and the auction pool count is
+labeled "est." to say so.
+
+**Transferable to other sports.** The method here — calibrate the curve against
+the league's own realized prices, cap by observed share of budget, and price
+retention as a break-even bid over a keeper horizon — is sport-agnostic. Only
+the inputs change: positional aging peaks (`AGE_PEAK`), position multipliers in
+`auctionWeight()`, roster shape, and the decay constant, all of which are
+per-league settings rather than code. Basketball auctions are the next
+application (see FEEDBACK.md, 2026-08-31).
+
+**Auction price layers**: auction leagues deliberately maintain two dollar concepts. **Market $** models what opponents are likely to pay; Yahoo league-specific default/Pre-Draft Value and Yahoo Average Salary are the preferred anchors when loaded, with market-source fallbacks. **Target $** is Hovo's independent bid ceiling/value layer and does not inherit Yahoo by default; it can blend FantasyPros, Draft Sharks, RotoWire, and the future custom league-aware valuation. Both are dynamically rescaled to the actual money and open roster slots remaining after projected/confirmed keepers and auction sales. If source columns are absent, each layer falls back to the existing rank/scarcity curve and is visibly labeled as an estimate. Supported optional player-CSV columns: `yahoo_default`, `yahoo_avg_salary`, `fp_value`, `ds_market`, `ds_value`, `rotowire_value`, `custom_value`.
 ### Teams & Keepers
 Rival roster view and keeper assignment/modeling across the league, plus
 the owner-tendency controls (see Opponent model below). For dollar-cost
@@ -68,8 +291,52 @@ team's selected keeper spend, money left, and maximum legal bid. Rival keepers
 can be auto-projected as a starting scenario and then manually adjusted; the
 user's own keeper selections are never cleared by "clear rival keepers."
 
+**Which pick pays for a keeper.** The cost round says what a keeper is *worth*,
+not which pick pays for him — with trades in play a team can hold several picks
+in one round or none at all. So each keeper is placed on a pick its team
+**currently owns**: the least valuable (latest) one available in the cost
+round, each keeper consuming a distinct pick so two keepers in the same round
+can't collide. If the cost round is exhausted, it falls back to *earlier*
+rounds — a 10th-round cost is paid with a 9th, then an 8th, and so on. Never
+later, which would underpay. A keeper whose team has traded away every pick at
+or before the cost round can't legally be kept, and is flagged with a ⚠ rather
+than silently vanishing off the board.
+
+**Unknown values read as "—", not as a number.** `adpRoundOf()` returns `null`
+for a player who isn't in the pool, and `keepValue()` propagates it. Previously
+a missing player fell through to a `99` sentinel, so a keeper costing a 10th
+displayed as `−89` — indistinguishable from a genuinely terrible keeper, and
+the cause of a real bug where a misspelled name made a `+2` bargain look like a
+disaster. Sorting places unknowns last rather than coercing them to 0, and
+auto-assign won't rank an unrated player against a rated one.
+
+Hand-entered rosters drift from the pool's spelling, and a mismatch silently
+breaks keeper valuation. `NAME_ALIASES` bridges verified misspellings (each
+checked against the pool before being added) so they resolve regardless of
+which data source supplied the roster — the authoritative copy lives in KV per
+league, so correcting the file alone wouldn't fix live data. Saved keeper
+selections in `assigned` store the name as spelled when it was picked, so
+`keeperCostFor()` resolves through the same alias/normalisation: without it,
+correcting a roster spelling would orphan the saved selection and drop the
+keeper with no visible error.
+
+`findPlayer()` matches exactly, then on a normalized form (case, punctuation,
+Jr/Sr/III suffixes), then — for DEF/DST only — on a name suffix, because
+rosters carry defenses by nickname ("Broncos") while the player pool carries
+full names ("Denver Broncos").
+
 ### Trades
-Reassign a draft pick to another manager (by round), or move a player/keeper
+**Pick trades work on current ownership, not original ownership.** You choose
+the manager giving up the pick, then choose from the picks that manager
+*actually holds right now* — including ones they acquired in an earlier trade,
+tagged "via <original owner>" — then the manager receiving it. This is what
+makes re-trading possible: previously the form took a round and computed the
+`from` manager's own original pick in it, so an acquired pick could never be
+moved on, and choosing a round whose pick had already been traded silently
+moved the wrong pick. Trading a pick back to whoever originally owned it clears
+the override instead of recording a redundant one.
+
+Reassign a draft pick to another manager, or move a player/keeper
 to a different roster — both change who's on the clock, who owns which
 pick, and keeper eligibility. Saved to the cloud (`/api/setup`) alongside
 keepers so trades only need entering once. Includes a "backup history"
@@ -162,15 +429,45 @@ owner/slot editor, no code change or redeploy needed. See "League profiles".
 ## League profiles
 
 The app serves multiple leagues from one deployment. A league profile bundles
-everything that used to be hardcoded — team count, scoring label, draft type
+everything that used to be hardcoded — team count, **rounds** (starters +
+bench combined; there's no separate bench-count field, since bench is
+whatever's left over after starters are filled — see `slotRosterPlayers`),
+scoring label, draft type
 (snake/linear/auction — linear keeps the same team order every round, no
 snaking; the draft engine only needs `overall()`/`slotForOverall()`/
 `posInRound()` to know the difference, so trades/board/Strategy Lab all work
 unchanged), superflex flag, starting lineup + flex eligibility, max
 keepers, keeper-cost type (round/dollar), draft/keeper dates, owners, draft
-order (`ownerSlot`), locked/known keepers, the roster data (`rostersRaw`,
-pipe-delimited `owner|player|drafted_round|keeper_round`), and the player
-pool CSV (`playersCsv`).
+order (`ownerSlot`, which for an auction league is nomination order — who
+nominates first, not a snake-draft position), locked/known keepers, the
+roster data (`rostersRaw`, pipe-delimited `owner|player|drafted_round|
+keeper_round`), and the player pool CSV (`playersCsv`).
+
+**`leagueKeepers`** (auction leagues): an array of `"Owner|Player"` for
+keepers the *league itself* has locked in — a passed deadline, identical for
+every viewer, so it lives on the shared profile rather than in a signed-in
+user's personal `assigned` set. `rebuildKeepers()` folds both together
+(league-declared first, then personal, deduped by owner+player) and derives
+each keeper's dollar cost from `rostersRaw`'s 4th field rather than storing it
+twice. `resetDraft()` marks every one drafted so it leaves the auction pool,
+and `auctionTeamState()` sums them into each team's committed spend, open
+roster slots, money left, and max bid — no separate plumbing needed once the
+keepers exist. On Teams & Keepers a league-locked keeper renders checked,
+disabled, and chipped **LOCKED**, since it's a fact rather than a choice.
+
+**Cloud profiles never get newer code defaults for free.** Once a built-in
+league is first seeded to KV (`fetchCloudLeagues()`), the cloud copy is
+authoritative forever — a real edit in the Leagues tab must never be
+overwritten by a later code change, so nothing in the code's `LEAGUES_DEFAULT`
+is pushed to an already-seeded profile. That's the right default, but it has
+one consequence worth knowing: a field added to a built-in profile's defaults
+*after* it was first seeded (like `leagueKeepers`) will never reach the live
+cloud copy on its own. `fetchCloudLeagues()` runs one narrowly-scoped backfill
+for exactly this: if a cloud profile's `leagueKeepers` is empty/missing but
+the code default has a real one, it merges the default in and writes the
+merged profile back — once, and only for that one field, so a genuine edit
+(including an intentionally-cleared list, if that ever becomes editable) is
+never at risk.
 
 **League type** (`leagueType`, separate from `draftType`): `keeper` (default)
 — today's model, pick up to `maxKeepers` at a per-player cost round, opt-in
@@ -299,12 +596,12 @@ entries in `FEEDBACK.md`.
 |---|---|---|
 | **Mock Draft Simulator** | Fast mocks vs simulated opponents, no waiting between picks | ✅ Have it — Draft Room |
 | **Keeper support** | Enter keepers per team with the round each costs; mocks account for them | ✅ Have it, and ours is more specific (real rosters + locked keepers) |
-| **Opponent pick logic** | Weighs rankings + team needs + positional scarcity; Basic vs Advanced modes | ⚠️ Partial — ours picks randomly within an ADP noise window; no roster-need or scarcity awareness |
-| **Draft Intel** | Analyzes leaguemates' past drafts for tendencies; toggle per team into mocks | ❌ Missing — but high value here since it's the same 12 owners yearly |
-| **Player queue** | Shortlist of targets, surfaced when you're on the clock | ❌ Missing |
-| **Tiers** | Tier breaks in rankings + "players left in tier" counter that reddens | ❌ Missing (CSV already carries a `tier` column, unused) |
-| **Draft Analyzer** | Post-draft grade, projected standings, positional ranks, strengths/weaknesses, steals & reaches | ❌ Missing |
-| **Redo / restart from any pick** | Branch a mock from an earlier point to test alternatives | ⚠️ Partial — single-step `undo()` only |
+| **Opponent pick logic** | Weighs rankings + team needs + positional scarcity; Basic vs Advanced modes | ✅ Have it — need-aware scoring with hard depth-cap vetoes (see "Opponent model") |
+| **Draft Intel** | Analyzes leaguemates' past drafts for tendencies; toggle per team into mocks | ✅ Have it — hand-set per-owner tendencies, toggled per owner (same 12 guys yearly, so no mining needed) |
+| **Player queue** | Shortlist of targets, surfaced when you're on the clock | ✅ Have it — "Q" column + My Queue |
+| **Tiers** | Tier breaks in rankings + "players left in tier" counter that reddens | ✅ Have it — filter-aware tier breaks in Best Available |
+| **Draft Analyzer** | Post-draft grade, projected standings, positional ranks, strengths/weaknesses, steals & reaches | ✅ Have it — Draft analysis card (grades, positional ranks, steals/reaches). No projected standings — we grade roster value, not simulate a season |
+| **Redo / restart from any pick** | Branch a mock from an earlier point to test alternatives | ✅ Have it — `rewindTo()` from any board cell or my-picks row |
 | **Cheat Sheet Creator** | Import/blend rankings from any source, drag-drop reorder, custom tiers | ⚠️ Partial — Data tab imports a CSV; no reordering or blending UI |
 | **Strategy comparison** | — (not a distinct DW tool) | ✅ Ours already exceeds this — Strategy Lab compares draft paths over N sims |
 
@@ -316,7 +613,10 @@ alongside, the board underneath, and always-visible "what should I do right
 now" guidance. Our Draft Room is already shaped this way — the gap is mostly
 in the *decision support* (tiers, queue, scarcity/run signals, need-aware
 opponents) and the *after-action review* (grade, steals/reaches, projected
-finish), not in the overall layout.
+finish), not in the overall layout. As of 2026-08-26 that gap is mostly
+closed — tiers, queue, run/scarcity cues, need-aware opponents, rewind, and
+draft grading all ship; what's left of it is a simulated projected finish,
+which we deliberately don't do (we grade roster value instead).
 
 ### Deliberately out of scope
 
@@ -343,6 +643,62 @@ the cloud or touches the real setup data. This is a UI-level restriction, not
 a real auth boundary — someone hitting the API directly from devtools isn't
 blocked — which is an accepted tradeoff for "show a friend," not a security
 posture for a hostile viewer.
+
+## Accounts (Google sign-in)
+
+Identity comes from Google OAuth. There are no passwords stored here to leak
+or reset, and no signup form — signing in with a Google account *is* creating
+the account.
+
+**The first Google account that ever signs in becomes the admin.** Everyone
+after that is a regular user. Re-signing in refreshes your name/avatar but
+never re-grants admin, so the role can't be taken by signing in again later.
+
+Three tiers, enforced on the server (`worker.js`) and mirrored in the UI:
+
+| | Tabs | Data |
+|---|---|---|
+| **Admin** | all eight | keeps the original unprefixed KV keys — the owner's existing keepers/trades/picks/mocks carry over untouched |
+| **Signed in** | Draft Room, Teams & Keepers, Trades, Mocks, Strategy Lab | own private setup + mocks under `:u:<id>` keys; reads shared league profiles, can't edit them |
+| **Signed out** | Draft Room only, nothing saves | none — same view a `?guest=1` link gives |
+
+Commish, Leagues, and Data are admin-only: the first is league administration
+(dues, contact info), and the other two edit *shared* league structure — the
+owner list, draft order, and player pool everyone else drafts against. So are
+the Sleeper/MFL/Yahoo imports, since they feed league-profile edits, and the
+Yahoo connect handshake, since there's one shared Yahoo grant slot.
+
+The admin keeping the legacy unprefixed keys is the same trick `aeo-keepers`
+already uses to keep its pre-multi-league data (see `leagueId()` in
+`worker.js`): it means turning accounts on requires no migration and can't
+strand the owner's existing draft prep.
+
+Mechanically: `/auth/google/start` redirects to Google's consent screen with a
+random `state` echoed through a short-lived cookie (CSRF on login);
+`/auth/google/callback` exchanges the code server-to-server, reads the
+`id_token` payload for the Google subject id, upserts a `user:<sub>` record,
+and sets an HttpOnly/Secure/SameSite=Lax session cookie signed with HMAC-SHA256
+(30 days). The `id_token`'s signature isn't separately verified because it
+arrives directly from Google's token endpoint over TLS in a call we initiated —
+verification matters for tokens handed over by a client, which this isn't.
+`/api/me` reports `{accountsEnabled, signedIn, admin, user}` and is the one
+route answerable while signed out; `/auth/signout` clears the cookie.
+
+**Dormant until configured.** With no `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+secrets set, `ACCOUNTS_ON` is false, every caller is treated as the owner, and
+the app behaves exactly as it did before accounts existed. That's a deployment
+prerequisite — you can't run OAuth without an OAuth app — not a security
+stance, and the header says so out loud ("⚠ Accounts off — everyone has full
+access") rather than looking like a login that isn't one. To turn it on:
+
+1. Create an OAuth client at https://console.cloud.google.com/apis/credentials
+   (type: Web application), with the authorized redirect URI
+   `https://aeo-draft-lab.hkeseyan.workers.dev/auth/google/callback`.
+2. `npx wrangler secret put GOOGLE_CLIENT_ID` and
+   `npx wrangler secret put GOOGLE_CLIENT_SECRET`.
+   Optionally `npx wrangler secret put SESSION_SECRET` (any long random string);
+   `GOOGLE_CLIENT_SECRET` is used for cookie signing if it's absent.
+3. Sign in first, before sharing the URL — whoever signs in first is admin.
 
 ## Deployment
 

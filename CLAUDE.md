@@ -150,10 +150,13 @@ current than this list.
 6. **Live draft capability** (real-time sync with an in-progress draft on
    Yahoo/Sleeper/MFL) — was explicitly deprioritized earlier, now scheduled
    for the next 2-3 days per the user (2026-08-25).
-7. **Multiple people / separate save files** — real per-user accounts, each
-   with their own save data (today it's one shared setup per league; guest
-   mode is read-only and doesn't address this). Explicitly low priority;
-   user wants it after commissioner mode, alongside the two items above.
+7. ~~**Multiple people / separate save files**~~ — done 2026-08-27. Google
+   sign-in; the first account to sign in is admin, everyone else gets their
+   own private setup/mocks. Three server-enforced tiers (admin / signed in /
+   signed out). **Dormant until `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`
+   are set in Cloudflare** — until then every visitor has full access and the
+   header says so. See `SPECS.md` → "Accounts (Google sign-in)" for the
+   turn-on steps; sign in before sharing the URL, since first in is admin.
 8. Later, still deferred: in-season tools — waivers/FAAB, start/sit, trade
    analysis; ESPN/FanTracks import; Yahoo Fantasy import (needs the user to
    register an OAuth app first — see conversation history, not recorded here
