@@ -20,6 +20,28 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🆕 2026-09-03 — **Yahoo Fantasy Sports API now requires a manual approval
+  application — the developer-console checkbox no longer does anything.**
+  Ground truth after actually reproducing the failure with a *fresh* grant
+  (ruling out stale-token and admin-session theories, both wrong guesses on
+  the way here): connecting via `discord-bot` (an old YDN app with "Fantasy
+  Sports · Read" checked) still gets a **403** from Yahoo's API itself —
+  `{"error":{"description":"This application is not authorized to perform
+  this action."}}` — even seconds after a brand-new OAuth grant. The user's
+  other, newer app (`Kyos Fantasy Manager`, created ~2 weeks ago) doesn't
+  offer a Fantasy Sports permission option **at all** anymore, only OpenID +
+  an unrelated "TW Auction" permission. Confirmed via
+  `sports.yahoo.com/developer/access/`: Yahoo now gates Fantasy Sports API
+  access behind a **manual application reviewed by Yahoo's Fantasy Sports
+  team** — read-only, explicitly allows "personal or single league use" as a
+  stated use case, wants the existing app's Client ID if you have a YDN
+  account. The old self-serve checkbox is a UI vestige from before this
+  change; checking it and reconnecting does nothing. **Blocked on Yahoo's
+  manual review — nothing further to fix in our code or Cloudflare config
+  until that's approved.** `/api/yahoo/status`'s `client_id_hint` and
+  `/api/yahoo/disconnect` (shipped this session) remain useful for verifying
+  which app is connected once/if approval comes through.
+
 - 🔧 2026-09-02 — **Yahoo: Fantasy Sports · Read was already ticked, so the
   permission wasn't the problem.** My earlier diagnosis was wrong — the user's
   screenshot of the `discord-bot` app shows the box already checked. The real
