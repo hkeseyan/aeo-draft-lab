@@ -274,8 +274,11 @@ This is intentionally a value/ranking overlay. Do not inflate projected games, p
 - Keeper salary is **prior auction/acquisition price + $1**. A kept salary becomes the next year's assumed prior price, so the player escalates another $1 each year.
 - Drafted-player cost provenance survives trades, drops, waivers, and reacquisition; those transactions do **not** reset cost.
 - An undrafted/free-agent player has a **$1 prior price**, so the first keeper salary is **$2**.
-- Keeper deadline: **Sunday, August 30, 2026 at 12:00am PDT** (the Saturday-night boundary). Yahoo lists this league's draft as Offline Draft; the exact offline draft date/time remains external/unconfirmed.
+- Keeper deadline: **Sunday, August 30, 2026 at 12:00am PDT** (the Saturday-night boundary). Draft: **Monday, September 7, 2026 at 7:00pm PDT**; Yahoo lists the league's draft format as Offline Draft.
 - 2026 authoritative keeper-eligible roster/cost source: Google Sheet **Fantastic Football Auction Keeper League Tracker 2026**. Those costs were manually reconstructed from 2025 end-of-season rosters plus 2025 auction results and already include the +$1 escalation. Draft Lab should consume the calculated 2026 costs rather than re-derive 2025 history this season.
+- The finalized 2026 declaration is versioned as `fantastic-2026-final-2026-08-31`: 106 keepers, $1,454 committed, $1,346 remaining, and 118 open draftable slots. The profile retains stable manager keys but separately stores current Yahoo team display names and the 1–14 nomination order. Final records and validated per-team totals are documented in `docs/FANTASTIC_2026.md`.
+- Built-in final keeper data is the first-run/mock baseline. Setup, config, and saved-mock payloads carry the keeper-data revision; a stale revision may retain independent tendencies/trades/queue state but must not restore pre-deadline keeper selections or draft sales into the final pool.
+- Hovo auction guidance distinguishes **Market $**, intrinsic value, preferred **Target $**, roster-fit max, and optional break-glass max. The current portfolio preference and player/QB2/DEF ceilings live in `FANTASTIC_2026_STRATEGY` and are summarized in `docs/FANTASTIC_2026.md`.
 
 ### AEOK Auction League — confirmed 2026 profile
 
