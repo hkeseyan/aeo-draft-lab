@@ -20,6 +20,17 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🔧 2026-09-03 — **Yahoo Fantasy API access application confirmed received.**
+  Got a confirmation email from the Yahoo Fantasy API Team for the
+  resubmission under the new "AEO Draft Lab" app: *"our team has begun
+  reviewing your request. The review process typically takes 1-2 weeks...
+  If we need any additional information, we'll reach out directly."* No
+  email was received/recalled for the original (pre-dedicated-app)
+  submission, so it's unclear whether that one ever actually landed — this
+  is the first confirmed-received application. **Purely a waiting period
+  now** — nothing actionable until Yahoo responds (expect ~mid-September
+  2026) or asks for more detail.
+
 - 🆕 2026-09-03 — **Confirmed: the checkbox genuinely does nothing anymore —
   Yahoo's manual approval is a hard gate, not a formality.** Decisive test:
   switched Cloudflare's `YAHOO_CLIENT_ID` to the brand-new "AEO Draft Lab" app
