@@ -469,6 +469,7 @@
     </div>
   </section>
 </main>
+<script src="/auction-values.js"></script>
 <script>
 // ---------- LEAGUE CONFIG ----------
 // LEAGUE / mySlot are set per active league profile by applyLeagueProfile() (see LEAGUES registry + INIT below).
@@ -1563,7 +1564,7 @@ const LEAGUES_DEFAULT = {
   'fantastic-auction': {
     id:'fantastic-auction', name:'Fantastic Keeper Auction', leagueType:'keeper',
     teams:14, rounds:16, mySlot:10, draftType:'auction', superflex:false,
-    scoringLabel:'Full PPR · 6-pt pass TD', draftDateLabel:'TBD', keeperDeadlineLabel:'Aug 30 · 12:00 AM PDT',
+    scoringLabel:'Full PPR · 6-pt pass TD', draftDateLabel:'Sep 7 · 7:00 PM PDT', keeperDeadlineLabel:'Aug 30 · 12:00 AM PDT',
     starters:{QB:1,RB:2,WR:2,TE:1,FLEX:2,DST:1}, flexEligible:['RB','WR','TE'],
     maxKeepers:null, keeperCostType:'dollar', auctionBudget:200, rosterSize:16, irSlots:2, minBid:1,
     yahooLeagueId:'835427', yahooLeagueUrl:'https://football.fantasysports.yahoo.com/league/fantasticauctiondynasty',
@@ -1574,7 +1575,7 @@ const LEAGUES_DEFAULT = {
     rankSourceLabel:'2026 PPR baseline + keeper-sheet coverage',
     owners:['Gev','Hakop','Gary','Avo','Gugo','Khacho','Edward','Art M','Lev','Hovo','Chris H','Aram','Savada','Art S'],
     meOwner:'Hovo', ownerSlot:{Gev:1,Hakop:2,Gary:3,Avo:4,Gugo:5,Khacho:6,Edward:7,'Art M':8,Lev:9,Hovo:10,'Chris H':11,Aram:12,Savada:13,'Art S':14},
-    myLocked:[], myKeepers:[], rostersRaw:ROSTERS_RAW_FANTASTIC, playersCsv:PLAYERS_CSV_AEO+'\n'+AUCTION_EXTRA_PLAYERS_CSV,
+    myLocked:[], myKeepers:[], rostersRaw:ROSTERS_RAW_FANTASTIC, playersCsv:PLAYERS_CSV_FANTASTIC,
   },
   'aeok-auction': {
     id:'aeok-auction', name:'AEOK Auction League', leagueType:'keeper',
@@ -1591,7 +1592,7 @@ const LEAGUES_DEFAULT = {
     superflexAdpOverrides:{'Josh Allen':3.0,'Drake Maye':10.7,'Lamar Jackson':9.6,'Joe Burrow':14.5,'Jayden Daniels':17.9,'Caleb Williams':24.2,'Jalen Hurts':28.5,'Justin Herbert':32.0,'Jaxson Dart':37.2,'Dak Prescott':40.0,'Trevor Lawrence':41.7,'Patrick Mahomes II':43.2,'Bo Nix':46.8,'Brock Purdy':53.5,'Jared Goff':61.9,'Matthew Stafford':64.3,'Jordan Love':67.6,'Baker Mayfield':71.9,'Kyler Murray':82.3,'Tyler Shough':84.2,'Sam Darnold':85.5,'C.J. Stroud':95.8,'Cam Ward':98.9,'Fernando Mendoza':103.8,'Malik Willis':106.2,'Daniel Jones':109.9,'Bryce Young':114.2,'Jacoby Brissett':143.1,'Aaron Rodgers':143.6,'Geno Smith':145.3,'Tua Tagovailoa':179.1,'Shedeur Sanders':184.3,'Kirk Cousins':185.4,'Deshaun Watson':210.6,'Michael Penix Jr.':215.8,'Garrett Nussmeier':216.2,'Carson Beck':220.2,'Ty Simpson':226.8,'Will Howard':240.9,'J.J. McCarthy':245.4},
     owners:['Jiro','Sako','Savada','Haik','Robert','David','Aren','Edward','Nick','Taron','Mher','Hovo'],
     meOwner:'Hovo', ownerSlot:{Jiro:1,Sako:2,Savada:3,Haik:4,Robert:5,David:6,Aren:7,Edward:8,Nick:9,Taron:10,Mher:11,Hovo:12},
-    myLocked:[], myKeepers:[], rostersRaw:ROSTERS_RAW_AEOK_AUCTION, playersCsv:PLAYERS_CSV_AEO+'\n'+AUCTION_EXTRA_PLAYERS_CSV,
+    myLocked:[], myKeepers:[], rostersRaw:ROSTERS_RAW_AEOK_AUCTION, playersCsv:PLAYERS_CSV_AEOK_AUCTION,
   },
 };
 // Mutable runtime registry — starts as a copy of the defaults, replaced by the cloud
@@ -1931,7 +1932,18 @@ function scaleAuctionValuesToRemainingBudget(base){
   const slots=states.reduce((n,x)=>n+x.open,0), money=states.reduce((n,x)=>n+Math.max(0,x.left),0);
   const pool=available().filter(auctionEligible).slice().sort((a,b)=>(base.get(b.id)||1)-(base.get(a.id)||1)).slice(0,slots);
   const extra=Math.max(0,money-slots*min), rawExtra=pool.reduce((n,p)=>n+Math.max(0,(base.get(p.id)||min)-min),0);
-  const scale=rawExtra>0?extra/rawExtra:1;
+  // Preserve a source's published dollar scale at the untouched start of a
+  // league. Then adjust only for keeper/sale inflation relative to that
+  // baseline; normalizing Yahoo/FantasyPros to force every league dollar into
+  // player values made their already league-aware top prices unrealistically high.
+  const baselineSlots=(LEAGUE.rosterSize||LEAGUE.rounds||16)*LEAGUE.teams;
+  const baselineMoney=(LEAGUE.auctionBudget||200)*LEAGUE.teams;
+  const baselinePool=PLAYERS.filter(auctionEligible).slice().sort((a,b)=>(base.get(b.id)||1)-(base.get(a.id)||1)).slice(0,baselineSlots);
+  const baselineExtra=Math.max(0,baselineMoney-baselineSlots*min);
+  const baselineRawExtra=baselinePool.reduce((n,p)=>n+Math.max(0,(base.get(p.id)||min)-min),0);
+  const scenarioRatio=rawExtra>0?extra/rawExtra:1;
+  const baselineRatio=baselineRawExtra>0?baselineExtra/baselineRawExtra:1;
+  const scale=baselineRatio>0?scenarioRatio/baselineRatio:1;
   pool.forEach(p=>out.set(p.id,Math.max(min,Math.round(min+Math.max(0,(base.get(p.id)||min)-min)*scale))));
   return out;
 }
