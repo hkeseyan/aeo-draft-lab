@@ -20,6 +20,20 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🆕 2026-09-03 — **Confirmed: the checkbox genuinely does nothing anymore —
+  Yahoo's manual approval is a hard gate, not a formality.** Decisive test:
+  switched Cloudflare's `YAHOO_CLIENT_ID` to the brand-new "AEO Draft Lab" app
+  (Fantasy Sports · Read checked at creation), reconnected for a fresh grant,
+  and `/api/yahoo/leagues` still returned the same 403 "This application is
+  not authorized to perform this action." That rules out every remaining
+  alternative theory (stale grant, wrong client id, old/legacy app quirk) —
+  only Yahoo's actual review-and-approval on the access-request application
+  can unblock this now. **Genuinely nothing left to try on our end.** Waiting
+  on Yahoo to act on the `sports.yahoo.com/developer/access/` submission
+  under this app's Client ID. Once approved: Disconnect + Connect fresh in
+  the Leagues tab (a token issued before approval, even under the same app,
+  may carry the same problem — reconnect to be safe) and re-test.
+
 - 🔧 2026-09-03 — **Resubmitted the Yahoo Fantasy Sports API access
   application under a new dedicated app.** Created a fresh Yahoo app ("AEO
   Draft Lab", homepage `https://aeo-draft-lab.hkeseyan.workers.dev/`,
