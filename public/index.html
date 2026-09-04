@@ -66,11 +66,11 @@
   .board{
     display:grid;gap:2px;padding-bottom:6px;
     grid-template-columns:repeat(var(--teams,12), minmax(120px,1fr));
-    /* Six rounds tall, then scroll — the board is the top card now, so it can't
+    /* Five rounds tall, then scroll — the board is the top card now, so it can't
        be allowed to push the player list off-screen. Row height is explicit
        because a populated cell (pick label + wrapped player name) runs well
        taller than .cell's 34px min-height; assuming the minimum showed 4. */
-    --board-rows:6; --board-row-h:60px;
+    --board-rows:5; --board-row-h:60px;
     max-height:calc(var(--board-rows) * var(--board-row-h) + 30px);
     overflow:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;
   }
