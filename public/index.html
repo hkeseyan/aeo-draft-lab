@@ -24,6 +24,14 @@
   .view{display:none} .view.active{display:block}
   .grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:16px}
   @media(max-width:1100px){.grid2{grid-template-columns:1fr}}
+  @media(max-width:760px){
+    /* Fixed tracks, not 1fr: the grid must be wider than the viewport for the
+       horizontal scroll to expose every team column. */
+    /* Narrower columns wrap names onto more lines, so rows are taller here. */
+    .board{grid-template-columns:repeat(var(--teams,12), 104px);--board-row-h:74px}
+    .cell{font-size:10px;padding:3px 4px}
+    .h{font-size:10px}
+  }
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:16px}
   .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 10px}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -41,14 +49,35 @@
   .pos.QB{background:var(--qb)} .pos.RB{background:var(--rb)} .pos.WR{background:var(--wr)}
   .pos.TE{background:var(--te)} .pos.K{background:var(--k)} .pos.DST{background:var(--dst)}
   .val-good{color:var(--accent2);font-weight:700} .val-bad{color:var(--bad)}
+  /* Auction scarcity tiers: how much of the position that is left is still worth
+     real money. Boundaries are detected from the remaining pool, never fixed
+     dollar thresholds — see auctionPosTiers(). */
+  .tier-g{color:var(--accent2);font-weight:700} .tier-y{color:var(--warn);font-weight:700} .tier-r{color:var(--bad);font-weight:700}
   .pick-btn{background:var(--accent2);color:#04210f;border:none;border-radius:6px;padding:4px 8px;font-weight:700;cursor:pointer;font-size:12px}
   .kchip{font-size:10px;color:var(--warn);border:1px solid var(--warn);border-radius:10px;padding:0 5px;margin-left:4px}
+  .headshot{width:20px;height:20px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:4px;background:#1a1f2b}
+  .rkchip{font-size:10px;color:var(--accent2);border:1px solid var(--accent2);border-radius:10px;padding:0 5px;margin-left:4px}
   /* grid-template-columns is set inline per-league (team count varies); every
      header/cell is a direct grid child in row-major order so a taller cell
      (e.g. a wrapped long name) grows that whole row for every column instead
      of pushing just its own column out of alignment. */
-  .board{display:grid;gap:2px;overflow-x:auto;padding-bottom:6px}
-  .h{min-width:120px;font-size:11px;color:var(--muted);text-align:center;padding:3px;font-weight:700}
+  /* --teams is set by renderBoard(); keeping the track list in CSS (rather than
+     an inline style) is what lets the mobile media query below actually win. */
+  .board{
+    display:grid;gap:2px;padding-bottom:6px;
+    grid-template-columns:repeat(var(--teams,12), minmax(120px,1fr));
+    /* Six rounds tall, then scroll — the board is the top card now, so it can't
+       be allowed to push the player list off-screen. Row height is explicit
+       because a populated cell (pick label + wrapped player name) runs well
+       taller than .cell's 34px min-height; assuming the minimum showed 4. */
+    --board-rows:6; --board-row-h:60px;
+    max-height:calc(var(--board-rows) * var(--board-row-h) + 30px);
+    overflow:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;
+  }
+  .h{
+    position:sticky;top:0;z-index:2;background:var(--panel);
+    font-size:11px;color:var(--muted);text-align:center;padding:4px 3px;font-weight:700;
+  }
   .h.me{color:#c9b8ff}
   .cell{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:11px;min-height:34px}
   .cell.me{background:var(--me)}
@@ -67,6 +96,18 @@
   .dcol{}
   body.hide-delta .dcol{display:none}
   .tradetag{font-size:9px;color:var(--warn);border:1px solid var(--warn);border-radius:8px;padding:0 4px;margin-left:3px}
+  .acct{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+  .acct img{width:24px;height:24px;border-radius:50%;border:1px solid var(--line)}
+  .acct .who{color:var(--ink);font-weight:600}
+  .gbtn{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#3c4043;border:1px solid #dadce0;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none}
+  .gbtn:hover{background:#f7f8f8}
+  .signin-note{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+  .tierrow td{background:#0e1626;border-top:2px solid var(--line);font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:3px 6px}
+  .cues{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+  .cues b{color:var(--ink)}
+  .gradechip{display:inline-block;min-width:26px;text-align:center;font-weight:700;border-radius:6px;padding:0 5px;border:1px solid var(--line)}
+  .rewind{cursor:pointer;color:var(--muted);text-decoration:none;margin-left:6px}
+  .cell.done{cursor:pointer}
   .cell.traded{border-color:var(--warn)}
   .tradebox{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
 </style>
@@ -88,6 +129,7 @@
     <button data-view="leagues">Leagues</button>
     <button data-view="commish">Commish</button>
   </nav>
+  <div class="acct" id="acctBox"></div>
 </header>
 <main>
   <!-- DRAFT ROOM -->
@@ -104,6 +146,11 @@
           <span id="noiseVal" class="muted">±2</span>
         </label>
       </div>
+      <div class="cues small muted" id="clockCues"></div>
+    </div>
+    <div class="card" id="snakeBoardCard">
+      <h2>Draft board <span class="muted small">(dashed = keeper · click a filled cell to rewind there · scrolls for later rounds)</span></h2>
+      <div class="board" id="boardGrid"></div>
     </div>
     <div class="grid2" id="snakeDraftGrid">
       <div>
@@ -122,7 +169,7 @@
           </div>
           <div class="scroll">
             <table id="poolTable">
-              <thead><tr><th title="Queue">Q</th><th>ADP</th><th>ECR</th><th>Pos</th><th>Player</th><th>P.Rk</th><th>Proj</th><th class="dcol">Δ</th><th></th></tr></thead>
+              <thead><tr><th title="Queue">Q</th><th>ADP</th><th>ECR</th><th title="Your own philosophy-adjusted rank, lower=better">My</th><th>Pos</th><th>Player</th><th>P.Rk</th><th>Proj</th><th class="dcol">Δ</th><th></th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -139,13 +186,17 @@
         </div>
       </div>
     </div>
-    <div class="card" id="snakeBoardCard">
-      <h2>Draft board <span class="muted small">(dashed = keeper · click a cell team header to set who's on the clock manually)</span></h2>
-      <div class="board" id="boardGrid"></div>
-    </div>
     <div class="card" id="snakeMyPicksCard">
       <h2>My picks & projected availability</h2>
       <div id="myPicks"></div>
+    </div>
+    <div class="card" id="snakeAnalysisCard">
+      <h2>Draft analysis <span class="muted small">(grades, positional ranks, steals & reaches — works mid-draft too)</span></h2>
+      <div class="row" style="margin-bottom:8px">
+        <button class="btn ghost" id="gradeDraft">Grade the draft as it stands</button>
+        <span class="muted small">Value is ECR-based, so it works even where projections are missing.</span>
+      </div>
+      <div id="draftAnalysis" class="small muted">Not run yet.</div>
     </div>
     <div id="auctionRoom" style="display:none">
       <div class="grid2">
@@ -169,21 +220,33 @@
           </div>
           <div class="card">
             <h2>Best available <span class="muted" id="auctionPoolCount"></span></h2>
+            <div class="row" style="margin-bottom:8px">
+              <select id="auctionPosFilter">
+                <option value="ALL">All positions</option>
+                <option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>K</option><option>DST</option>
+              </select>
+              <input type="text" id="auctionSearch" placeholder="search player…" style="flex:1;min-width:120px">
+              <span class="small muted" id="auctionPosCounts"></span>
+            </div>
+            <p class="small muted" style="margin:-4px 0 8px">Counts left at each position:
+              <span class="tier-g">top tier</span> / <span class="tier-y">still rosterable</span> /
+              <span class="tier-r">past replacement</span>. The split is read off the remaining
+              pool's own price cliffs, so it moves as players come off the board.</p>
             <div class="scroll">
-              <table id="auctionPoolTable"><thead><tr><th>Market $</th><th>Target $</th><th>ADP</th><th>Pos</th><th>Player</th><th>Team</th><th></th></tr></thead><tbody></tbody></table>
+              <table id="auctionPoolTable"><thead><tr><th>Market $</th><th>Target $</th><th>ECR</th><th>Pos</th><th>Player</th><th>Team</th><th></th></tr></thead><tbody></tbody></table>
             </div>
           </div>
         </div>
         <div>
           <div class="card">
-            <h2>Team budgets</h2>
-            <div class="scroll" style="max-height:430px">
-              <table id="auctionBudgetTable"><thead><tr><th>Team</th><th>Roster</th><th>Keep $</th><th>Draft $</th><th>Left</th><th>Max bid</th></tr></thead><tbody></tbody></table>
-            </div>
+            <h2>Roster <select id="auctionRosterOwner" style="margin-left:6px"></select></h2>
+            <div id="auctionMyRoster" class="small muted">—</div>
           </div>
           <div class="card">
-            <h2>My auction roster</h2>
-            <div id="auctionMyRoster" class="small muted">—</div>
+            <h2>Team budgets</h2>
+            <div class="scroll" style="max-height:430px">
+              <table id="auctionBudgetTable"><thead><tr><th>Team</th><th>Roster</th><th>Left</th><th>Max bid</th></tr></thead><tbody></tbody></table>
+            </div>
           </div>
         </div>
       </div>
@@ -228,10 +291,10 @@
   <section class="view" id="view-trades">
     <div class="card">
       <h2>Draft-pick trades</h2>
-      <p class="small muted">Reassign any pick to another manager (real trades, or hypothetical ones you're weighing). Traded picks change who's on the clock and which picks are yours. Saved to the cloud so you only enter them once.</p>
+      <p class="small muted">Reassign any pick to another manager (real trades, or hypothetical ones you're weighing). The pick list shows what that manager <em>currently</em> holds, so a pick they acquired in an earlier trade can be traded on again. Traded picks change who's on the clock and which picks are yours. Saved to the cloud so you only enter them once.</p>
       <div class="tradebox">
-        <label class="small">Round <select id="ptRound"></select></label>
         <label class="small">from <select id="ptFrom"></select></label>
+        <label class="small">pick <select id="ptPick" style="min-width:190px"></select></label>
         <label class="small">to <select id="ptTo"></select></label>
         <button class="btn" id="addPickTrade">Add pick trade</button>
       </div>
@@ -302,7 +365,7 @@
     <div class="grid2">
       <div class="card">
         <h2>Player pool (ADP / ECR / projection)</h2>
-        <p class="small muted">Paste CSV with header <code>name,pos,team,adp,ecr,proj</code> (one player per line) to replace the seed. This is where the FantasyPros + Yahoo pull lands.</p>
+        <p class="small muted">Paste CSV with header <code>name,pos,team,adp,ecr,proj</code> (one player per line) to replace the seed. This is where the FantasyPros + Yahoo pull lands. Optional <code>sleeper_id</code>/<code>rookie</code> columns drive headshots and the rookie badge.</p>
         <textarea id="importPlayers" placeholder="name,pos,team,adp,ecr,proj&#10;Ja'Marr Chase,WR,CIN,1,1,320&#10;..."></textarea>
         <div class="row" style="margin-top:8px">
           <button class="btn" id="loadPlayers">Load players CSV</button>
@@ -376,10 +439,13 @@
     </div>
     <div class="card">
       <h2>Connect Yahoo (in progress)</h2>
-      <p class="small muted">OAuth handshake works; the roster-import mapping isn't built yet. "List my leagues" is a diagnostic to see what Yahoo returns.</p>
+      <p class="small muted">This is where Yahoo gets connected — admin only, one grant covers every Yahoo league. Click <b>Connect Yahoo account</b>, approve in the tab that opens, then come back and click <b>List my leagues</b> (a diagnostic to see what Yahoo returns; the roster-import mapping isn't built yet).</p>
+      <p class="small muted">If listing fails with <code>additional_authorization_required</code>, Yahoo is saying the <i>grant this token was issued under</i> has no fantasy access. A refresh token can never gain a permission it wasn't granted, so refreshing or reconnecting on top of the old grant won't help — and Yahoo skips the consent screen for an app you've already approved, quietly reissuing on the same grant. Two things to check, in order: (1) <b>Check status</b> below shows which client id this Worker actually holds — confirm it matches the app you edited in the Yahoo Developer console; (2) if it matches, revoke the app at <a href="https://login.yahoo.com/account/security" target="_blank" rel="noopener">Yahoo account security → apps</a>, click <b>Disconnect</b> here, then Connect again so Yahoo has to ask you fresh.</p>
       <div class="row">
         <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account</button>
         <button class="btn ghost" id="yahooListBtn">List my leagues</button>
+        <button class="btn ghost" id="yahooStatusBtn">Check status</button>
+        <button class="btn ghost" id="yahooDisconnectBtn">Disconnect</button>
       </div>
       <div class="small muted" id="yahooStatus" style="margin-top:6px"></div>
       <pre id="yahooRaw" class="small muted" style="margin-top:6px;white-space:pre-wrap;max-height:240px;overflow:auto"></pre>
@@ -389,6 +455,7 @@
       <div class="row">
         <label class="small">Name <input type="text" id="lgName" style="min-width:200px"></label>
         <label class="small">Teams <input type="number" id="lgTeams" min="2" max="32" style="width:70px"></label>
+        <label class="small">Rounds <input type="number" id="lgRounds" min="1" max="40" style="width:70px" title="Total draft rounds = starters + bench. There is no separate bench-count field: bench is however many rounds are left over after starters are filled."></label>
         <label class="small">Draft type <select id="lgDraftType"><option value="snake">Snake</option><option value="linear">Linear (no snake)</option><option value="auction">Auction</option></select></label>
         <label class="small"><input type="checkbox" id="lgSuperflex"> Superflex</label>
       </div>
@@ -434,7 +501,7 @@
         <div id="lgRosterBuilder" style="display:none;margin-top:8px"></div>
       </div>
       <div style="margin-top:8px">
-        <label class="small muted">Players CSV — header <code>name,pos,team,adp,ecr,proj,tier,fp_adp,yahoo_adp</code></label>
+        <label class="small muted">Players CSV — header <code>name,pos,team,adp,ecr,proj,tier,fp_adp,yahoo_adp,sleeper_id,rookie</code></label>
         <textarea id="lgPlayersCsv"></textarea>
       </div>
       <div class="row" style="margin-top:10px">
@@ -469,7 +536,6 @@
     </div>
   </section>
 </main>
-<script src="/auction-values.js"></script>
 <script>
 // ---------- LEAGUE CONFIG ----------
 // LEAGUE / mySlot are set per active league profile by applyLeagueProfile() (see LEAGUES registry + INIT below).
@@ -556,7 +622,7 @@ Robert|Brandon Aiyuk|10|9
 Robert|Brashard Smith|FA|10
 Robert|Jason Myers|FA|10
 Robert|Broncos|12|11
-Robert|Jonathan Brooks|FA|10
+Robert|Jonathon Brooks|FA|10
 Robert|Brock Bowers|7|6
 Edward|Matthew Stafford|FA|10
 Edward|Puka Nacua|9|8
@@ -683,7 +749,7 @@ Jiro|Omarion Hampton|2|1
 Jiro|Jake Ferguson|FA|10
 Jiro|Tony Pollard|3|2
 Jiro|Emanuel Wilson|FA|10
-Jiro|Jaocry Croskey-Merritt|6|5
+Jiro|Jacory Croskey-Merritt|6|5
 Jiro|Oronde Gadsden|FA|10
 Jiro|Rhamondre Stevenson|7|6
 Jiro|Rome Odunze|6|5
@@ -738,258 +804,258 @@ Sako|Jake Bates|14|13
 Sako|Wil Lutz|FA|10
 Sako|Saints|15|14`;
 
-// ---------- REAL PLAYER DATA (FantasyPros Half-PPR ECR + blended FP/Yahoo ADP, pulled 2026-08-23; top 250 by ECR; proj is FantasyPros' free-preview top-10-per-position only, else 0) ----------
-const PLAYERS_CSV_AEO = `name,pos,team,adp,ecr,proj,tier,fp_adp,yahoo_adp
-Jahmyr Gibbs,RB,DET,1.0,1,337.2,1,1.0,1.0
-Bijan Robinson,RB,ATL,2.0,2,329.9,1,2.0,2.0
-Ja'Marr Chase,WR,CIN,3.0,3,275.4,1,3.0,3.0
-Puka Nacua,WR,LAR,4.0,4,281.3,1,4.0,4.0
-Jaxon Smith-Njigba,WR,SEA,6.2,5,268.7,1,6.3,6.0
-Amon-Ra St. Brown,WR,DET,8.2,6,261.1,1,8.3,8.0
-Jonathan Taylor,RB,IND,6.8,7,288.7,1,6.7,7.0
-Christian McCaffrey,RB,SF,5.0,8,295.6,1,5.0,5.0
-CeeDee Lamb,WR,DAL,10.9,9,224.3,1,11.3,10.0
-Justin Jefferson,WR,MIN,12.2,10,223.2,2,12.3,12.0
-James Cook III,RB,BUF,9.0,11,253.9,2,9.0,9.0
-Drake London,WR,ATL,19.7,12,236.2,2,20.0,19.0
-Chase Brown,RB,CIN,14.8,13,246.6,2,14.7,15.0
-A.J. Brown,WR,NE,22.0,14,211.3,2,21.0,24.0
-Saquon Barkley,RB,PHI,12.1,15,243.8,2,12.7,11.0
-De'Von Achane,RB,MIA,13.3,16,259.7,2,13.0,14.0
-Brock Bowers,TE,LV,21.7,17,195.8,2,22.0,21.0
-Nico Collins,WR,HOU,23.1,18,0,2,23.7,22.0
-Omarion Hampton,RB,LAC,16.7,19,0,2,16.0,18.0
-Derrick Henry,RB,BAL,18.1,20,264.6,2,18.7,17.0
-Kenneth Walker III,RB,KC,16.7,21,0,2,17.0,16.0
-George Pickens,WR,DAL,24.3,22,0,2,25.0,23.0
-Trey McBride,TE,ARI,23.5,23,199.8,3,22.7,25.0
-Chris Olave,WR,NO,29.5,24,213.9,3,28.7,31.0
-Rashee Rice,WR,KC,32.1,25,224.5,3,31.7,33.0
-Malik Nabers,WR,NYG,29.0,26,0,3,29.0,29.0
-DeVonta Smith,WR,PHI,31.4,27,0,3,33.0,28.0
-Zay Flowers,WR,BAL,36.9,28,0,3,37.3,36.0
-Kyren Williams,RB,LAR,27.7,29,0,3,28.0,27.0
-Tee Higgins,WR,CIN,36.9,30,0,3,39.3,32.0
-Tetairoa McMillan,WR,CAR,40.0,31,0,3,40.0,40.0
-Josh Allen,QB,BUF,19.8,32,372.5,3,19.7,20.0
-Javonte Williams,RB,DAL,32.2,33,0,3,31.3,34.0
-Breece Hall,RB,NYJ,33.7,34,0,3,33.0,35.0
-Garrett Wilson,WR,NYJ,46.1,35,0,3,44.7,49.0
-Josh Jacobs,RB,GB,29.5,36,0,3,29.3,30.0
-Ladd McConkey,WR,LAC,43.1,37,0,3,42.7,44.0
-Jaylen Waddle,WR,DEN,44.8,38,0,3,46.7,41.0
-Emeka Egbuka,WR,TB,41.5,39,0,4,40.7,43.0
-Jeremiyah Love,RB,ARI,26.5,40,0,4,26.7,26.0
-Colston Loveland,TE,CHI,41.4,41,171.9,4,43.0,38.0
-Travis Etienne Jr.,RB,NO,41.3,42,0,4,41.0,42.0
-Lamar Jackson,QB,BAL,37.9,43,324.9,4,38.3,37.0
-Terry McLaurin,WR,WAS,54.9,44,0,4,55.3,54.0
-Ashton Jeanty,RB,LV,11.9,45,247.3,4,11.3,13.0
-Davante Adams,WR,LAR,55.4,46,0,4,57.0,52.0
-D'Andre Swift,RB,CHI,48.8,47,0,4,49.7,47.0
-Luther Burden III,WR,CHI,54.5,48,0,4,53.3,57.0
-Drake Maye,QB,NE,49.8,49,323.0,4,51.7,46.0
-Cam Skattebo,RB,NYG,38.3,50,0,4,38.0,39.0
-Tyler Warren,TE,IND,48.4,51,159.7,4,50.0,45.0
-Jameson Williams,WR,DET,60.8,52,0,4,59.7,63.0
-Bucky Irving,RB,TB,49.4,53,0,4,46.7,55.0
-Quinshon Judkins,RB,CLE,47.0,54,0,4,45.0,51.0
-David Montgomery,RB,HOU,49.1,55,0,4,48.7,50.0
-DJ Moore,WR,BUF,53.8,56,0,4,50.3,61.0
-Christian Watson,WR,GB,67.1,57,0,4,67.7,66.0
-Mike Evans,WR,SF,63.7,58,0,4,63.0,65.0
-Rome Odunze,WR,CHI,64.5,59,0,4,63.3,67.0
-Joe Burrow,QB,CIN,50.9,60,310.9,4,52.3,48.0
-Bhayshul Tuten,RB,JAC,57.5,61,0,4,56.3,60.0
-TreVeyon Henderson,RB,NE,55.2,62,0,5,53.3,59.0
-Jayden Daniels,QB,WAS,57.9,63,322.5,5,60.3,53.0
-Jadarian Price,RB,SEA,60.9,64,0,5,59.3,64.0
-Parker Washington,WR,JAC,74.7,65,0,5,73.0,78.0
-Jalen Hurts,QB,PHI,59.4,66,320.5,5,61.0,56.0
-Tucker Kraft,TE,GB,63.2,67,147.7,5,65.7,58.0
-Carnell Tate,WR,TEN,74.1,68,0,5,73.7,75.0
-Marvin Harrison Jr.,WR,ARI,75.5,69,0,5,76.3,74.0
-Jaylen Warren,RB,PIT,70.5,70,0,5,69.3,73.0
-Rhamondre Stevenson,RB,NE,75.1,71,0,5,74.7,76.0
-Caleb Williams,QB,CHI,71.4,72,0,5,73.0,68.0
-Brian Thomas Jr.,WR,JAC,76.8,73,0,5,75.7,79.0
-Tony Pollard,RB,TEN,79.7,74,0,5,79.0,81.0
-Harold Fannin Jr.,TE,CLE,69.1,75,151.8,5,68.7,70.0
-DK Metcalf,WR,PIT,83.7,76,0,5,84.0,83.0
-Sam LaPorta,TE,DET,68.5,77,145.3,5,71.7,62.0
-Justin Herbert,QB,LAC,75.2,78,0,5,78.3,69.0
-Chris Godwin Jr.,WR,TB,91.5,79,0,5,90.7,93.0
-Rico Dowdle,RB,PIT,80.5,80,0,5,78.3,85.0
-Kyle Pitts Sr.,TE,ATL,74.3,81,155.9,5,76.0,71.0
-Courtland Sutton,WR,DEN,93.5,82,0,5,89.3,102.0
-Trevor Lawrence,QB,JAC,83.4,83,306.2,5,85.0,80.0
-Jonathon Brooks,RB,CAR,89.2,84,0,5,86.3,95.0
-Dak Prescott,QB,DAL,77.2,85,306.2,5,79.7,72.0
-J.K. Dobbins,RB,DEN,89.8,86,0,5,88.7,92.0
-Michael Pittman Jr.,WR,PIT,114.8,87,0,5,109.3,126.0
-Michael Wilson,WR,ARI,94.1,88,0,6,88.7,105.0
-Mike Washington Jr.,RB,LV,166.9,89,0,6,169.3,162.0
-Quentin Johnston,WR,LAC,107.1,90,0,6,106.7,108.0
-Blake Corum,RB,LAR,95.0,91,0,6,94.0,97.0
-Alec Pierce,WR,IND,93.2,92,0,6,95.7,88.0
-Chuba Hubbard,RB,CAR,80.1,93,0,6,81.7,77.0
-Josh Downs,WR,IND,108.3,94,0,6,107.0,111.0
-George Kittle,TE,SF,91.6,95,0,6,94.3,86.0
-RJ Harvey,RB,DEN,90.5,96,0,6,84.3,103.0
-Wan'Dale Robinson,WR,TEN,145.8,97,0,6,125.0,188.0
-Stefon Diggs,WR,WAS,111.5,98,0,6,112.3,110.0
-Jacory Croskey-Merritt,RB,WAS,106.4,99,0,6,102.7,114.0
-Travis Kelce,TE,KC,94.4,100,144.6,6,96.0,91.0
-Brock Purdy,QB,SF,103.8,101,307.5,6,108.7,94.0
-Jordan Addison,WR,MIN,113.4,102,0,6,109.7,121.0
-Jordan Mason,RB,MIN,108.6,103,0,6,103.0,120.0
-Kyle Monangai,RB,CHI,97.8,104,0,6,94.7,104.0
-Kenny Gainwell,RB,TB,113.1,105,0,6,108.7,122.0
-Jayden Reed,WR,GB,116.8,106,0,6,113.3,124.0
-Jaxson Dart,QB,NYG,90.2,107,309.9,6,93.3,84.0
-Rachaad White,RB,WAS,120.4,108,0,6,115.7,130.0
-Dalton Kincaid,TE,BUF,100.9,109,0,6,103.3,96.0
-Bo Nix,QB,DEN,103.7,110,0,6,106.0,99.0
-Patrick Mahomes II,QB,KC,102.7,111,0,6,105.0,98.0
-Makai Lemon,WR,PHI,107.3,112,0,6,105.0,112.0
-Jakobi Meyers,WR,JAC,144.6,113,0,6,133.0,168.0
-Aaron Jones Sr.,RB,MIN,124.3,114,0,6,120.0,133.0
-Matthew Stafford,QB,LAR,103.1,115,0,6,104.7,100.0
-Dallas Goedert,TE,PHI,117.2,116,146.7,6,122.7,106.0
-Jared Goff,QB,DET,118.2,117,0,6,119.3,116.0
-Isaiah Likely,TE,NYG,106.8,118,0,6,105.7,109.0
-Kyler Murray,QB,MIN,123.5,119,0,6,128.7,113.0
-Mark Andrews,TE,BAL,117.7,120,0,6,119.0,115.0
-KC Concepcion,WR,CLE,151.1,121,0,6,139.3,175.0
-Chris Rodriguez Jr.,RB,JAC,166.9,122,0,6,152.0,197.0
-Xavier Worthy,WR,KC,152.0,123,0,6,143.7,169.0
-Jalen Coker,WR,CAR,178.0,124,0,6,164.7,205.0
-Matthew Golden,WR,GB,150.1,125,0,6,142.3,166.0
-Jake Ferguson,TE,DAL,115.1,126,0,6,113.7,118.0
-Khalil Shakir,WR,BUF,171.0,127,0,7,160.7,192.0
-Baker Mayfield,QB,TB,145.5,128,0,7,142.3,152.0
-Tyler Allgeier,RB,ARI,158.2,129,0,7,148.0,179.0
-Jordyn Tyson,WR,NO,93.8,130,0,7,95.7,90.0
-Jordan Love,QB,GB,145.2,131,0,7,148.7,138.0
-Woody Marks,RB,HOU,165.2,132,0,7,151.0,194.0
-Tyler Shough,QB,NO,167.9,133,0,7,162.0,180.0
-Romeo Doubs,WR,NE,167.2,134,0,7,152.0,198.0
-Tyjae Spears,RB,TEN,177.2,135,0,7,165.0,202.0
-Juwan Johnson,TE,NO,161.8,136,0,7,160.7,164.0
-Deebo Samuel Sr.,WR,SF,146.3,137,0,7,141.0,157.0
-Malik Willis,QB,MIA,153.2,138,0,7,159.7,140.0
-Keaton Mitchell,RB,LAC,177.1,139,0,7,166.3,199.0
-Tyrone Tracy Jr.,RB,NYG,162.1,140,0,7,148.3,190.0
-Tank Bigsby,RB,PHI,172.4,141,0,7,165.7,186.0
-De'Zhaun Stribling,WR,SF,126.1,142,0,7,126.7,125.0
-Hunter Henry,TE,NE,155.2,143,0,7,153.3,159.0
-Jonah Coleman,RB,DEN,165.4,144,0,7,155.7,185.0
-Zach Charbonnet,RB,SEA,150.9,145,0,7,141.0,171.0
-C.J. Stroud,QB,HOU,163.3,146,0,7,172.3,145.0
-Chig Okonkwo,TE,WAS,160.1,147,0,7,165.0,150.0
-Brenton Strange,TE,JAC,165.5,148,0,7,163.3,170.0
-Sam Darnold,QB,SEA,145.9,149,0,7,151.7,134.0
-Dylan Sampson,RB,CLE,165.5,150,0,7,165.5,
-Alvin Kamara,RB,NO,146.2,151,0,7,145.3,148.0
-Denzel Boston,WR,CLE,175.6,152,0,7,168.0,191.0
-Rashid Shaheed,WR,SEA,152.7,153,0,7,147.7,163.0
-Daniel Jones,QB,IND,172.3,154,0,7,179.3,158.0
-Adonai Mitchell,WR,NYJ,217.0,155,0,7,217.0,
-Dalton Schultz,TE,HOU,179.3,156,0,7,185.3,167.0
-Brian Robinson Jr.,RB,ATL,141.5,157,0,7,146.7,131.0
-Cam Ward,QB,TEN,165.3,158,0,7,176.3,143.0
-Isiah Pacheco,RB,DET,151.9,159,0,7,153.3,149.0
-Tre Tucker,WR,LV,197.5,160,0,7,197.5,
-Jauan Jennings,WR,MIN,171.1,161,0,7,179.0,155.0
-Jalen McMillan,WR,TB,184.2,162,0,7,187.3,178.0
-Jerry Jeudy,WR,CLE,186.0,163,0,7,186.0,
-Braelon Allen,RB,NYJ,178.0,164,0,7,178.0,
-T.J. Hockenson,TE,MIN,174.7,165,0,7,174.0,176.0
-AJ Barner,TE,SEA,173.8,166,0,7,187.0,147.0
-MarShawn Lloyd,RB,GB,183.5,167,0,7,175.3,200.0
-Bryce Young,QB,CAR,165.3,168,0,8,181.7,132.0
-Oronde Gadsden II,TE,LAC,160.8,169,0,8,164.7,153.0
-Jalen Nailor,WR,LV,171.1,170,0,8,164.7,184.0
-Dontayvion Wicks,WR,PHI,201.0,171,0,8,201.0,
-Tre' Harris,WR,LAC,203.0,172,0,8,203.0,
-Ray Davis,RB,BUF,209.5,173,0,8,209.5,
-Omar Cooper Jr.,WR,NYJ,184.2,174,0,8,185.3,182.0
-Emmett Johnson,RB,KC,202.0,175,0,8,202.0,
-Jacoby Brissett,QB,ARI,213.0,176,0,8,213.0,
-Ryan Flournoy,WR,DAL,257.5,177,0,8,257.5,
-Terrance Ferguson,TE,LAR,180.3,178,0,8,194.7,151.0
-Sean Tucker,RB,TB,229.0,179,0,8,229.0,
-Pat Bryant,WR,DEN,230.0,180,0,8,230.0,
-Malik Washington,WR,MIA,182.0,181,0,8,182.0,
-Keenan Allen,WR,IND,163.9,182,0,8,182.0,127.0
-Kenyon Sadiq,TE,NYJ,177.9,183,0,8,176.3,181.0
-Jaylin Noel,WR,HOU,184.0,184,0,8,184.0,
-Gunnar Helm,TE,TEN,236.0,185,0,8,236.0,
-Kayshon Boutte,WR,NE,199.5,186,0,8,199.5,
-Travis Hunter,WR,JAC,174.6,187,0,8,184.7,154.0
-Nicholas Singleton,RB,TEN,204.0,188,0,8,204.0,
-Kimani Vidal,RB,LAC,228.5,189,0,8,228.5,
-Houston Texans,DEF,HOU,109.1,190,120.4,8,119.0,89.0
-Calvin Ridley,WR,TEN,203.0,191,0,8,203.0,
-Tank Dell,WR,HOU,181.0,192,0,8,181.0,
-Denver Broncos,DEF,DEN,121.1,193,118.3,8,131.0,101.0
-Seattle Seahawks,DEF,SEA,123.3,194,110.9,8,131.3,107.0
-Los Angeles Rams,DEF,LAR,108.2,195,107.3,8,118.7,87.0
-Geno Smith,QB,NYJ,224.0,196,0,8,224.0,
-Aaron Rodgers,QB,PIT,160.7,197,0,8,181.3,119.0
-Cade Otton,TE,TB,236.5,198,0,8,236.5,
-Philadelphia Eagles,DEF,PHI,144.0,199,102.6,8,148.0,136.0
-Pat Freiermuth,TE,PIT,181.9,200,0,8,202.0,141.0
-Kaytron Allen,RB,WAS,225.0,201,0,8,225.0,
-James Conner,RB,ARI,181.7,202,0,8,199.3,146.0
-Jacksonville Jaguars,DEF,JAC,198.3,203,0,8,191.0,213.0
-New England Patriots,DEF,NE,163.6,204,0,8,167.3,156.0
-Isaac TeSlaa,WR,DET,183.7,205,0,8,203.3,144.0
-Pittsburgh Steelers,DEF,PIT,199.0,206,111.9,8,194.0,209.0
-Emanuel Wilson,RB,SEA,207.0,207,0,8,207.0,
-Jaydon Blue,RB,DAL,202.0,208,0,8,202.0,
-Rashod Bateman,WR,BAL,209.0,209,0,8,209.0,
-Los Angeles Chargers,DEF,LAC,204.9,210,108.6,8,199.0,217.0
-Minnesota Vikings,DEF,MIN,183.0,211,112.8,8,180.0,189.0
-Brandon Aubrey,K,DAL,107.9,212,153.0,8,120.7,82.0
-Baltimore Ravens,DEF,BAL,204.6,213,0,8,200.0,214.0
-Ka'imi Fairbairn,K,HOU,138.4,214,144.1,8,146.0,123.0
-Cameron Dicker,K,LAC,143.7,215,143.7,9,148.0,135.0
-Darnell Mooney,WR,NYG,216.0,216,0,9,216.0,
-Troy Franklin,WR,DEN,217.0,217,0,9,217.0,
-Kansas City Chiefs,DEF,KC,227.9,218,0,9,238.7,206.0
-Cam Little,K,JAC,167.5,219,0,9,165.3,172.0
-Jason Myers,K,SEA,147.7,220,150.4,9,153.0,137.0
-Fernando Mendoza,QB,LV,155.5,221,0,9,169.0,128.0
-Cooper Kupp,WR,SEA,178.6,222,0,9,203.0,129.0
-Tyler Loop,K,BAL,209.3,223,0,9,205.0,218.0
-Jaylen Wright,RB,MIA,242.0,224,0,9,242.0,
-Green Bay Packers,DEF,GB,214.8,225,0,9,214.7,215.0
-Eddy Pineiro,K,SF,209.9,226,132.6,9,204.0,222.0
-Colby Parkinson,TE,LAR,227.0,227,0,9,227.0,
-Jake Bates,K,DET,197.2,228,135.9,9,188.0,216.0
-George Holani,RB,SEA,220.0,229,0,9,220.0,
-Buffalo Bills,DEF,BUF,208.8,230,106.6,9,219.5,187.0
-Evan Engram,TE,DEN,231.0,231,0,9,231.0,
-Germie Bernard,WR,PIT,261.5,232,0,9,261.5,
-David Njoku,TE,LAC,167.6,233,0,9,181.7,139.0
-Cairo Santos,K,CHI,238.1,234,133.3,9,245.0,224.0
-Detroit Lions,DEF,DET,217.6,235,106.8,9,220.3,212.0
-Harrison Mevis,K,LAR,194.6,236,136.9,9,190.0,204.0
-Ollie Gordon II,RB,MIA,237.0,237,0,9,237.0,
-Zachariah Branch,WR,ATL,209.5,238,0,9,209.5,
-Tua Tagovailoa,QB,ATL,230.5,239,0,9,230.5,
-Chase McLaughlin,K,TB,222.6,240,132.9,9,224.3,219.0
-Justice Hill,RB,BAL,209.0,241,0,9,209.0,
-Malachi Fields,WR,NYG,212.5,242,0,9,212.5,
-Devaughn Vele,WR,NO,243.0,243,0,9,243.0,
-Jack Bech,WR,LV,244.0,244,0,9,244.0,
-Evan McPherson,K,CIN,224.4,245,0,9,226.0,221.0
-Andy Borregales,K,NE,220.3,246,0,9,219.0,223.0
-Antonio Williams,WR,WAS,259.5,247,0,9,259.5,
-Demond Claiborne,RB,MIN,234.5,248,0,9,234.5,
-Isaiah Davis,RB,NYJ,249.0,249,0,9,249.0,
-Elic Ayomanor,WR,TEN,250.0,250,0,9,250.0,`;
+// ---------- REAL PLAYER DATA (FantasyPros Half-PPR ECR + blended FP/Yahoo ADP, pulled 2026-08-23; top 250 by ECR; proj is FantasyPros' free-preview top-10-per-position only, else 0. sleeper_id/rookie added 2026-09-02 from Sleeper's public player list, matched by normalized name — headshots hotlink sleepercdn.com/content/nfl/players/<id>.jpg, no crosswalk to maintain) ----------
+const PLAYERS_CSV_AEO = `name,pos,team,adp,ecr,proj,tier,fp_adp,yahoo_adp,sleeper_id,rookie
+Jahmyr Gibbs,RB,DET,1.0,1,337.2,1,1.0,1.0,9221,
+Bijan Robinson,RB,ATL,2.0,2,329.9,1,2.0,2.0,9509,
+Ja'Marr Chase,WR,CIN,3.0,3,275.4,1,3.0,3.0,7564,
+Puka Nacua,WR,LAR,4.0,4,281.3,1,4.0,4.0,9493,
+Jaxon Smith-Njigba,WR,SEA,6.2,5,268.7,1,6.3,6.0,9488,
+Amon-Ra St. Brown,WR,DET,8.2,6,261.1,1,8.3,8.0,7547,
+Jonathan Taylor,RB,IND,6.8,7,288.7,1,6.7,7.0,6813,
+Christian McCaffrey,RB,SF,5.0,8,295.6,1,5.0,5.0,4034,
+CeeDee Lamb,WR,DAL,10.9,9,224.3,1,11.3,10.0,6786,
+Justin Jefferson,WR,MIN,12.2,10,223.2,2,12.3,12.0,6794,
+James Cook III,RB,BUF,9.0,11,253.9,2,9.0,9.0,8138,
+Drake London,WR,ATL,19.7,12,236.2,2,20.0,19.0,8112,
+Chase Brown,RB,CIN,14.8,13,246.6,2,14.7,15.0,9224,
+A.J. Brown,WR,NE,22.0,14,211.3,2,21.0,24.0,5859,
+Saquon Barkley,RB,PHI,12.1,15,243.8,2,12.7,11.0,4866,
+De'Von Achane,RB,MIA,13.3,16,259.7,2,13.0,14.0,9226,
+Brock Bowers,TE,LV,21.7,17,195.8,2,22.0,21.0,11604,
+Nico Collins,WR,HOU,23.1,18,0,2,23.7,22.0,7569,
+Omarion Hampton,RB,LAC,16.7,19,0,2,16.0,18.0,12507,
+Derrick Henry,RB,BAL,18.1,20,264.6,2,18.7,17.0,3198,
+Kenneth Walker III,RB,KC,16.7,21,0,2,17.0,16.0,8151,
+George Pickens,WR,DAL,24.3,22,0,2,25.0,23.0,8137,
+Trey McBride,TE,ARI,23.5,23,199.8,3,22.7,25.0,8130,
+Chris Olave,WR,NO,29.5,24,213.9,3,28.7,31.0,8144,
+Rashee Rice,WR,KC,32.1,25,224.5,3,31.7,33.0,10229,
+Malik Nabers,WR,NYG,29.0,26,0,3,29.0,29.0,11632,
+DeVonta Smith,WR,PHI,31.4,27,0,3,33.0,28.0,7525,
+Zay Flowers,WR,BAL,36.9,28,0,3,37.3,36.0,9997,
+Kyren Williams,RB,LAR,27.7,29,0,3,28.0,27.0,8150,
+Tee Higgins,WR,CIN,36.9,30,0,3,39.3,32.0,6801,
+Tetairoa McMillan,WR,CAR,40.0,31,0,3,40.0,40.0,12526,
+Josh Allen,QB,BUF,19.8,32,372.5,3,19.7,20.0,4984,
+Javonte Williams,RB,DAL,32.2,33,0,3,31.3,34.0,7588,
+Breece Hall,RB,NYJ,33.7,34,0,3,33.0,35.0,8155,
+Garrett Wilson,WR,NYJ,46.1,35,0,3,44.7,49.0,8146,
+Josh Jacobs,RB,GB,29.5,36,0,3,29.3,30.0,5850,
+Ladd McConkey,WR,LAC,43.1,37,0,3,42.7,44.0,11635,
+Jaylen Waddle,WR,DEN,44.8,38,0,3,46.7,41.0,7526,
+Emeka Egbuka,WR,TB,41.5,39,0,4,40.7,43.0,12514,
+Jeremiyah Love,RB,ARI,26.5,40,0,4,26.7,26.0,13287,1
+Colston Loveland,TE,CHI,41.4,41,171.9,4,43.0,38.0,12517,
+Travis Etienne Jr.,RB,NO,41.3,42,0,4,41.0,42.0,7543,
+Lamar Jackson,QB,BAL,37.9,43,324.9,4,38.3,37.0,4881,
+Terry McLaurin,WR,WAS,54.9,44,0,4,55.3,54.0,5927,
+Ashton Jeanty,RB,LV,11.9,45,247.3,4,11.3,13.0,12527,
+Davante Adams,WR,LAR,55.4,46,0,4,57.0,52.0,2133,
+D'Andre Swift,RB,CHI,48.8,47,0,4,49.7,47.0,6790,
+Luther Burden III,WR,CHI,54.5,48,0,4,53.3,57.0,12519,
+Drake Maye,QB,NE,49.8,49,323.0,4,51.7,46.0,11564,
+Cam Skattebo,RB,NYG,38.3,50,0,4,38.0,39.0,12481,
+Tyler Warren,TE,IND,48.4,51,159.7,4,50.0,45.0,12518,
+Jameson Williams,WR,DET,60.8,52,0,4,59.7,63.0,8148,
+Bucky Irving,RB,TB,49.4,53,0,4,46.7,55.0,11584,
+Quinshon Judkins,RB,CLE,47.0,54,0,4,45.0,51.0,12512,
+David Montgomery,RB,HOU,49.1,55,0,4,48.7,50.0,5892,
+DJ Moore,WR,BUF,53.8,56,0,4,50.3,61.0,4983,
+Christian Watson,WR,GB,67.1,57,0,4,67.7,66.0,8167,
+Mike Evans,WR,SF,63.7,58,0,4,63.0,65.0,2216,
+Rome Odunze,WR,CHI,64.5,59,0,4,63.3,67.0,11620,
+Joe Burrow,QB,CIN,50.9,60,310.9,4,52.3,48.0,6770,
+Bhayshul Tuten,RB,JAC,57.5,61,0,4,56.3,60.0,12490,
+TreVeyon Henderson,RB,NE,55.2,62,0,5,53.3,59.0,12529,
+Jayden Daniels,QB,WAS,57.9,63,322.5,5,60.3,53.0,11566,
+Jadarian Price,RB,SEA,60.9,64,0,5,59.3,64.0,13286,1
+Parker Washington,WR,JAC,74.7,65,0,5,73.0,78.0,9487,
+Jalen Hurts,QB,PHI,59.4,66,320.5,5,61.0,56.0,6904,
+Tucker Kraft,TE,GB,63.2,67,147.7,5,65.7,58.0,9484,
+Carnell Tate,WR,TEN,74.1,68,0,5,73.7,75.0,13279,1
+Marvin Harrison Jr.,WR,ARI,75.5,69,0,5,76.3,74.0,11628,
+Jaylen Warren,RB,PIT,70.5,70,0,5,69.3,73.0,8228,
+Rhamondre Stevenson,RB,NE,75.1,71,0,5,74.7,76.0,7611,
+Caleb Williams,QB,CHI,71.4,72,0,5,73.0,68.0,11560,
+Brian Thomas Jr.,WR,JAC,76.8,73,0,5,75.7,79.0,11631,
+Tony Pollard,RB,TEN,79.7,74,0,5,79.0,81.0,5967,
+Harold Fannin Jr.,TE,CLE,69.1,75,151.8,5,68.7,70.0,12506,
+DK Metcalf,WR,PIT,83.7,76,0,5,84.0,83.0,5846,
+Sam LaPorta,TE,DET,68.5,77,145.3,5,71.7,62.0,10859,
+Justin Herbert,QB,LAC,75.2,78,0,5,78.3,69.0,6797,
+Chris Godwin Jr.,WR,TB,91.5,79,0,5,90.7,93.0,4037,
+Rico Dowdle,RB,PIT,80.5,80,0,5,78.3,85.0,7021,
+Kyle Pitts Sr.,TE,ATL,74.3,81,155.9,5,76.0,71.0,7553,
+Courtland Sutton,WR,DEN,93.5,82,0,5,89.3,102.0,5045,
+Trevor Lawrence,QB,JAC,83.4,83,306.2,5,85.0,80.0,7523,
+Jonathon Brooks,RB,CAR,89.2,84,0,5,86.3,95.0,11583,
+Dak Prescott,QB,DAL,77.2,85,306.2,5,79.7,72.0,3294,
+J.K. Dobbins,RB,DEN,89.8,86,0,5,88.7,92.0,6806,
+Michael Pittman Jr.,WR,PIT,114.8,87,0,5,109.3,126.0,6819,
+Michael Wilson,WR,ARI,94.1,88,0,6,88.7,105.0,10232,
+Mike Washington Jr.,RB,LV,166.9,89,0,6,169.3,162.0,13305,1
+Quentin Johnston,WR,LAC,107.1,90,0,6,106.7,108.0,9754,
+Blake Corum,RB,LAR,95.0,91,0,6,94.0,97.0,11586,
+Alec Pierce,WR,IND,93.2,92,0,6,95.7,88.0,8142,
+Chuba Hubbard,RB,CAR,80.1,93,0,6,81.7,77.0,7594,
+Josh Downs,WR,IND,108.3,94,0,6,107.0,111.0,9500,
+George Kittle,TE,SF,91.6,95,0,6,94.3,86.0,4217,
+RJ Harvey,RB,DEN,90.5,96,0,6,84.3,103.0,12489,
+Wan'Dale Robinson,WR,TEN,145.8,97,0,6,125.0,188.0,8126,
+Stefon Diggs,WR,WAS,111.5,98,0,6,112.3,110.0,2449,
+Jacory Croskey-Merritt,RB,WAS,106.4,99,0,6,102.7,114.0,12533,
+Travis Kelce,TE,KC,94.4,100,144.6,6,96.0,91.0,1466,
+Brock Purdy,QB,SF,103.8,101,307.5,6,108.7,94.0,8183,
+Jordan Addison,WR,MIN,113.4,102,0,6,109.7,121.0,9756,
+Jordan Mason,RB,MIN,108.6,103,0,6,103.0,120.0,8408,
+Kyle Monangai,RB,CHI,97.8,104,0,6,94.7,104.0,12534,
+Kenny Gainwell,RB,TB,113.1,105,0,6,108.7,122.0,7567,
+Jayden Reed,WR,GB,116.8,106,0,6,113.3,124.0,10222,
+Jaxson Dart,QB,NYG,90.2,107,309.9,6,93.3,84.0,12508,
+Rachaad White,RB,WAS,120.4,108,0,6,115.7,130.0,8136,
+Dalton Kincaid,TE,BUF,100.9,109,0,6,103.3,96.0,10236,
+Bo Nix,QB,DEN,103.7,110,0,6,106.0,99.0,11563,
+Patrick Mahomes II,QB,KC,102.7,111,0,6,105.0,98.0,4046,
+Makai Lemon,WR,PHI,107.3,112,0,6,105.0,112.0,13294,1
+Jakobi Meyers,WR,JAC,144.6,113,0,6,133.0,168.0,5947,
+Aaron Jones Sr.,RB,MIN,124.3,114,0,6,120.0,133.0,4199,
+Matthew Stafford,QB,LAR,103.1,115,0,6,104.7,100.0,421,
+Dallas Goedert,TE,PHI,117.2,116,146.7,6,122.7,106.0,5022,
+Jared Goff,QB,DET,118.2,117,0,6,119.3,116.0,3163,
+Isaiah Likely,TE,NYG,106.8,118,0,6,105.7,109.0,8131,
+Kyler Murray,QB,MIN,123.5,119,0,6,128.7,113.0,5849,
+Mark Andrews,TE,BAL,117.7,120,0,6,119.0,115.0,5012,
+KC Concepcion,WR,CLE,151.1,121,0,6,139.3,175.0,13298,1
+Chris Rodriguez Jr.,RB,JAC,166.9,122,0,6,152.0,197.0,10219,
+Xavier Worthy,WR,KC,152.0,123,0,6,143.7,169.0,11624,
+Jalen Coker,WR,CAR,178.0,124,0,6,164.7,205.0,11646,
+Matthew Golden,WR,GB,150.1,125,0,6,142.3,166.0,12501,
+Jake Ferguson,TE,DAL,115.1,126,0,6,113.7,118.0,8110,
+Khalil Shakir,WR,BUF,171.0,127,0,7,160.7,192.0,8134,
+Baker Mayfield,QB,TB,145.5,128,0,7,142.3,152.0,4892,
+Tyler Allgeier,RB,ARI,158.2,129,0,7,148.0,179.0,8132,
+Jordyn Tyson,WR,NO,93.8,130,0,7,95.7,90.0,13281,1
+Jordan Love,QB,GB,145.2,131,0,7,148.7,138.0,6804,
+Woody Marks,RB,HOU,165.2,132,0,7,151.0,194.0,12474,
+Tyler Shough,QB,NO,167.9,133,0,7,162.0,180.0,12545,
+Romeo Doubs,WR,NE,167.2,134,0,7,152.0,198.0,8121,
+Tyjae Spears,RB,TEN,177.2,135,0,7,165.0,202.0,9508,
+Juwan Johnson,TE,NO,161.8,136,0,7,160.7,164.0,7002,
+Deebo Samuel Sr.,WR,SF,146.3,137,0,7,141.0,157.0,5872,
+Malik Willis,QB,MIA,153.2,138,0,7,159.7,140.0,8161,
+Keaton Mitchell,RB,LAC,177.1,139,0,7,166.3,199.0,9511,
+Tyrone Tracy Jr.,RB,NYG,162.1,140,0,7,148.3,190.0,11655,
+Tank Bigsby,RB,PHI,172.4,141,0,7,165.7,186.0,9225,
+De'Zhaun Stribling,WR,SF,126.1,142,0,7,126.7,125.0,13417,1
+Hunter Henry,TE,NE,155.2,143,0,7,153.3,159.0,3214,
+Jonah Coleman,RB,DEN,165.4,144,0,7,155.7,185.0,13345,1
+Zach Charbonnet,RB,SEA,150.9,145,0,7,141.0,171.0,9753,
+C.J. Stroud,QB,HOU,163.3,146,0,7,172.3,145.0,9758,
+Chig Okonkwo,TE,WAS,160.1,147,0,7,165.0,150.0,8210,
+Brenton Strange,TE,JAC,165.5,148,0,7,163.3,170.0,9480,
+Sam Darnold,QB,SEA,145.9,149,0,7,151.7,134.0,4943,
+Dylan Sampson,RB,CLE,165.5,150,0,7,165.5,,12469,
+Alvin Kamara,RB,NO,146.2,151,0,7,145.3,148.0,4035,
+Denzel Boston,WR,CLE,175.6,152,0,7,168.0,191.0,13346,1
+Rashid Shaheed,WR,SEA,152.7,153,0,7,147.7,163.0,8676,
+Daniel Jones,QB,IND,172.3,154,0,7,179.3,158.0,5870,
+Adonai Mitchell,WR,NYJ,217.0,155,0,7,217.0,,11625,
+Dalton Schultz,TE,HOU,179.3,156,0,7,185.3,167.0,5001,
+Brian Robinson Jr.,RB,ATL,141.5,157,0,7,146.7,131.0,8154,
+Cam Ward,QB,TEN,165.3,158,0,7,176.3,143.0,12522,
+Isiah Pacheco,RB,DET,151.9,159,0,7,153.3,149.0,8205,
+Tre Tucker,WR,LV,197.5,160,0,7,197.5,,10213,
+Jauan Jennings,WR,MIN,171.1,161,0,7,179.0,155.0,7049,
+Jalen McMillan,WR,TB,184.2,162,0,7,187.3,178.0,11618,
+Jerry Jeudy,WR,CLE,186.0,163,0,7,186.0,,6783,
+Braelon Allen,RB,NYJ,178.0,164,0,7,178.0,,11576,
+T.J. Hockenson,TE,MIN,174.7,165,0,7,174.0,176.0,5844,
+AJ Barner,TE,SEA,173.8,166,0,7,187.0,147.0,11603,
+MarShawn Lloyd,RB,GB,183.5,167,0,7,175.3,200.0,11581,
+Bryce Young,QB,CAR,165.3,168,0,8,181.7,132.0,9228,
+Oronde Gadsden II,TE,LAC,160.8,169,0,8,164.7,153.0,12493,
+Jalen Nailor,WR,LV,171.1,170,0,8,164.7,184.0,8180,
+Dontayvion Wicks,WR,PHI,201.0,171,0,8,201.0,,9486,
+Tre' Harris,WR,LAC,203.0,172,0,8,203.0,,12509,
+Ray Davis,RB,BUF,209.5,173,0,8,209.5,,11575,
+Omar Cooper Jr.,WR,NYJ,184.2,174,0,8,185.3,182.0,13276,1
+Emmett Johnson,RB,KC,202.0,175,0,8,202.0,,13337,1
+Jacoby Brissett,QB,ARI,213.0,176,0,8,213.0,,3257,
+Ryan Flournoy,WR,DAL,257.5,177,0,8,257.5,,11783,
+Terrance Ferguson,TE,LAR,180.3,178,0,8,194.7,151.0,12487,
+Sean Tucker,RB,TB,229.0,179,0,8,229.0,,9506,
+Pat Bryant,WR,DEN,230.0,180,0,8,230.0,,12492,
+Malik Washington,WR,MIA,182.0,181,0,8,182.0,,11610,
+Keenan Allen,WR,IND,163.9,182,0,8,182.0,127.0,1479,
+Kenyon Sadiq,TE,NYJ,177.9,183,0,8,176.3,181.0,13330,1
+Jaylin Noel,WR,HOU,184.0,184,0,8,184.0,,12536,
+Gunnar Helm,TE,TEN,236.0,185,0,8,236.0,,12502,
+Kayshon Boutte,WR,NE,199.5,186,0,8,199.5,,9504,
+Travis Hunter,WR,JAC,174.6,187,0,8,184.7,154.0,12530,
+Nicholas Singleton,RB,TEN,204.0,188,0,8,204.0,,13288,1
+Kimani Vidal,RB,LAC,228.5,189,0,8,228.5,,11647,
+Houston Texans,DEF,HOU,109.1,190,120.4,8,119.0,89.0,,
+Calvin Ridley,WR,TEN,203.0,191,0,8,203.0,,4981,
+Tank Dell,WR,HOU,181.0,192,0,8,181.0,,9502,
+Denver Broncos,DEF,DEN,121.1,193,118.3,8,131.0,101.0,,
+Seattle Seahawks,DEF,SEA,123.3,194,110.9,8,131.3,107.0,,
+Los Angeles Rams,DEF,LAR,108.2,195,107.3,8,118.7,87.0,,
+Geno Smith,QB,NYJ,224.0,196,0,8,224.0,,1373,
+Aaron Rodgers,QB,PIT,160.7,197,0,8,181.3,119.0,96,
+Cade Otton,TE,TB,236.5,198,0,8,236.5,,8111,
+Philadelphia Eagles,DEF,PHI,144.0,199,102.6,8,148.0,136.0,,
+Pat Freiermuth,TE,PIT,181.9,200,0,8,202.0,141.0,7600,
+Kaytron Allen,RB,WAS,225.0,201,0,8,225.0,,13405,1
+James Conner,RB,ARI,181.7,202,0,8,199.3,146.0,4137,
+Jacksonville Jaguars,DEF,JAC,198.3,203,0,8,191.0,213.0,,
+New England Patriots,DEF,NE,163.6,204,0,8,167.3,156.0,,
+Isaac TeSlaa,WR,DET,183.7,205,0,8,203.3,144.0,12535,
+Pittsburgh Steelers,DEF,PIT,199.0,206,111.9,8,194.0,209.0,,
+Emanuel Wilson,RB,SEA,207.0,207,0,8,207.0,,11435,
+Jaydon Blue,RB,DAL,202.0,208,0,8,202.0,,12457,
+Rashod Bateman,WR,BAL,209.0,209,0,8,209.0,,7571,
+Los Angeles Chargers,DEF,LAC,204.9,210,108.6,8,199.0,217.0,,
+Minnesota Vikings,DEF,MIN,183.0,211,112.8,8,180.0,189.0,,
+Brandon Aubrey,K,DAL,107.9,212,153.0,8,120.7,82.0,11533,
+Baltimore Ravens,DEF,BAL,204.6,213,0,8,200.0,214.0,,
+Ka'imi Fairbairn,K,HOU,138.4,214,144.1,8,146.0,123.0,3451,
+Cameron Dicker,K,LAC,143.7,215,143.7,9,148.0,135.0,8259,
+Darnell Mooney,WR,NYG,216.0,216,0,9,216.0,,7090,
+Troy Franklin,WR,DEN,217.0,217,0,9,217.0,,11627,
+Kansas City Chiefs,DEF,KC,227.9,218,0,9,238.7,206.0,,
+Cam Little,K,JAC,167.5,219,0,9,165.3,172.0,11786,
+Jason Myers,K,SEA,147.7,220,150.4,9,153.0,137.0,2747,
+Fernando Mendoza,QB,LV,155.5,221,0,9,169.0,128.0,13269,1
+Cooper Kupp,WR,SEA,178.6,222,0,9,203.0,129.0,4039,
+Tyler Loop,K,BAL,209.3,223,0,9,205.0,218.0,12711,
+Jaylen Wright,RB,MIA,242.0,224,0,9,242.0,,11643,
+Green Bay Packers,DEF,GB,214.8,225,0,9,214.7,215.0,,
+Eddy Pineiro,K,SF,209.9,226,132.6,9,204.0,222.0,5189,
+Colby Parkinson,TE,LAR,227.0,227,0,9,227.0,,6865,
+Jake Bates,K,DET,197.2,228,135.9,9,188.0,216.0,11539,
+George Holani,RB,SEA,220.0,229,0,9,220.0,,12048,
+Buffalo Bills,DEF,BUF,208.8,230,106.6,9,219.5,187.0,,
+Evan Engram,TE,DEN,231.0,231,0,9,231.0,,4066,
+Germie Bernard,WR,PIT,261.5,232,0,9,261.5,,13274,1
+David Njoku,TE,LAC,167.6,233,0,9,181.7,139.0,4033,
+Cairo Santos,K,CHI,238.1,234,133.3,9,245.0,224.0,2020,
+Detroit Lions,DEF,DET,217.6,235,106.8,9,220.3,212.0,,
+Harrison Mevis,K,LAR,194.6,236,136.9,9,190.0,204.0,12015,
+Ollie Gordon II,RB,MIA,237.0,237,0,9,237.0,,12495,
+Zachariah Branch,WR,ATL,209.5,238,0,9,209.5,,13320,1
+Tua Tagovailoa,QB,ATL,230.5,239,0,9,230.5,,6768,
+Chase McLaughlin,K,TB,222.6,240,132.9,9,224.3,219.0,6650,
+Justice Hill,RB,BAL,209.0,241,0,9,209.0,,5995,
+Malachi Fields,WR,NYG,212.5,242,0,9,212.5,,13285,1
+Devaughn Vele,WR,NO,243.0,243,0,9,243.0,,11834,
+Jack Bech,WR,LV,244.0,244,0,9,244.0,,12483,
+Evan McPherson,K,CIN,224.4,245,0,9,226.0,221.0,7839,
+Andy Borregales,K,NE,220.3,246,0,9,219.0,223.0,12713,
+Antonio Williams,WR,WAS,259.5,247,0,9,259.5,,13301,1
+Demond Claiborne,RB,MIN,234.5,248,0,9,234.5,,13347,1
+Isaiah Davis,RB,NYJ,249.0,249,0,9,249.0,,11571,
+Elic Ayomanor,WR,TEN,250.0,250,0,9,250.0,,12499,`;
 
 const AUCTION_EXTRA_PLAYERS_CSV = `Sterling Shepard,WR,TB,251.0,251.0,0,9,,
 Isaiah Bond,WR,CLE,252.0,252.0,0,9,,
@@ -1545,7 +1611,9 @@ Hovo|Travis Hunter|SHEET|14`;
 const LEAGUES_DEFAULT = {
   'aeo-keepers': {
     id:'aeo-keepers', name:'AEO-Keepers',
-    teams:12, rounds:16, mySlot:6, draftType:'snake', superflex:false,
+    // 15 rounds: 10 starters + 5 bench. (Was 16 — a league settings error that
+    // was corrected by dropping one bench spot.)
+    teams:12, rounds:15, mySlot:6, draftType:'snake', superflex:false,
     scoringLabel:'Half-PPR', draftDateLabel:'Sept 8', keeperDeadlineLabel:'Sept 1',
     starters:{QB:1,RB:2,WR:3,TE:1,FLEX:1,K:1,DST:1}, flexEligible:['RB','WR','TE'],
     maxKeepers:3, keeperCostType:'round',
@@ -1564,9 +1632,18 @@ const LEAGUES_DEFAULT = {
   'fantastic-auction': {
     id:'fantastic-auction', name:'Fantastic Keeper Auction', leagueType:'keeper',
     teams:14, rounds:16, mySlot:10, draftType:'auction', superflex:false,
-    scoringLabel:'Full PPR · 6-pt pass TD', draftDateLabel:'Sep 7 · 7:00 PM PDT', keeperDeadlineLabel:'Aug 30 · 12:00 AM PDT',
+    scoringLabel:'Full PPR · 6-pt pass TD', draftDateLabel:'TBD', keeperDeadlineLabel:'Aug 30 · 12:00 AM PDT',
     starters:{QB:1,RB:2,WR:2,TE:1,FLEX:2,DST:1}, flexEligible:['RB','WR','TE'],
     maxKeepers:null, keeperCostType:'dollar', auctionBudget:200, rosterSize:16, irSlots:2, minBid:1,
+    // Fitted to this league's own 106 realized keeper prices (max $64, median $6,
+    // 25.5% at $1-2): reproduces $66 / $6 / 26.3% in a full auction.
+    auctionDecay:42, auctionShape:0.90,
+    // Ceiling 36% of budget = $72. Realized history tops out at 32% ($64); the
+    // extra headroom covers the thinned elite tier (five of the top ten are kept,
+    // so whoever is best available draws a scarcity premium) without letting one
+    // player eat a share no manager here would actually commit — at $80 a team
+    // is left with roughly $16 for seven more slots.
+    auctionMaxPriceShare:0.36,
     yahooLeagueId:'835427', yahooLeagueUrl:'https://football.fantasysports.yahoo.com/league/fantasticauctiondynasty',
     sourceSheetUrl:'https://docs.google.com/spreadsheets/d/1iCk8oi6RtRgJd_gxPDST9k_tC1NBe2i54nWOVglg8e4/edit',
     keeperRules:{annualIncrease:1, undraftedFirstKeeperCost:2, costPersistsThroughTransactions:true, reservePerOpenRosterSpot:1, irCountsAtDraft:false},
@@ -1574,8 +1651,137 @@ const LEAGUES_DEFAULT = {
     settings:{waiverType:'FAB w/ continual rolling list tiebreak',weeklyWaivers:'Game Time - Tuesday',postDraftPlayers:'Free Agents',playoffs:'6 teams · Weeks 15-17',tradeDeadline:'Nov 28, 2026'},
     rankSourceLabel:'2026 PPR baseline + keeper-sheet coverage',
     owners:['Gev','Hakop','Gary','Avo','Gugo','Khacho','Edward','Art M','Lev','Hovo','Chris H','Aram','Savada','Art S'],
-    meOwner:'Hovo', ownerSlot:{Gev:1,Hakop:2,Gary:3,Avo:4,Gugo:5,Khacho:6,Edward:7,'Art M':8,Lev:9,Hovo:10,'Chris H':11,Aram:12,Savada:13,'Art S':14},
-    myLocked:[], myKeepers:[], rostersRaw:ROSTERS_RAW_FANTASTIC, playersCsv:PLAYERS_CSV_FANTASTIC,
+    // Slots follow the league's real auction nomination order (1=nominates
+    // first), per the keeper sheet — not an arbitrary draft-order assignment.
+    meOwner:'Hovo', ownerSlot:{Savada:1,'Art M':2,Avo:3,Hakop:4,Gugo:5,Khacho:6,Gev:7,Gary:8,Aram:9,'Chris H':10,Hovo:11,'Art S':12,Lev:13,Edward:14},
+    // Keepers the league locked in at its Aug 30 deadline (from the Yahoo keeper
+    // sheet): 106 across all 14 teams. Costs are deliberately NOT repeated here —
+    // they already live in rostersRaw's 4th field, and every one was verified to
+    // match the sheet exactly. These are league facts, not personal modeling, so
+    // they belong on the profile rather than in per-user setup data.
+    leagueKeepers:[
+      // Savada — "Abella Danger" · nominates 1 · $92 committed, $108 left
+      "Savada|Justin Herbert",
+      "Savada|Chris Olave",
+      "Savada|Travis Etienne Jr.",
+      "Savada|D'Andre Swift",
+      "Savada|Rachaad White",
+      "Savada|Baker Mayfield",
+      "Savada|Quinshon Judkins",
+      "Savada|Tucker Kraft",
+      // Art M — "It's Always Sunny..." · nominates 2 · $148 committed, $52 left
+      "Art M|Brock Purdy",
+      "Art M|Zay Flowers",
+      "Art M|A.J. Brown",
+      "Art M|Chase Brown",
+      "Art M|David Montgomery",
+      "Art M|DeVonta Smith",
+      "Art M|Jameson Williams",
+      "Art M|George Kittle",
+      "Art M|Harold Fannin Jr.",
+      "Art M|J.K. Dobbins",
+      "Art M|Broncos",
+      "Art M|Eagles",
+      // Avo — "Hock Tua" · nominates 3 · $187 committed, $13 left
+      "Avo|Bo Nix",
+      "Avo|CeeDee Lamb",
+      "Avo|Rico Dowdle",
+      "Avo|Kenny Gainwell",
+      "Avo|Trey McBride",
+      "Avo|Chris Godwin Jr.",
+      "Avo|DK Metcalf",
+      "Avo|Jake Ferguson",
+      "Avo|Isiah Pacheco",
+      "Avo|Dontayvion Wicks",
+      "Avo|Vikings",
+      // Hakop — "Hayastan" · nominates 4 · $26 committed, $174 left
+      "Hakop|George Pickens",
+      "Hakop|Jaxon Smith-Njigba",
+      // Gugo — "Flock Nation!!" · nominates 5 · $161 committed, $39 left
+      "Gugo|Lamar Jackson",
+      "Gugo|Deebo Samuel Sr.",
+      "Gugo|Derrick Henry",
+      "Gugo|Jahmyr Gibbs",
+      "Gugo|Mark Andrews",
+      "Gugo|Keenan Allen",
+      "Gugo|Rhamondre Stevenson",
+      "Gugo|Chargers",
+      // Khacho — "eagles's Champion..." · nominates 6 · $142 committed, $58 left
+      "Khacho|Jakobi Meyers",
+      "Khacho|Quentin Johnston",
+      "Khacho|Khalil Shakir",
+      "Khacho|Michael Pittman Jr.",
+      "Khacho|Jalen Hurts",
+      "Khacho|Christian McCaffrey",
+      "Khacho|Chuba Hubbard",
+      "Khacho|Devaughn Vele",
+      "Khacho|Sam LaPorta",
+      // Gev — "ROTY" · nominates 7 · $104 committed, $96 left
+      "Gev|Justin Jefferson",
+      "Gev|Rashee Rice",
+      "Gev|Kyle Pitts Sr.",
+      "Gev|Jacory Croskey-Merritt",
+      "Gev|Jayden Reed",
+      "Gev|49ers",
+      // Gary — "Gary's Game-Chang..." · nominates 8 · $25 committed, $175 left
+      "Gary|Wan'Dale Robinson",
+      "Gary|Tre Tucker",
+      "Gary|Dallas Goedert",
+      "Gary|Bucky Irving",
+      "Gary|Trevor Lawrence",
+      "Gary|Caleb Williams",
+      // Aram — "Glendale Football..." · nominates 9 · $46 committed, $154 left
+      "Aram|Matthew Stafford",
+      "Aram|TreVeyon Henderson",
+      "Aram|Theo Johnson",
+      "Aram|Woody Marks",
+      "Aram|Jalen Coker",
+      "Aram|Parker Washington",
+      "Aram|Keon Coleman",
+      "Aram|AJ Barner",
+      "Aram|Seahawks",
+      // Chris H — "Step-Burrrrrow" · nominates 10 · $77 committed, $123 left
+      "Chris H|Joe Burrow",
+      "Chris H|Ladd McConkey",
+      "Chris H|Tee Higgins",
+      "Chris H|Javonte Williams",
+      "Chris H|Jaylen Waddle",
+      "Chris H|Texans",
+      // Hovo — "Stay off the WEEEED" · nominates 11 · $111 committed, $89 left
+      "Hovo|Jayden Daniels",
+      "Hovo|Jonathon Brooks",
+      "Hovo|Isaiah Likely",
+      "Hovo|Blake Corum",
+      "Hovo|Drake London",
+      "Hovo|Tyler Warren",
+      "Hovo|Jonathan Taylor",
+      "Hovo|Christian Watson",
+      // Art S — "Biscuits n Gravy ..." · nominates 12 · $142 committed, $58 left
+      "Art S|Josh Allen",
+      "Art S|Ja'Marr Chase",
+      "Art S|Michael Wilson",
+      "Art S|Kyren Williams",
+      "Art S|Darius Slayton",
+      "Art S|Dalton Kincaid",
+      "Art S|Rams",
+      // Lev — "SMASH BROS" · nominates 13 · $76 committed, $124 left
+      "Lev|Bhayshul Tuten",
+      "Lev|Cam Skattebo",
+      "Lev|Terrance Ferguson",
+      "Lev|Jalen McMillan",
+      "Lev|Colston Loveland",
+      "Lev|Jaxson Dart",
+      "Lev|Nico Collins",
+      "Lev|James Cook III",
+      // Edward — "Edward's Swag Team" · nominates 14 · $117 committed, $83 left
+      "Edward|Drake Maye",
+      "Edward|Brock Bowers",
+      "Edward|Luther Burden III",
+      "Edward|Emeka Egbuka",
+      "Edward|Omarion Hampton",
+      "Edward|Malik Nabers",
+    ],
+    myLocked:[], myKeepers:[], rostersRaw:ROSTERS_RAW_FANTASTIC, playersCsv:PLAYERS_CSV_AEO+'\n'+AUCTION_EXTRA_PLAYERS_CSV,
   },
   'aeok-auction': {
     id:'aeok-auction', name:'AEOK Auction League', leagueType:'keeper',
@@ -1583,6 +1789,15 @@ const LEAGUES_DEFAULT = {
     scoringLabel:'Full PPR · Superflex · bonuses', draftDateLabel:'Sep 8 · 9:00 PM PDT', keeperDeadlineLabel:'Sep 8 · 12:00 AM PDT',
     starters:{QB:1,RB:2,WR:2,TE:1,FLEX:2,SUPERFLEX:1}, flexEligible:['RB','WR','TE'],
     maxKeepers:null, keeperCostType:'dollar', auctionBudget:200, rosterSize:18, irSlots:2, minBid:1, nominationSeconds:30, bidSeconds:20,
+    // Fitted to this league's own 93 realized keeper prices (max $58, median $8,
+    // 11% at $1-2): reproduces $53 / $7 / 9.3%. Flatter than Fantastic — superflex
+    // with 18 roster spots spreads money over more genuinely rosterable players,
+    // so there is far less $1-2 filler.
+    auctionDecay:34, auctionShape:0.70,
+    // Ceiling 32% of budget = $64, just above this league's realized max of $58
+    // (29%). Not currently binding — the money left per slot is below a normal
+    // auction, so prices sit under it anyway — but it guards the same failure.
+    auctionMaxPriceShare:0.32,
     yahooLeagueId:'868349', yahooLeagueUrl:'https://football.fantasysports.yahoo.com/league/aeokauction',
     sourceSheetUrl:'https://docs.google.com/spreadsheets/d/1HUgdOEbgPfLoYgiSLWzSE6xyzrOmJyb531ULm5mWfjo/edit',
     keeperRules:{annualIncrease:1, undraftedFirstKeeperCost:2, undraftedQbFirstKeeperCost:6, costPersistsThroughTransactions:true, reservePerOpenRosterSpot:1, irCountsAtDraft:false},
@@ -1591,8 +1806,122 @@ const LEAGUES_DEFAULT = {
     rankSourceLabel:'2026 Superflex market ADP overrides + PPR baseline',
     superflexAdpOverrides:{'Josh Allen':3.0,'Drake Maye':10.7,'Lamar Jackson':9.6,'Joe Burrow':14.5,'Jayden Daniels':17.9,'Caleb Williams':24.2,'Jalen Hurts':28.5,'Justin Herbert':32.0,'Jaxson Dart':37.2,'Dak Prescott':40.0,'Trevor Lawrence':41.7,'Patrick Mahomes II':43.2,'Bo Nix':46.8,'Brock Purdy':53.5,'Jared Goff':61.9,'Matthew Stafford':64.3,'Jordan Love':67.6,'Baker Mayfield':71.9,'Kyler Murray':82.3,'Tyler Shough':84.2,'Sam Darnold':85.5,'C.J. Stroud':95.8,'Cam Ward':98.9,'Fernando Mendoza':103.8,'Malik Willis':106.2,'Daniel Jones':109.9,'Bryce Young':114.2,'Jacoby Brissett':143.1,'Aaron Rodgers':143.6,'Geno Smith':145.3,'Tua Tagovailoa':179.1,'Shedeur Sanders':184.3,'Kirk Cousins':185.4,'Deshaun Watson':210.6,'Michael Penix Jr.':215.8,'Garrett Nussmeier':216.2,'Carson Beck':220.2,'Ty Simpson':226.8,'Will Howard':240.9,'J.J. McCarthy':245.4},
     owners:['Jiro','Sako','Savada','Haik','Robert','David','Aren','Edward','Nick','Taron','Mher','Hovo'],
-    meOwner:'Hovo', ownerSlot:{Jiro:1,Sako:2,Savada:3,Haik:4,Robert:5,David:6,Aren:7,Edward:8,Nick:9,Taron:10,Mher:11,Hovo:12},
-    myLocked:[], myKeepers:[], rostersRaw:ROSTERS_RAW_AEOK_AUCTION, playersCsv:PLAYERS_CSV_AEOK_AUCTION,
+    meOwner:'Hovo', // Slots are the league's real auction nomination order, per the keeper sheet.
+    ownerSlot:{Savada:1,Nick:2,David:3,Sako:4,Taron:5,Jiro:6,Mher:7,Hovo:8,Haik:9,Aren:10,Robert:11,Edward:12},
+    // Keepers locked in for 2026 (Yahoo keeper sheet): 93 across all 12 teams.
+    // Costs live in rostersRaw's 4th field and were verified to match the sheet
+    // exactly; 11 of 12 teams also reconciled against their stated salary/remaining
+    // totals (team 12's totals row was missing from the source paste, so its $165
+    // committed / $35 left is computed from the keeper list itself, and was
+    // confirmed correct by the user on 2026-09-02).
+    leagueKeepers:[
+      // Savada — "Riley Reid" · nominates 1 · $122 committed, $78 left
+      "Savada|Justin Herbert",
+      "Savada|Rhamondre Stevenson",
+      "Savada|Jakobi Meyers",
+      "Savada|DeVonta Smith",
+      "Savada|Brock Purdy",
+      "Savada|Mark Andrews",
+      "Savada|Travis Etienne Jr.",
+      "Savada|Bijan Robinson",
+      "Savada|Stefon Diggs",
+      // Nick — "Tight End U" · nominates 2 · $168 committed, $32 left
+      "Nick|Sam Darnold",
+      "Nick|Sam LaPorta",
+      "Nick|Shedeur Sanders",
+      "Nick|Ja'Marr Chase",
+      "Nick|Aaron Rodgers",
+      "Nick|Kyle Pitts Sr.",
+      "Nick|Zach Charbonnet",
+      "Nick|David Montgomery",
+      "Nick|Michael Wilson",
+      "Nick|Malik Nabers",
+      // David — "Apush Lakotner" · nominates 3 · $64 committed, $136 left
+      "David|J.K. Dobbins",
+      "David|Chris Godwin Jr.",
+      "David|Breece Hall",
+      "David|Kyren Williams",
+      // Sako — "SeñorMarquez" · nominates 4 · $147 committed, $53 left
+      "Sako|Tyler Shough",
+      "Sako|Marvin Harrison Jr.",
+      "Sako|Christian McCaffrey",
+      "Sako|Ashton Jeanty",
+      "Sako|Patrick Mahomes",
+      // Taron — "Constant Consonant" · nominates 5 · $111 committed, $89 left
+      "Taron|Lamar Jackson",
+      "Taron|Colston Loveland",
+      "Taron|Rachaad White",
+      "Taron|Jared Goff",
+      "Taron|A.J. Brown",
+      "Taron|Javonte Williams",
+      "Taron|Cam Skattebo",
+      // Jiro — "Zetas ese pt. 2" · nominates 6 · $88 committed, $112 left
+      "Jiro|Jordan Love",
+      "Jiro|Jayden Daniels",
+      "Jiro|Rome Odunze",
+      "Jiro|Daniel Jones",
+      "Jiro|Bryce Young",
+      "Jiro|Terry McLaurin",
+      "Jiro|Brian Thomas Jr.",
+      "Jiro|Bucky Irving",
+      "Jiro|Ladd McConkey",
+      "Jiro|Tucker Kraft",
+      // Mher — "GIBbs me a BO job" · nominates 7 · $167 committed, $33 left
+      "Mher|Michael Penix Jr.",
+      "Mher|Geno Smith",
+      "Mher|Jaylen Waddle",
+      "Mher|Bo Nix",
+      "Mher|Christian Watson",
+      "Mher|Tyler Warren",
+      "Mher|Kenneth Walker III",
+      "Mher|Jahmyr Gibbs",
+      "Mher|Tetairoa McMillan",
+      "Mher|Garrett Wilson",
+      // Hovo — "Pennybags" · nominates 8 · $107 committed, $93 left
+      "Hovo|Josh Allen",
+      "Hovo|Malik Willis",
+      "Hovo|Nico Collins",
+      "Hovo|De'Von Achane",
+      // Haik — "Rub my Chubb" · nominates 9 · $19 committed, $181 left
+      "Haik|Blake Corum",
+      "Haik|AJ Barner",
+      "Haik|Chris Olave",
+      "Haik|Baker Mayfield",
+      // Aren — "dolla dolla bling bling yall" · nominates 10 · $160 committed, $40 left
+      "Aren|Drake Maye",
+      "Aren|Kayshon Boutte",
+      "Aren|Tyler Allgeier",
+      "Aren|Rashee Rice",
+      "Aren|Amon-Ra St. Brown",
+      "Aren|Brock Bowers",
+      "Aren|Jaxson Dart",
+      "Aren|Jaxon Smith-Njigba",
+      "Aren|Chase Brown",
+      "Aren|Jaylen Warren",
+      "Aren|Zay Flowers",
+      // Robert — "Pickle Rick" · nominates 11 · $89 committed, $111 left
+      "Robert|Dak Prescott",
+      "Robert|Jonathon Brooks",
+      "Robert|Luther Burden III",
+      "Robert|Jameson Williams",
+      "Robert|George Kittle",
+      "Robert|Matthew Stafford",
+      "Robert|James Cook III",
+      "Robert|Harold Fannin Jr.",
+      "Robert|D'Andre Swift",
+      // Edward — "Edward's Victorious Team" · nominates 12 · $165 committed, $35 left
+      "Edward|Trevor Lawrence",
+      "Edward|Kyle Monangai",
+      "Edward|Quinshon Judkins",
+      "Edward|Puka Nacua",
+      "Edward|Bhayshul Tuten",
+      "Edward|Joe Burrow",
+      "Edward|Tee Higgins",
+      "Edward|Trey McBride",
+      "Edward|Omarion Hampton",
+      "Edward|George Pickens",
+    ],
+    myLocked:[], myKeepers:[], rostersRaw:ROSTERS_RAW_AEOK_AUCTION, playersCsv:PLAYERS_CSV_AEO+'\n'+AUCTION_EXTRA_PLAYERS_CSV,
   },
 };
 // Mutable runtime registry — starts as a copy of the defaults, replaced by the cloud
@@ -1600,22 +1929,77 @@ const LEAGUES_DEFAULT = {
 let LEAGUES = {...LEAGUES_DEFAULT};
 </script>
 <script>
-// ---------- GUEST MODE (?guest=1) ----------
-// A read-only, single-league, Draft-Room-only view for sharing a link without
-// exposing other leagues or letting the viewer save/change anything. This is
-// a UI-level restriction only (hides tabs, no-ops the save call) — someone
-// technical enough to hit the API directly from devtools isn't blocked by
-// this, which is an accepted tradeoff for "just show a friend," not a
-// security boundary for a hostile viewer.
+// ---------- ACCOUNTS + GUEST MODE ----------
+// Who you are decides which tabs exist. Three states, in order of access:
+//
+//   admin      — the first Google account that ever signed in. Everything.
+//   signed in  — own private keepers/trades/picks/mocks; no Commish, no league
+//                editing, no Data tab (that edits the shared player pool).
+//   signed out — Draft Room only, nothing saves. Same as a ?guest=1 link.
+//
+// This mirrors the server (worker.js), which enforces the same three tiers on
+// /api/*. The UI hiding is convenience; the server is the actual boundary.
+// When accounts aren't configured yet (no GOOGLE_CLIENT_ID secret), the server
+// reports accountsEnabled:false and treats everyone as the owner — the app then
+// behaves exactly as it did before accounts existed, and the header says so
+// rather than pretending to be a login.
 const GUEST_MODE = new URLSearchParams(location.search).get('guest')==='1';
-function applyGuestModeUI(){
-  if(!GUEST_MODE)return;
-  document.querySelectorAll('nav button').forEach(b=>{ if(b.dataset.view!=='room')b.style.display='none'; });
-  const sel=el('leagueSelect'); if(sel)sel.style.display='none';
+let ME = { accountsEnabled:false, signedIn:false, admin:true, user:null };
+async function loadMe(){
+  try{
+    const r = await fetch('/api/me', { headers: tokenHdr() });
+    if(r.ok) ME = await r.json();
+  }catch(e){ /* offline: leave the permissive default so a local/offline page still works */ }
+}
+// Tabs only an admin should ever see: league administration and anything that
+// edits shared league structure rather than your own draft prep.
+const ADMIN_ONLY_VIEWS = ['commish','leagues','data'];
+function canSave(){ return !GUEST_MODE && (ME.admin || ME.signedIn); }
+function roomOnly(){ return GUEST_MODE || (ME.accountsEnabled && !ME.signedIn); }
+function applyAccessUI(){
+  const allowed = (v) => {
+    if(roomOnly()) return v==='room';
+    if(ME.admin) return true;
+    return !ADMIN_ONLY_VIEWS.includes(v);
+  };
+  document.querySelectorAll('nav button').forEach(b=>{ if(!allowed(b.dataset.view))b.style.display='none'; });
+  if(roomOnly()){ const sel=el('leagueSelect'); if(sel)sel.style.display='none'; }
   // Hiding the tab isn't enough — the other views' data still populates the DOM
   // in the background and a right-click "Inspect" would see it. Strip those
   // sections down to nothing rather than just hiding them.
-  document.querySelectorAll('main .view').forEach(sec=>{ if(sec.id!=='view-room')sec.remove(); });
+  document.querySelectorAll('main .view').forEach(sec=>{
+    if(!allowed(sec.id.replace('view-','')))sec.remove();
+  });
+}
+function renderAcct(){
+  const box=el('acctBox'); if(!box)return;
+  if(GUEST_MODE){ box.innerHTML='<span class="tag">Guest view</span>'; return; }
+  if(!ME.accountsEnabled){
+    box.innerHTML='<span class="tag" title="Set the GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET secrets in Cloudflare to turn on sign-in. Until then everyone who reaches this URL has full access.">⚠ Accounts off — everyone has full access</span>';
+    return;
+  }
+  if(!ME.signedIn){
+    box.innerHTML='<a class="gbtn" href="/auth/google/start">Sign in with Google</a>';
+    return;
+  }
+  const u=ME.user||{};
+  box.innerHTML=`${u.picture?`<img src="${u.picture}" alt="">`:''}
+    <span class="who">${u.name||u.email||'Signed in'}</span>
+    ${ME.admin?'<span class="tag">admin</span>':''}
+    <a href="/auth/signout" class="small">Sign out</a>`;
+}
+// Signed-out visitors get the Draft Room as a sandbox (picks work, nothing
+// saves) plus a plain explanation of why the rest of the app isn't there.
+function renderSignInNote(){
+  if(!(ME.accountsEnabled && !ME.signedIn) || GUEST_MODE) return;
+  const room=el('view-room'); if(!room)return;
+  const d=document.createElement('div');
+  d.className='signin-note';
+  d.innerHTML=`<b>You're not signed in.</b><br>
+    <span class="small muted">This is a scratch draft board — pick away, but nothing is saved.
+    Sign in with Google to get your own keepers, trades, mocks and saved drafts.</span>
+    <div style="margin-top:10px"><a class="gbtn" href="/auth/google/start">Sign in with Google</a></div>`;
+  room.insertBefore(d, room.firstChild);
 }
 
 // ---------- STATE ----------
@@ -1657,15 +2041,118 @@ function effOwner(pl){return playerTrades[pl]||ORIG_OWNER[pl];}
 function effRoster(owner){const out=[];Object.keys(ROSTERS).forEach(o=>ROSTERS[o].forEach(r=>{if(effOwner(r.player)===owner)out.push(r);}));return out;}
 function ownerOf(ov){return pickOwnerOverride[ov]||slotForOverall(ov).slot;}
 function computePosRanks(){const byPos={};PLAYERS.forEach(p=>{(byPos[p.pos]=byPos[p.pos]||[]).push(p);});Object.values(byPos).forEach(a=>{a.slice().sort((x,y)=>x.adp-y.adp).forEach((p,i)=>p.posRank=i+1);});}
-function adpRoundOf(name){const p=findPlayer(name); return p?Math.ceil(p.adp/LEAGUE.teams):99;}
-// Classic keeper value = cost round − ADP round. Auction pricing deliberately has
-// TWO layers: (1) opponent market behavior, anchored to Yahoo/default-market prices,
-// and (2) Hovo target value, which can blend independent expert values + our model.
-// The rank/scarcity curve is only a fallback when sourced dollar columns are absent.
+function adpRoundOf(name){const p=findPlayer(name); return p?Math.ceil(p.adp/LEAGUE.teams):null;}
+// Auction pricing deliberately has TWO layers: (1) opponent market behavior,
+// anchored to Yahoo/default-market prices, and (2) Hovo target value, which can
+// blend independent expert values + our model. The rank/scarcity curve is only a
+// fallback when sourced dollar columns are absent.
+// How steeply price falls with ADP. Calibrated against this league's own 106
+// realized keeper prices (real winning bids + $1/yr escalation): at decay 50 a
+// full 14-team/$200 auction reproduces max $59 (observed $64), median $6
+// (observed $6) and 25.9% of the roster at $1-2 (observed 25.5%). The original
+// 35 was far too concentrated — it put the top player at $81 in a full auction
+// and 46% of the roster at $1-2. Tunable per league (see auctionDecay) because
+// a different sport or format has a different shape.
+const AUCTION_DECAY_DEFAULT=50;
+// Curve shape. A plain exponential (shape 1) has only one knob, and one knob
+// can't hit both a sharp peak and a fat middle: fitting AEOK's median forced its
+// top player to $43 when that league's own history says $58. A stretched
+// exponential, exp(-(rank/decay)^shape), separates the two — below 1 it drops
+// hard at the very top and then flattens, which is what a real auction looks
+// like. Fitted per league against their own realized prices; 1 keeps the old
+// pure-exponential behavior for any league without a fit.
+const AUCTION_SHAPE_DEFAULT=1;
+// Nobody spends most of a budget on one player. This league's realized ceiling
+// is $64 = 32% of a $200 budget; 40% leaves headroom for genuine keeper-driven
+// inflation while still ruling out the runaway values an uncapped curve
+// produced. Money clipped here is redistributed, never destroyed.
+const AUCTION_MAX_PRICE_SHARE_DEFAULT=0.40;
+const auctionDecay=()=>LEAGUE.auctionDecay||AUCTION_DECAY_DEFAULT;
+const auctionShape=()=>LEAGUE.auctionShape||AUCTION_SHAPE_DEFAULT;
+const auctionPriceCap=()=>Math.max(2,Math.round((LEAGUE.auctionBudget||200)*(LEAGUE.auctionMaxPriceShare||AUCTION_MAX_PRICE_SHARE_DEFAULT)));
 function auctionWeight(p){
   const posMult={QB:LEAGUE.superflex?1.0:0.72,RB:1.08,WR:1.0,TE:0.88,K:0.12,DST:0.16};
-  return Math.exp(-Math.max(0,(p.adp||999)-1)/35)*(posMult[p.pos]||0.5);
+  return Math.exp(-Math.pow(Math.max(0,(p.adp||999)-1)/auctionDecay(), auctionShape()))*(posMult[p.pos]||0.5);
 }
+// Squash prices toward the ceiling and push the freed dollars back onto everyone
+// below it, so the pool still sums to the money that actually has to be spent.
+//
+// The squash is soft, not a clip. A hard clip put four different players at
+// exactly $72 — it enforced the ceiling but destroyed the ordering among the
+// very players a bid decision is about. Below the knee nothing moves; above it
+// values compress smoothly and approach the cap without reaching it, so the top
+// tier stays ranked and distinct.
+function softCeiling(v,cap){
+  const knee=cap*0.75;
+  if(v<=knee)return v;
+  return knee+(cap-knee)*Math.tanh((v-knee)/(cap-knee));
+}
+function applyAuctionCap(entries,weights,cap,min){
+  // Deliberately a single pass. Iterating — squash, redistribute, squash again —
+  // pushes each redistribution back over the knee and re-compresses it, and the
+  // whole top tier converges onto one number (seven players at $58). softCeiling
+  // is monotonic, so applied once it preserves the ordering entirely.
+  const knee=cap*0.75;
+  let freed=0;
+  const out=entries.map(v=>{ const sv=softCeiling(v,cap); freed+=v-sv; return sv; });
+  if(freed>0.5){
+    // The freed dollars go only to players below the knee, who are nowhere near
+    // the ceiling and can absorb them without needing to be squashed in turn.
+    const room=[]; let rw=0;
+    out.forEach((v,i)=>{ if(v<knee){room.push(i); rw+=weights[i];} });
+    if(room.length&&rw>0) room.forEach(i=>{ out[i]+=freed*weights[i]/rw; });
+  }
+  return out.map(v=>Math.max(min,Math.round(v)));
+}
+// How many players at each position the league as a whole will actually roster.
+// This is the auction's replacement level, and it is the thing that was missing:
+// a pure rank curve gives the 25th quarterback in a one-QB league real money
+// because his overall ADP is only ~150, when in fact nobody bids on him at all.
+// Demand is derived from the league's own settings — starters, flex, superflex,
+// bench — not from a tuning knob, so it moves correctly between formats.
+const AUCTION_FLEX_SHARE={RB:0.42,WR:0.46,TE:0.12};
+const AUCTION_SUPERFLEX_SHARE={QB:0.85,RB:0.06,WR:0.07,TE:0.02};
+function auctionRosterDemand(){
+  const T=LEAGUE.teams||12, S=LEAGUE.starters||{};
+  const need={QB:0,RB:0,WR:0,TE:0,K:0,DST:0};
+  Object.keys(need).forEach(pos=>{ need[pos]=T*(+S[pos]||0); });
+  const flex=T*(+S.FLEX||0);
+  if(flex>0){
+    const elig=(LEAGUE.flexEligible||['RB','WR','TE']).filter(p=>AUCTION_FLEX_SHARE[p]);
+    const tot=elig.reduce((n,p)=>n+AUCTION_FLEX_SHARE[p],0);
+    if(tot>0)elig.forEach(p=>{ need[p]+=flex*AUCTION_FLEX_SHARE[p]/tot; });
+  }
+  const sflex=T*(+S.SUPERFLEX||0);
+  if(sflex>0)Object.keys(AUCTION_SUPERFLEX_SHARE).forEach(p=>{ need[p]+=sflex*AUCTION_SUPERFLEX_SHARE[p]; });
+  // Bench. Kickers and defenses get exactly one each — nobody benches them — so
+  // every bench spot goes to the four positions people actually stockpile.
+  const startersPerTeam=Object.values(S).reduce((n,v)=>n+(+v||0),0);
+  const bench=T*Math.max(0,(LEAGUE.rosterSize||LEAGUE.rounds||16)-startersPerTeam);
+  const share=LEAGUE.superflex?{QB:0.14,RB:0.35,WR:0.41,TE:0.10}:{QB:0.12,RB:0.37,WR:0.42,TE:0.09};
+  if(bench>0)Object.keys(share).forEach(p=>{ need[p]+=bench*share[p]; });
+  Object.keys(need).forEach(p=>{ need[p]=Math.round(need[p]); });
+  return need;
+}
+// The weight of the last rosterable player at each position — everything at or
+// below it is worth the minimum bid and nothing more.
+function auctionReplacementWeights(){
+  const need=auctionRosterDemand(), out={};
+  const byPos={};
+  PLAYERS.filter(auctionEligible).forEach(p=>{ (byPos[p.pos]=byPos[p.pos]||[]).push(p); });
+  Object.keys(need).forEach(pos=>{
+    const list=(byPos[pos]||[]).slice().sort((a,b)=>(a.adp||999)-(b.adp||999));
+    const n=need[pos];
+    // Past the end of the list there is no replacement player to subtract, so
+    // the shelf sits at the worst player we know about.
+    const repl=list.length?list[Math.min(list.length-1,Math.max(0,n-1))]:null;
+    out[pos]=repl?auctionWeight(repl):0;
+  });
+  return out;
+}
+// Value above replacement, which is what a dollar in an auction actually buys.
+// Subtracting the shelf is why prices now fall off a cliff near the end of the
+// rosterable pool instead of tapering gently through a fat $4-9 middle.
+function auctionSurplus(p,repl){ return Math.max(0, auctionWeight(p)-(repl[p.pos]||0)); }
 function auctionEligible(p){
   if(p.pos==='K' && !(LEAGUE.starters.K||0))return false;
   if(p.pos==='DST' && !(LEAGUE.starters.DST||0))return false;
@@ -1676,8 +2163,11 @@ function auctionFallbackValues(){
   const min=LEAGUE.minBid||1, slots=(LEAGUE.rosterSize||LEAGUE.rounds||16)*LEAGUE.teams;
   const pool=PLAYERS.filter(auctionEligible).slice().sort((a,b)=>a.adp-b.adp).slice(0,slots);
   const extra=Math.max(0,(LEAGUE.auctionBudget||200)*LEAGUE.teams-slots*min);
-  const sum=pool.reduce((n,p)=>n+auctionWeight(p),0)||1;
-  pool.forEach(p=>out.set(p.id,Math.max(min,Math.round(min+extra*auctionWeight(p)/sum))));
+  const repl=auctionReplacementWeights();
+  const wts=pool.map(p=>auctionSurplus(p,repl)), sum=wts.reduce((n,w)=>n+w,0)||1;
+  let vals=pool.map((p,i)=>Math.max(min,Math.round(min+extra*wts[i]/sum)));
+  vals=applyAuctionCap(vals,wts,auctionPriceCap(),min);
+  pool.forEach((p,i)=>out.set(p.id,vals[i]));
   return out;
 }
 function weightedDollar(items,fallback){
@@ -1699,17 +2189,83 @@ function auctionOpponentBaseValues(){
   });
   return out;
 }
+// What a keeper is worth beyond this season.
+//
+// In a keeper auction the price you pay is also next year's cost basis: keeping
+// him costs price + annualIncrease. So overpaying doesn't just cost money now,
+// it destroys the retention value that made him worth chasing — the Egbuka
+// case, bought at $23 when $18 was the number, which made his $24 keeper price
+// worse than his worth and turned a multi-year asset into a one-year rental.
+//
+// Break-even max bid P over a horizon of H future years:
+//   P = V + Σ(k=1..H) max(0, V·traj^k − (P + k·increase))
+// with V the one-year value and traj the year-over-year value trend. Solved as
+// a fixed point (it converges in a handful of passes). The max(0, …) is the
+// cliff: past the price where next year's cost exceeds his value, the retention
+// premium is simply gone and the target stops rising.
+//
+// traj comes from an optional `trajectory` CSV column — 1.0 is neutral, >1 for
+// young/ascending, <1 for aging. Left at 1.0 a player's target lands on his
+// one-year value, which is the honest answer when we have no age or career data
+// (the FantasyPros feed carries none). This is the hook for the "adjust for
+// youth/ceiling/trajectory" judgement rather than a guess pretending to be data.
+function keeperBreakEvenBid(oneYearValue, traj, horizon, increase){
+  const V=Math.max(1,oneYearValue||1);
+  if(!(horizon>0))return V;
+  let P=V;
+  for(let pass=0; pass<25; pass++){
+    let extra=0;
+    for(let k=1;k<=horizon;k++) extra+=Math.max(0, V*Math.pow(traj,k) - (P + k*increase));
+    const next=V+extra;
+    if(Math.abs(next-P)<0.01){P=next;break;}
+    P=P*0.5+next*0.5;   // damped, so the fixed point can't oscillate
+  }
+  return P;
+}
+// Year-over-year value trend implied by age, since a keeper's worth is a
+// multi-year question. Peaks are the conventional positional aging curves —
+// running backs fall off earliest, quarterbacks hold value longest — and the
+// effect is deliberately capped so age nudges the number rather than dominating
+// it. An explicit `trajectory` column always overrides this.
+const AGE_PEAK={RB:25, WR:27, TE:28, QB:30, K:30, DST:27};
+function ageTrajectory(p){
+  const age=+p.age;
+  if(!Number.isFinite(age)||age<=0)return 1;               // no data -> neutral
+  const peak=AGE_PEAK[p.pos]||27;
+  if(age<peak){
+    // Still climbing. Rookies and second-year players carry the most upside,
+    // which is what makes them worth paying above one-year value to retain.
+    return 1+0.12*Math.min(1,(peak-age)/3);
+  }
+  // Past peak, decaying toward a floor. RBs fall fastest.
+  const steep=(p.pos==='RB')?3:4.5;
+  return 1-0.20*Math.min(1,(age-peak)/steep);
+}
 function auctionTargetBaseValues(){
   const fallback=auctionFallbackValues(), out=new Map();
+  const rules=LEAGUE.keeperRules||{};
+  const increase=rules.annualIncrease!=null?rules.annualIncrease:1;
+  // Only a keeper league has retention value to price in; a redraft auction's
+  // target is simply what the player is worth this season.
+  // How many future seasons of retention to price in. Both auction leagues here
+  // allow effectively unlimited keepers, so a genuinely ascending young player
+  // is a multi-year asset — at horizon 1 the premium is a rounding error ($3 on
+  // a $67 player) and doesn't reflect how these get bid up in practice. Three
+  // years separates a 21-year-old from a 28-year-old meaningfully without
+  // pretending we can forecast a decade.
+  const horizon=(LEAGUE.leagueType==='keeper' && LEAGUE.keeperCostType==='dollar')
+    ? (LEAGUE.keeperHorizon!=null?LEAGUE.keeperHorizon:3) : 0;
   PLAYERS.forEach(p=>{
     const fb=fallback.get(p.id)||1;
-    // Hovo's target deliberately does NOT inherit Yahoo by default. It blends
-    // independent valuation sources; our future custom auction model can be fed
-    // in via `custom_value` without changing simulation mechanics.
-    const v=weightedDollar([
+    // Target deliberately does NOT inherit Yahoo — Yahoo anchors what rivals pay,
+    // not what he's worth to us. Independent sources first, our own model via
+    // `custom_value`, falling back to the calibrated curve.
+    const oneYear=weightedDollar([
       {v:p.customValue,w:0.40},{v:p.fpValue,w:0.20},{v:p.dsValue,w:0.20},{v:p.rotowireValue,w:0.20}
     ],fb);
-    out.set(p.id,v);
+    // Explicit tag wins; otherwise infer from age; otherwise neutral.
+    const traj=Number.isFinite(+p.trajectory)&&+p.trajectory>0 ? +p.trajectory : ageTrajectory(p);
+    out.set(p.id, Math.max(1, Math.round(keeperBreakEvenBid(oneYear, traj, horizon, increase))));
   });
   return out;
 }
@@ -1718,15 +2274,46 @@ function auctionPriceSourceStatus(){
   const target=PLAYERS.some(p=>p.customValue||p.fpValue||p.dsValue||p.rotowireValue);
   return {market,target};
 }
+// value = keeper cost round − where he'd actually be drafted. Positive = paying a
+// LATER pick than his draft value = bargain. Dollar-cost (auction) keepers diff
+// against the target-value layer instead. Either way, a player we can't find is
+// null — genuinely unknown — never a fabricated number.
 function keepValue(name,cost){
-  if(LEAGUE.keeperCostType==='dollar'){const p=findPlayer(name);if(!p)return -999;return (auctionTargetBaseValues().get(p.id)||1)-cost;}
-  return cost-adpRoundOf(name);
+  if(LEAGUE.keeperCostType==='dollar'){
+    const p=findPlayer(name);
+    return p ? (auctionTargetBaseValues().get(p.id)||1)-cost : null;
+  }
+  const r=adpRoundOf(name);
+  return r===null ? null : cost-r;
+}
+// Renders a keeper value, distinguishing "no data" from a real (possibly bad) number.
+function valText(v){ return v===null||v===undefined ? '—' : (v>0?'+':'')+v; }
+// Sort best-value-first with unknowns last, rather than letting null coerce to 0
+// (which used to float unrated players into the middle of the table).
+function byValueDesc(a,b){
+  const av=a.val, bv=b.val;
+  if(av===null&&bv===null)return 0;
+  if(av===null)return 1;
+  if(bv===null)return -1;
+  return bv-av;
 }
 
 function seedPool(){
   PLAYERS = SEED.filter((p,i,a)=>a.findIndex(x=>x[0]===p[0])===i) // dedupe
     .map((p,i)=>({id:i+1,name:p[0],pos:p[1],team:p[2],adp:i+1,ecr:i+1,proj:0,drafted:false,keeper:null}));
 }
+// Hand-entered rosters drift from the player pool's spelling. Each of these was
+// verified against the pool before being added; a wrong name silently breaks
+// keeper valuation (findPlayer returns null), so they're bridged here rather
+// than left to fail quietly. Safe to drop an entry once the stored roster is
+// corrected — it simply stops matching anything.
+const NAME_ALIASES = {
+  'jonathan brooks':'Jonathon Brooks',
+  'jaocry croskeymerritt':'Jacory Croskey-Merritt',
+};
+// Team defenses are entered by nickname on rosters but carry the full name in
+// the player pool. The explicit table is authoritative; the DEF/DST suffix rule
+// below catches any team it doesn't list.
 const PLAYER_NAME_ALIASES={
   '49ers':'San Francisco 49ers','Bills':'Buffalo Bills','Broncos':'Denver Broncos','Buccaneers':'Tampa Bay Buccaneers',
   'Chargers':'Los Angeles Chargers','Commanders':'Washington Commanders','Eagles':'Philadelphia Eagles','Falcons':'Atlanta Falcons',
@@ -1736,20 +2323,52 @@ const PLAYER_NAME_ALIASES={
 };
 function normName(s){return s.toLowerCase().replace(/\s+(jr|sr|ii|iii|iv)\.?$/,'').replace(/[.'’`-]/g,'').replace(/\s+/g,' ').trim();}
 function findPlayer(name){
-  const raw=(name||'').trim(), alias=PLAYER_NAME_ALIASES[raw]||raw, n=alias.toLowerCase();
+  const raw=(name||'').trim();
+  const aliased=NAME_ALIASES[normName(raw)] || PLAYER_NAME_ALIASES[raw] || raw;
+  const n=aliased.toLowerCase(), nn=normName(aliased);
   return PLAYERS.find(p=>p.name.toLowerCase()===n) ||
-         PLAYERS.find(p=>normName(p.name)===normName(alias));
+         PLAYERS.find(p=>normName(p.name)===nn) ||
+         // Fallback for any defense the table above doesn't name. Restricted to
+         // DEF/DST so this can never latch onto a surname.
+         PLAYERS.find(p=>(p.pos==='DEF'||p.pos==='DST') && normName(p.name).endsWith(' '+nn));
 }
 
 // ---------- KEEPER SETUP ----------
 function initKeepers(){ rebuildKeepers(); }
+// Keeper cost for a saved selection, tolerating a spelling that no longer matches
+// the roster exactly (aliases, punctuation, suffixes) — otherwise renaming a
+// roster entry orphans the saved keeper and it vanishes without a trace.
+function keeperCostFor(player){
+  if(KEEPCOST[player]!=null)return KEEPCOST[player];
+  const want=normName(NAME_ALIASES[normName(player)]||player);
+  const hit=Object.keys(KEEPCOST).find(k=>normName(NAME_ALIASES[normName(k)]||k)===want);
+  return hit!=null?KEEPCOST[hit]:null;
+}
+// "Owner|Player" of every keeper the league itself has locked in. These are facts
+// (a passed deadline), identical for everyone, so they live on the league profile
+// rather than in a single user's setup — a leaguemate signing in sees the same
+// board you do. Personal `assigned` picks stack on top for what-if modeling.
+function leagueKeeperKeys(){ return (LEAGUE.leagueKeepers||[]); }
+function isLeagueKeeper(owner,player){
+  const want=(owner+'|'+player).toLowerCase();
+  return leagueKeeperKeys().some(k=>k.toLowerCase()===want);
+}
 function rebuildKeepers(){
   KEEPERS=[];
   if(LEAGUE.leagueType==='dynasty')return; // no cost-round concept — see dynastyKeptRoster()
-  assigned.forEach(key=>{
-    const i=key.indexOf('|'); const owner=key.slice(0,i), player=key.slice(i+1);
-    const cost=KEEPCOST[player];
+  const seen=new Set();
+  const add=(owner,player)=>{
+    const key=(owner+'|'+player).toLowerCase();
+    if(seen.has(key))return; seen.add(key);      // league-declared wins; no double-count
+    const cost=keeperCostFor(player);
     if(cost!=null){KEEPERS.push({name:player, team:OWNER_SLOT[owner]||1, round:cost});}
+  };
+  leagueKeeperKeys().forEach(entry=>{
+    const i=entry.indexOf('|'); if(i<0)return;
+    add(entry.slice(0,i).trim(), entry.slice(i+1).trim());
+  });
+  assigned.forEach(key=>{
+    const i=key.indexOf('|'); add(key.slice(0,i), key.slice(i+1));
   });
 }
 function applyAndReset(){ rebuildKeepers(); applyKeepers(); resetDraft(); renderTeams(); if(typeof renderTrades==="function")renderTrades(); if(typeof saveSetup==="function")saveSetup(); }
@@ -1783,15 +2402,41 @@ function resetDraft(){
     render();
     return;
   }
-  // pre-place keepers at their team's pick in that round
+  // Pre-place keepers on a pick the team actually still owns.
+  //
+  // The cost round says what the keeper is *worth*, not which pick pays for him:
+  //   - pay with the least valuable pick the team holds in that round (latest
+  //     overall), so a team holding two 5ths burns the worse one;
+  //   - a team can hold several picks in one round, or none, once trades are in,
+  //     so each keeper consumes a distinct pick (`used`);
+  //   - if the cost round is gone, walk to *earlier* rounds (a 10th-round cost
+  //     falls back to a 9th, then an 8th...). Never later — that would underpay.
+  // Anything still unpaid after round 1 is surfaced rather than silently dropped.
+  const used=new Set();
+  unpayableKeepers=[];
+  const heldInRound=(slot,r)=>{
+    const out=[];
+    for(let s2=1;s2<=LEAGUE.teams;s2++){ const ov=overall(r,s2); if(ownerOf(ov)===slot) out.push(ov); }
+    return out.sort((a,b)=>b-a); // latest pick first = least valuable
+  };
   KEEPERS.forEach(k=>{
     const p=findPlayer(k.name); if(!p) return;
-    const ov=overall(k.round,k.team);
-    picks.push({overall:ov,round:k.round,slot:k.team,playerId:p.id,keeper:true});
+    let paid=null;
+    for(let r=k.round; r>=1 && paid===null; r--){
+      const free=heldInRound(k.team,r).filter(ov=>!used.has(ov));
+      if(free.length) paid=free[0];
+    }
+    if(paid===null){ unpayableKeepers.push({name:k.name, team:k.team, round:k.round}); return; }
+    used.add(paid);
+    const pos=slotForOverall(paid);
+    picks.push({overall:paid, round:pos.round, slot:pos.slot, playerId:p.id, keeper:true, costRound:k.round});
     p.drafted=true;
   });
   render();
 }
+// Keepers whose team has no pick left at or before the cost round — they can't
+// legally be paid for, so they're reported instead of quietly vanishing.
+let unpayableKeepers=[];
 function slotForOverall(ov){const N=LEAGUE.teams;const r=Math.ceil(ov/N);const idx=ov-(r-1)*N;if(LEAGUE.draftType==='linear')return {round:r,slot:idx};const s=(r%2===1)?idx:(N-idx+1);return {round:r,slot:s};}
 function pickTakenAt(ov){return picks.find(p=>p.overall===ov);}
 function nextOpenPick(from){let ov=from;while(ov<=totalPicks && pickTakenAt(ov))ov++;return ov;}
@@ -1899,6 +2544,16 @@ function undo(){
   picks=picks.filter(p=>p!==last); const pl=PLAYERS.find(x=>x.id===last.playerId); if(pl)pl.drafted=false;
   curPick=nextOpenPick(Math.min(curPick,last.overall)); render(); saveSetup();
 }
+// Rewind to any earlier point: drops every non-keeper pick from `ov` onward and
+// puts the clock back there, so you can re-run a mock down a different branch
+// without resetting the whole draft. Keepers are pre-placed, never rewound.
+function rewindTo(ov){
+  const doomed=picks.filter(p=>!p.keeper&&p.overall>=ov);
+  if(!doomed.length)return;
+  doomed.forEach(p=>{const pl=PLAYERS.find(x=>x.id===p.playerId); if(pl)pl.drafted=false;});
+  picks=picks.filter(p=>p.keeper||p.overall<ov);
+  curPick=nextOpenPick(ov); render(); saveSetup();
+}
 
 // ---------- ROSTER NEED ----------
 function myRoster(){return LEAGUE.draftType==='auction'?rosterOf(mySlot):picks.filter(p=>ownerOf(p.overall)===mySlot).map(p=>PLAYERS.find(x=>x.id===p.playerId)).filter(Boolean);}
@@ -1906,13 +2561,15 @@ function myRoster(){return LEAGUE.draftType==='auction'?rosterOf(mySlot):picks.f
 // ---------- RENDER ----------
 const el=id=>document.getElementById(id);
 function setDraftRoomMode(auction){
-  ['snakeControlsCard','snakeDraftGrid','snakeBoardCard','snakeMyPicksCard'].forEach(id=>{const x=el(id);if(x)x.style.display=auction?'none':'';});
+  // snakeAnalysisCard is the draft-grading card; it grades snake picks only, so
+  // it hides with the rest of the snake room in auction mode.
+  ['snakeControlsCard','snakeDraftGrid','snakeBoardCard','snakeMyPicksCard','snakeAnalysisCard'].forEach(id=>{const x=el(id);if(x)x.style.display=auction?'none':'';});
   const a=el('auctionRoom');if(a)a.style.display=auction?'':'none';
 }
 function render(){
   const isAuction=LEAGUE.draftType==='auction'; setDraftRoomMode(isAuction);
   if(isAuction){renderAuctionRoom();return;}
-  renderPool();renderBoard();renderMyPicks();renderRoster();renderOnClock();renderKeeperList();renderQueue();
+  renderPool();renderBoard();renderMyPicks();renderRoster();renderOnClock();renderCues();renderKeeperList();renderQueue();
 }
 function renderAuctionPlaceholder(){
   renderAuctionRoom();
@@ -1932,19 +2589,15 @@ function scaleAuctionValuesToRemainingBudget(base){
   const slots=states.reduce((n,x)=>n+x.open,0), money=states.reduce((n,x)=>n+Math.max(0,x.left),0);
   const pool=available().filter(auctionEligible).slice().sort((a,b)=>(base.get(b.id)||1)-(base.get(a.id)||1)).slice(0,slots);
   const extra=Math.max(0,money-slots*min), rawExtra=pool.reduce((n,p)=>n+Math.max(0,(base.get(p.id)||min)-min),0);
-  // Preserve a source's published dollar scale at the untouched start of a
-  // league. Then adjust only for keeper/sale inflation relative to that
-  // baseline; normalizing Yahoo/FantasyPros to force every league dollar into
-  // player values made their already league-aware top prices unrealistically high.
-  const baselineSlots=(LEAGUE.rosterSize||LEAGUE.rounds||16)*LEAGUE.teams;
-  const baselineMoney=(LEAGUE.auctionBudget||200)*LEAGUE.teams;
-  const baselinePool=PLAYERS.filter(auctionEligible).slice().sort((a,b)=>(base.get(b.id)||1)-(base.get(a.id)||1)).slice(0,baselineSlots);
-  const baselineExtra=Math.max(0,baselineMoney-baselineSlots*min);
-  const baselineRawExtra=baselinePool.reduce((n,p)=>n+Math.max(0,(base.get(p.id)||min)-min),0);
-  const scenarioRatio=rawExtra>0?extra/rawExtra:1;
-  const baselineRatio=baselineRawExtra>0?baselineExtra/baselineRawExtra:1;
-  const scale=baselineRatio>0?scenarioRatio/baselineRatio:1;
-  pool.forEach(p=>out.set(p.id,Math.max(min,Math.round(min+Math.max(0,(base.get(p.id)||min)-min)*scale))));
+  const scale=rawExtra>0?extra/rawExtra:1;
+  // Rescaling to the money actually left is right — those dollars do get spent,
+  // and a keeper league that locks up half its cash really does inflate what's
+  // left. But it has to respect the same ceiling, or a thin pool with a lot of
+  // money chasing it produces prices no human would ever bid.
+  const wts=pool.map(p=>Math.max(0,(base.get(p.id)||min)-min));
+  let vals=pool.map((p,i)=>Math.max(min,Math.round(min+wts[i]*scale)));
+  vals=applyAuctionCap(vals,wts,auctionPriceCap(),min);
+  pool.forEach((p,i)=>out.set(p.id,vals[i]));
   return out;
 }
 function auctionMarketValues(){ return scaleAuctionValuesToRemainingBudget(auctionOpponentBaseValues()); }
@@ -1980,21 +2633,103 @@ function simAuctionSale(){
   auctionPicks.push({playerId:p.id,owner:winner.slot,price});p.drafted=true;return true;
 }
 function simAuctionSales(n){for(let i=0;i<n;i++){if(!simAuctionSale())break;}renderAuctionRoom();saveSetup();}
+// Split what's left at a position into three tiers, from the shape of the
+// remaining pool rather than from fixed dollar cut-offs — a $29 player next to a
+// cluster of $30s belongs with them, not with the $4-16 group below.
+//
+//  red    — past the point where the league will still roster this position at
+//           all. That's replacement level (auctionRosterDemand) minus everyone
+//           already rostered there, so it's the literal waiver-wire tail.
+//  green  — above the biggest price cliff in the top half of what remains. As
+//           the elite tier gets bought this narrows on its own, which is the
+//           point: eventually one player is green by himself.
+//  yellow — everything between.
+function auctionPosTiers(availByPos, valOf){
+  const need=auctionRosterDemand(), out={};
+  const taken={};
+  KEEPERS.forEach(k=>{const p=findPlayer(k.name); if(p)taken[p.pos]=(taken[p.pos]||0)+1;});
+  auctionPicks.forEach(a=>{const p=PLAYERS.find(x=>x.id===a.playerId); if(p)taken[p.pos]=(taken[p.pos]||0)+1;});
+  Object.keys(availByPos).forEach(pos=>{
+    const list=availByPos[pos].slice().sort((a,b)=>(valOf(b)||0)-(valOf(a)||0));
+    const rosterable=Math.max(0,Math.min(list.length,(need[pos]||0)-(taken[pos]||0)));
+    const live=list.slice(0,rosterable);
+    let green=live.length;
+    if(live.length>1){
+      // Look for the cliff only in the top half — the biggest raw drop in the
+      // whole list is usually the $2 -> $1 step at the very bottom, which says
+      // nothing about who the premium players are.
+      const limit=Math.max(1,Math.ceil(live.length/2));
+      let best=-1;
+      for(let i=1;i<=Math.min(limit,live.length-1);i++){
+        const d=(valOf(live[i-1])||0)-(valOf(live[i])||0);
+        if(d>best){best=d;green=i;}
+      }
+      if(best<=0)green=live.length;   // no cliff at all: it's one flat tier
+    }
+    out[pos]={green, yellow:Math.max(0,live.length-green), red:list.length-live.length};
+  });
+  return out;
+}
 function renderAuctionRoom(){
   if(!el('auctionRoom'))return;
   if(!PLAYERS.length){el('auctionStatus').textContent='No player data loaded for this league yet.';return;}
-  const vals=auctionMarketValues(), targets=auctionTargetValues(), avail=available().filter(auctionEligible).sort((a,b)=>(vals.get(b.id)||0)-(vals.get(a.id)||0));
-  const src=auctionPriceSourceStatus(); el('auctionPoolCount').textContent=`(${avail.length})${src.market?'':' · market est.'}${src.target?'':' · target est.'}`;
+  const vals=auctionMarketValues(), targets=auctionTargetValues();
+  const allAvail=available().filter(auctionEligible).sort((a,b)=>(vals.get(b.id)||0)-(vals.get(a.id)||0));
+  // How many are left at each position — the "how urgently do I need to bid on a
+  // RB" read, which is the auction equivalent of the snake room's scarcity cues.
+  const byPos={}; allAvail.forEach(p=>{(byPos[p.pos]=byPos[p.pos]||[]).push(p);});
+  const tiers=auctionPosTiers(byPos, p=>vals.get(p.id)||0);
+  const cEl=el('auctionPosCounts');
+  if(cEl)cEl.innerHTML=['QB','RB','WR','TE','K','DST'].filter(x=>byPos[x])
+    .map(x=>{const t=tiers[x]||{green:0,yellow:0,red:byPos[x].length};
+      return `<span class="pos ${x}">${x}</span>&nbsp;<span class="tier-g" title="top tier left">${t.green}</span>/<span class="tier-y" title="still rosterable">${t.yellow}</span>/<span class="tier-r" title="past replacement level">${t.red}</span>`;})
+    .join(' &nbsp;');
+  const posF=(el('auctionPosFilter')&&el('auctionPosFilter').value)||'ALL';
+  const q=((el('auctionSearch')&&el('auctionSearch').value)||'').trim().toLowerCase();
+  let avail=allAvail;
+  if(posF!=='ALL')avail=avail.filter(p=>p.pos===posF);
+  if(q)avail=avail.filter(p=>p.name.toLowerCase().includes(q));
+  const src=auctionPriceSourceStatus();
+  el('auctionPoolCount').textContent=`(${avail.length}${posF!=='ALL'||q?` of ${allAvail.length}`:''})${src.market?'':' · market est.'}${src.target?'':' · target est.'}`;
   el('auctionPlayerList').innerHTML=avail.slice(0,160).map(p=>`<option value="${p.name}">`).join('');
   el('auctionWinner').innerHTML=OWNERS.map(o=>`<option value="${o}">${o}${o===ME_OWNER?' (me)':''}</option>`).join('');
   if(ME_OWNER)el('auctionWinner').value=ME_OWNER;
   const ptb=el('auctionPoolTable').querySelector('tbody');
-  ptb.innerHTML=avail.slice(0,100).map(p=>`<tr><td><b>$${vals.get(p.id)||1}</b></td><td class="val-good"><b>$${targets.get(p.id)||1}</b></td><td>${Math.round(p.adp||0)}</td><td><span class="pos ${p.pos}">${p.pos}</span></td><td>${p.name}</td><td class="muted">${p.team||''}</td><td><button class="pick-btn" data-aucbuy="${p.id}">select</button></td></tr>`).join('');
+  // ECR rather than ADP: Market $ already *is* the auction's draft-position
+  // signal, so ADP was a second version of the same thing taking up a column.
+  ptb.innerHTML=avail.slice(0,100).map(p=>`<tr><td><b>$${vals.get(p.id)||1}</b></td><td class="val-good"><b>$${targets.get(p.id)||1}</b></td><td>${p.ecr?Math.round(p.ecr):'—'}</td><td><span class="pos ${p.pos}">${p.pos}</span></td><td>${headshotImg(p)}${p.name}${rookieBadge(p)}</td><td class="muted">${p.team||''}</td><td><button class="pick-btn" data-aucbuy="${p.id}">select</button></td></tr>`).join('');
   ptb.querySelectorAll('[data-aucbuy]').forEach(b=>b.onclick=()=>{const p=PLAYERS.find(x=>x.id===+b.dataset.aucbuy);if(p){el('auctionPlayerInput').value=p.name;el('auctionPrice').value=vals.get(p.id)||1;}});
   const btb=el('auctionBudgetTable').querySelector('tbody');
-  btb.innerHTML=Array.from({length:LEAGUE.teams},(_,i)=>i+1).map(slot=>{const st=auctionTeamState(slot),o=SLOT_OWNER[slot]||('T'+slot);return `<tr><td>${o}${o===ME_OWNER?' ★':''}</td><td>${st.used}/${st.rosterSize}</td><td>$${st.keeperSpend}</td><td>$${st.draftSpend}</td><td class="${st.valid?'':'val-bad'}">$${st.left}</td><td><b>$${st.maxBid}</b></td></tr>`;}).join('');
-  const mine=KEEPERS.filter(k=>k.team===mySlot).map(k=>({p:findPlayer(k.name),price:k.round,keeper:true})).concat(auctionPicks.filter(a=>a.owner===mySlot).map(a=>({p:PLAYERS.find(x=>x.id===a.playerId),price:a.price,keeper:false}))).filter(x=>x.p);
-  el('auctionMyRoster').innerHTML=mine.length?mine.map(x=>`<div class="mypick-row"><span><span class="pos ${x.p.pos}">${x.p.pos}</span> ${x.p.name}${x.keeper?' <span class="kchip">KEEP</span>':''}</span><b>$${x.price}</b></div>`).join(''):'—';
+  // Keeper-spend / draft-spend split removed deliberately: mid-auction the only
+  // things that change a bid are what a team has left and what it can still bid.
+  btb.innerHTML=Array.from({length:LEAGUE.teams},(_,i)=>i+1).map(slot=>{const st=auctionTeamState(slot),o=SLOT_OWNER[slot]||('T'+slot);return `<tr><td>${o}${o===ME_OWNER?' ★':''}</td><td>${st.used}/${st.rosterSize}</td><td class="${st.valid?'':'val-bad'}">$${st.left}</td><td><b>$${st.maxBid}</b></td></tr>`;}).join('');
+  // Same shape as the snake room's roster panel: pick any owner, see the starting
+  // slots laid out with players filled in best-ECR-first, then the bench.
+  const rsel=el('auctionRosterOwner');
+  if(rsel){
+    if(rsel.options.length!==LEAGUE.teams){
+      rsel.innerHTML=Array.from({length:LEAGUE.teams},(_,i)=>i+1)
+        .map(s=>`<option value="${s}">${SLOT_OWNER[s]||('T'+s)}${s===mySlot?' (me)':''}</option>`).join('');
+      if(mySlot!=null)rsel.value=mySlot;
+    }
+    const rslot=+rsel.value||mySlot;
+    const priced=new Map();
+    KEEPERS.filter(k=>k.team===rslot).forEach(k=>{const p=findPlayer(k.name); if(p)priced.set(p.id,{price:k.round,keeper:true});});
+    auctionPicks.filter(a=>a.owner===rslot).forEach(a=>priced.set(a.playerId,{price:a.price,keeper:false}));
+    const roster=rosterOf(rslot);
+    const {starterSlots,bench}=slotRosterPlayers(roster, LEAGUE.starters||{});
+    const tag=p=>{const m=priced.get(p.id); return m?`${m.keeper?' <span class="kchip">KEEP</span>':''}</span><b>$${m.price}</b>`:'</span>';};
+    const rows=starterSlots.map(sl=>sl.player
+      ? `<div class="mypick-row"><span class="muted small" style="min-width:52px;display:inline-block">${sl.label}</span><span><span class="pos ${sl.player.pos}">${sl.player.pos}</span> ${sl.player.name}${tag(sl.player)}</div>`
+      : `<div class="mypick-row"><span class="muted small" style="min-width:52px;display:inline-block">${sl.label}</span><span class="muted small">— empty —</span></div>`).join('');
+    const benchRows=bench.length
+      ? `<div class="small muted" style="margin-top:8px;margin-bottom:2px">Bench (${bench.length})</div>`+
+        bench.map(p=>`<div class="mypick-row"><span><span class="pos ${p.pos}">${p.pos}</span> ${p.name}${tag(p)}</div>`).join('')
+      : '';
+    const st=auctionTeamState(rslot);
+    const hdr=`<div class="small muted" style="margin-bottom:6px">$${st.left} left · max bid <b>$${st.maxBid}</b> · ${st.used}/${st.rosterSize} filled</div>`;
+    el('auctionMyRoster').innerHTML = hdr + ((rows+benchRows) || '—');
+  }
   const rtb=el('auctionResultsTable').querySelector('tbody');
   rtb.innerHTML=auctionPicks.length?auctionPicks.map((a,i)=>{const p=PLAYERS.find(x=>x.id===a.playerId);return `<tr><td>${i+1}</td><td>${p?p.name:'?'}</td><td>${p?`<span class="pos ${p.pos}">${p.pos}</span>`:''}</td><td>${SLOT_OWNER[a.owner]||('T'+a.owner)}</td><td>$${a.price}</td><td><button class="btn bad" style="padding:2px 7px" data-aucundo="${i}">×</button></td></tr>`;}).join(''):'<tr><td colspan="6" class="muted small">No auction sales yet.</td></tr>';
   rtb.querySelectorAll('[data-aucundo]').forEach(b=>b.onclick=()=>undoAuctionSale(+b.dataset.aucundo));
@@ -2002,7 +2737,7 @@ function renderAuctionRoom(){
 function _unusedAuctionPlaceholderLegacy(){
   const msg='Auction drafting is active.';
   const onClock=el('onClock'); if(onClock) onClock.textContent=msg;
-  const pool=el('poolTable'); if(pool){const tb=pool.querySelector('tbody'); if(tb) tb.innerHTML=`<tr><td colspan="9" class="muted small">${msg}</td></tr>`;}
+  const pool=el('poolTable'); if(pool){const tb=pool.querySelector('tbody'); if(tb) tb.innerHTML=`<tr><td colspan="10" class="muted small">${msg}</td></tr>`;}
   const poolCount=el('poolCount'); if(poolCount) poolCount.textContent='';
   const board=el('boardGrid'); if(board) board.innerHTML=`<div class="muted small">${msg}</div>`;
   const myPicks=el('myPicks'); if(myPicks) myPicks.innerHTML=`<div class="muted small">${msg}</div>`;
@@ -2016,6 +2751,48 @@ function renderOnClock(){
   const owner=ownerOf(ov); const mine=owner===mySlot?' — YOUR PICK':'';
   el('onClock').innerHTML=`On the clock: <b>Pick ${ov}</b> (${label(round,slot)}, team ${owner})${mine}`;
 }
+// Every one of my picks that hasn't happened yet, in draft order (the first
+// entry is the pick on the clock when it's my turn).
+function myUpcomingPicks(){
+  const out=[]; for(let ov=nextOpenPick(curPick);ov<=totalPicks;ov++){ if(!pickTakenAt(ov)&&ownerOf(ov)===mySlot)out.push(ov); }
+  return out;
+}
+function renderCues(){
+  const box=el('clockCues'); if(!box)return;
+  const parts=[];
+  // Run detection: what's come off the board since my most recent pick.
+  const mineDone=picks.filter(p=>!p.keeper&&ownerOf(p.overall)===mySlot).map(p=>p.overall).sort((a,b)=>a-b);
+  const from=mineDone.length?mineDone[mineDone.length-1]:0;
+  const since=picks.filter(p=>!p.keeper&&p.overall>from);
+  if(since.length){
+    const c={}; since.forEach(p=>{const pl=PLAYERS.find(x=>x.id===p.playerId); if(pl)c[pl.pos]=(c[pl.pos]||0)+1;});
+    const run=Object.entries(c).sort((a,b)=>b[1]-a[1]).map(([pos,n])=>`<span class="pos ${pos}">${pos}</span> ${n}`).join(' · ');
+    parts.push(`<span>${from?'Since your last pick':'So far'} (${since.length}): ${run}</span>`);
+  }
+  // Scarcity: how thin the top remaining tier is at each position.
+  const scar=[];
+  ['QB','RB','WR','TE'].forEach(pos=>{
+    const left=available().filter(p=>p.pos===pos);
+    if(!left.length)return;
+    // Best *tier* still on the board at this position, not the best ADP — a
+    // tier-2 guy who's slipped down the ADP board is still a tier-2 guy.
+    const t=Math.min.apply(null,left.map(p=>p.tier||99)); if(t===99)return;
+    const n=left.filter(p=>p.tier===t).length;
+    scar.push(`<span class="pos ${pos}">${pos}</span> <span class="${n<=3?'val-bad':''}">${n}</span> in T${t}`);
+  });
+  if(scar.length)parts.push(`<span>Top tier left: ${scar.join(' · ')}</span>`);
+  // Who probably won't survive until my pick after this one.
+  const up=myUpcomingPicks();
+  const target=(up[0]===nextOpenPick(curPick))?up[1]:up[0];
+  if(target){
+    const risk=available().filter(p=>p.adp<target);
+    if(risk.length){
+      const names=risk.slice(0,3).map(p=>`${queued.has(p.name)?'★':''}${p.name}`).join(', ');
+      parts.push(`<span><b>${risk.length}</b> likely gone before your #${target}: ${names}${risk.length>3?'…':''}</span>`);
+    }
+  }
+  box.innerHTML=parts.join('') || '<span>Draft complete.</span>';
+}
 function valClass(d){return d>=8?'val-good':(d<=-8?'val-bad':'');}
 function renderPool(){
   if(LEAGUE.draftType==='auction')return; // placeholder shown by render(); search/filter inputs shouldn't clobber it
@@ -2026,12 +2803,28 @@ function renderPool(){
   if(q)rows=rows.filter(p=>p.name.toLowerCase().includes(q));
   el('poolCount').textContent=`(${available().length} left)`;
   const tb=el('poolTable').querySelector('tbody'); tb.innerHTML='';
+  // Tier counts are computed over the *filtered* rows on purpose: with the
+  // position filter on, "4 left in tier 3" reads as "4 RBs left in tier 3",
+  // which is the scarcity question you actually ask on the clock.
+  const tierLeft={}; rows.forEach(p=>{ if(p.tier)tierLeft[p.tier]=(tierLeft[p.tier]||0)+1; });
+  // Only break when we cross into a *deeper* tier: the pool is ADP-sorted while
+  // tiers come from ECR, so the two disagree often enough that reacting to every
+  // change would litter the list with headers. A stray better-tier player who
+  // fell down the ADP board just renders inline under the tier he fell into.
+  let shownTier=0;
   rows.slice(0,220).forEach(p=>{
+    if(p.tier && p.tier>shownTier){
+      shownTier=p.tier;
+      const n=tierLeft[p.tier];
+      const trT=document.createElement('tr'); trT.className='tierrow';
+      trT.innerHTML=`<td colspan="10">Tier ${p.tier}<span class="${n<=3?'val-bad':'muted'}"> · ${n} left${pos!=='ALL'?' at '+pos:''}</span></td>`;
+      tb.appendChild(trT);
+    }
     const d=Math.round((p.adp-p.ecr)*10)/10; // + = falls later than ranked = value
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><input type="checkbox" class="qcheck" data-q="${p.name.replace(/"/g,'&quot;')}" ${queued.has(p.name)?'checked':''}></td>
-      <td>${p.adp}</td><td>${p.ecr}</td><td><span class="pos ${p.pos}">${p.pos}</span></td>
-      <td>${p.name}${p.keeper?`<span class="kchip">K</span>`:''}</td><td class="muted small">${p.pos}${p.posRank||''}</td><td class="small">${p.proj?p.proj.toFixed(1):''}</td>
+      <td>${p.adp}</td><td>${p.ecr}</td><td>${p.myRank!=null?p.myRank:'—'}</td><td><span class="pos ${p.pos}">${p.pos}</span></td>
+      <td>${headshotImg(p)}${p.name}${p.keeper?`<span class="kchip">K</span>`:''}${rookieBadge(p)}</td><td class="muted small">${p.pos}${p.posRank||''}</td><td class="small">${p.proj?p.proj.toFixed(1):''}</td>
       <td class="dcol ${valClass(d)}">${d>0?'+':''}${d}</td>
       <td><button class="pick-btn" data-pk="${p.id}">draft →</button></td>`;
     tb.appendChild(tr);
@@ -2064,7 +2857,7 @@ function renderQueue(){
 function ownerLabel(slot){ return (SLOT_OWNER&&SLOT_OWNER[slot]) || ('T'+slot); }
 function renderBoard(){
   const g=el('boardGrid'); g.innerHTML='';
-  g.style.gridTemplateColumns=`repeat(${LEAGUE.teams}, minmax(120px,1fr))`;
+  g.style.setProperty('--teams', LEAGUE.teams);
   const ovNext=nextOpenPick(curPick);
   // Headers and cells are appended directly as grid children in row-major
   // order (all team headers, then all round-1 cells, then all round-2
@@ -2082,7 +2875,12 @@ function renderBoard(){
       const c=document.createElement('div');
       c.className='cell'+(own===mySlot?' me':'')+(pk&&pk.keeper?' keeper':'')+(ov===ovNext?' now':'')+(traded?' traded':'');
       if(pk){const pl=PLAYERS.find(x=>x.id===pk.playerId);
-        c.innerHTML=`<div class="pk">${label(r,s)} ${pk.keeper?'· K':''}${tt}</div><b>${pl?pl.name:''}</b> <span class="pos ${pl?pl.pos:''}">${pl?pl.pos:''}</span>`;
+        c.innerHTML=`<div class="pk">${label(r,s)} ${pk.keeper?'· K':''}${tt}</div>${pl?headshotImg(pl):''}<b>${pl?pl.name:''}</b> <span class="pos ${pl?pl.pos:''}">${pl?pl.pos:''}</span>`;
+        if(!pk.keeper){
+          c.classList.add('done');
+          c.title='Rewind the draft to this pick';
+          c.onclick=()=>{ if(confirm(`Rewind to pick #${ov} (${label(r,s)})? This undoes that pick and everything after it.`))rewindTo(ov); };
+        }
       } else {c.innerHTML=`<div class="pk">${label(r,s)} · #${ov}${tt}</div>`;}
       g.appendChild(c);
     }
@@ -2096,7 +2894,8 @@ function renderMyPicks(){
     const div=document.createElement('div'); div.className='mypick-row';
     let right;
     if(pk){const pl=PLAYERS.find(x=>x.id===pk.playerId);
-      right=`<b>${pl?pl.name:''}</b> <span class="pos ${pl?pl.pos:''}">${pl?pl.pos:''}</span> ${pk.keeper?'<span class="kchip">keeper</span>':''}`;
+      const rw=pk.keeper?'':`<a href="#" class="rewind" data-rw="${ov}" title="Rewind the draft to this pick">↩</a>`;
+      right=`${pl?headshotImg(pl):''}<b>${pl?pl.name:''}</b> <span class="pos ${pl?pl.pos:''}">${pl?pl.pos:''}</span> ${pk.keeper?'<span class="kchip">keeper</span>':''}${rw}`;
     } else {
       const pr=available().filter(p=>p.adp>=ov-6).slice(0,3).map(p=>`${p.name} <span class="muted">(${p.pos}${p.posRank||''}, adp ${p.adp})</span>`).join(', ')||'—';
       right=`<span class="muted">likely: ${pr}</span>`;
@@ -2105,6 +2904,67 @@ function renderMyPicks(){
     div.innerHTML=`<span class="muted small">${label(round,slot)} · #${ov}${acq}</span><span class="small" style="text-align:right">${right}</span>`;
     box.appendChild(div);
   });
+  box.querySelectorAll('[data-rw]').forEach(a=>a.onclick=(e)=>{
+    e.preventDefault(); const ov=+a.dataset.rw;
+    if(confirm(`Rewind to pick #${ov}? This undoes that pick and everything after it.`))rewindTo(ov);
+  });
+}
+// ---------- DRAFT ANALYSIS ----------
+// Draft value is deliberately ECR-based rather than projection-based: `proj` is
+// only populated for the players FantasyPros exposes without a login, so grading
+// on it would score half the board as zero. The curve is steep at the top and
+// flattens out, so a stud is worth more than two mid-round starters.
+function valuePoints(p){ if(!p)return 0; const ecr=p.ecr||p.adp||250; return Math.round(12000/(1+ecr/25))/100; }
+function gradeFor(z){
+  if(z>=1.5)return ['A+','var(--accent2)']; if(z>=1.0)return ['A','var(--accent2)'];
+  if(z>=0.5)return ['B+','var(--accent)']; if(z>=0)return ['B','var(--accent)'];
+  if(z>=-0.5)return ['C+','var(--muted)']; if(z>=-1.0)return ['C','var(--muted)'];
+  if(z>=-1.5)return ['D','var(--warn)']; return ['F','var(--bad)'];
+}
+function renderDraftAnalysis(){
+  const box=el('draftAnalysis'); if(!box)return;
+  if(LEAGUE.draftType==='auction'){ box.innerHTML='Auction drafts aren\u2019t modeled yet.'; return; }
+  if(!picks.filter(p=>!p.keeper).length){ box.innerHTML='No picks made yet \u2014 run a mock (or make a pick) first.'; return; }
+  const teams=[];
+  for(let s=1;s<=LEAGUE.teams;s++){
+    const roster=rosterOf(s);
+    const {starterSlots,bench}=slotRosterPlayers(roster, LEAGUE.starters||{});
+    const starterPts=starterSlots.reduce((a,x)=>a+valuePoints(x.player),0);
+    const benchPts=bench.reduce((a,x)=>a+valuePoints(x),0)*0.3; // depth counts, but far less than starters
+    const byPos={QB:0,RB:0,WR:0,TE:0};
+    roster.forEach(pl=>{ if(byPos[pl.pos]!=null)byPos[pl.pos]+=valuePoints(pl); });
+    teams.push({slot:s, owner:ownerLabel(s), total:starterPts+benchPts, starterPts, byPos,
+      filled:starterSlots.filter(x=>x.player).length, slots:starterSlots.length});
+  }
+  const mean=teams.reduce((a,t)=>a+t.total,0)/teams.length;
+  const sd=Math.sqrt(teams.reduce((a,t)=>a+(t.total-mean)**2,0)/teams.length)||1;
+  const posRank={};
+  ['QB','RB','WR','TE'].forEach(pos=>{
+    teams.slice().sort((a,b)=>b.byPos[pos]-a.byPos[pos]).forEach((t,i)=>{ (posRank[t.slot]=posRank[t.slot]||{})[pos]=i+1; });
+  });
+  const ranked=teams.slice().sort((a,b)=>b.total-a.total);
+  const rows=ranked.map((t,i)=>{
+    const [g,col]=gradeFor((t.total-mean)/sd);
+    const pr=['QB','RB','WR','TE'].map(pos=>`<span class="pos ${pos}">${pos}</span>${posRank[t.slot][pos]}`).join(' ');
+    return `<tr${t.slot===mySlot?' style="background:var(--me)"':''}><td>${i+1}</td><td>${t.slot===mySlot?'\u2605 ':''}${t.owner}</td>
+      <td><span class="gradechip" style="color:${col};border-color:${col}">${g}</span></td>
+      <td>${t.total.toFixed(1)}</td><td class="muted small">${t.filled}/${t.slots}</td><td class="small">${pr}</td></tr>`;
+  }).join('');
+  // Steals & reaches: where a player actually went vs. where ADP said they'd go.
+  // K/DST are excluded: everyone waits on them by convention, so they "fall"
+  // 20+ spots past ADP every draft and would crowd out the real steals.
+  const deltas=picks.filter(p=>!p.keeper).map(p=>{
+    const pl=PLAYERS.find(x=>x.id===p.playerId); if(!pl||pl.pos==='K'||pl.pos==='DST')return null;
+    return {name:pl.name, pos:pl.pos, ov:p.overall, owner:ownerLabel(ownerOf(p.overall)), d:Math.round(pl.adp-p.overall)};
+  }).filter(Boolean);
+  const fmt=list=>list.length?list.map(x=>`<div class="mypick-row"><span class="small"><span class="pos ${x.pos}">${x.pos}</span> ${x.name} <span class="muted">\u2014 ${x.owner} at #${x.ov}</span></span><span class="small ${x.d>0?'val-good':'val-bad'}">${x.d>0?'+':''}${x.d}</span></div>`).join(''):'<span class="muted small">\u2014</span>';
+  const steals=deltas.slice().sort((a,b)=>b.d-a.d).slice(0,5);
+  const reaches=deltas.slice().sort((a,b)=>a.d-b.d).slice(0,5);
+  box.innerHTML=`<div class="scroll"><table><thead><tr><th>#</th><th>Team</th><th>Grade</th><th>Value</th><th>Starters</th><th>Pos ranks</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="grid2" style="margin-top:12px">
+      <div><div class="small muted" style="margin-bottom:4px">Biggest steals (fell past ADP · K/DST excluded)</div>${fmt(steals)}</div>
+      <div><div class="small muted" style="margin-bottom:4px">Biggest reaches (went early)</div>${fmt(reaches)}</div>
+    </div>`;
 }
 // Fills starters slot-by-slot (exact positions first, then FLEX, then SUPERFLEX
 // if the league has one) so empty slots are visible, not just a flat player list.
@@ -2144,7 +3004,17 @@ function renderRoster(){
 }
 function renderKeeperList(){
   const wrap=el('keeperList'); if(!wrap)return;
-  wrap.innerHTML = KEEPERS.map(k=>`<span class="pill">${k.name} · ${ownerLabel(k.team)} · ${LEAGUE.keeperCostType==='dollar'?'$':'R'}${k.round}</span>`).join('');
+  const costLabel = LEAGUE.keeperCostType==='dollar' ? '$' : 'R';
+  const pills = KEEPERS.map(k=>{
+    const unpaid = unpayableKeepers.some(u=>u.name===k.name && u.team===k.team);
+    return `<span class="pill"${unpaid?' style="border-color:var(--bad);color:var(--bad)" title="This team has no pick left in R'+k.round+' or any earlier round, so this keeper can\'t be paid for"':''}>${k.name} · ${ownerLabel(k.team)} · ${costLabel}${k.round}${unpaid?' ⚠':''}</span>`;
+  }).join('');
+  // A keeper whose team traded away every pick at or before the cost round can't
+  // legally be kept — say so rather than letting him quietly vanish off the board.
+  const warn = unpayableKeepers.length
+    ? `<div class="small" style="color:var(--bad);margin-top:6px">⚠ ${unpayableKeepers.length} keeper${unpayableKeepers.length>1?'s':''} can't be paid for — no pick left at or before the cost round: ${unpayableKeepers.map(u=>`${u.name} (${ownerLabel(u.team)}, R${u.round})`).join(', ')}</div>`
+    : '';
+  wrap.innerHTML = pills + warn;
   renderKeeperValueTable();
 }
 function renderKeeperValueTable(){
@@ -2157,14 +3027,14 @@ function renderKeeperValueTable(){
   if(!applicable)return;
   const tb=el('keeperValueTable'); if(!tb)return;
   const rows=KEEPERS.map(k=>({...k, pos:(findPlayer(k.name)||{}).pos||'', adpRound:adpRoundOf(k.name), val:keepValue(k.name,k.round)}))
-    .sort((a,b)=>b.val-a.val);
+    .sort(byValueDesc);
   tb.innerHTML=rows.map(k=>`<tr>
     <td>${ownerLabel(k.team)}</td>
     <td>${k.name}</td>
     <td style="text-align:center"><span class="pos ${k.pos}">${k.pos}</span></td>
     <td style="text-align:center">R${k.round}</td>
-    <td style="text-align:center">R${k.adpRound}</td>
-    <td style="text-align:center" class="${k.val>=3?'val-good':(k.val<=-3?'val-bad':'muted')}">${k.val>0?'+':''}${k.val}</td>
+    <td style="text-align:center">${k.adpRound===null?'<span class="muted" title="Not in the player pool — no ADP to compare against">—</span>':'R'+k.adpRound}</td>
+    <td style="text-align:center" class="${k.val===null?'muted':(k.val>=3?'val-good':(k.val<=-3?'val-bad':'muted'))}" ${k.val===null?'title="Not in the player pool, so there is no value to compute"':''}>${valText(k.val)}</td>
   </tr>`).join('') || '<tr><td colspan="6" class="muted small">No keepers set yet.</td></tr>';
 }
 
@@ -2212,7 +3082,11 @@ function renderTeams(){
   const tally=[];
   OWNERS.forEach(owner=>{
     const isMe=owner===ME_OWNER, roster=effRoster(owner);
-    const eligible=roster.filter(r=>r.keeper!=null).map(r=>{const p=findPlayer(r.player), val=isAuction?((p?(baseVals.get(p.id)||1):1)-r.keeper):keepValue(r.player,r.keeper);return {...r,pos:(p||{}).pos||'',val};}).sort((a,b)=>b.val-a.val);
+    const eligible=roster.filter(r=>r.keeper!=null).map(r=>{
+      const p=findPlayer(r.player);
+      const val=isAuction ? (p?(baseVals.get(p.id)||1)-r.keeper:null) : keepValue(r.player,r.keeper);
+      return {...r, pos:(p||{}).pos||'', val};
+    }).sort(byValueDesc);
     const chosen=eligible.filter(r=>assigned.has(owner+'|'+r.player));
     const slot=OWNER_SLOT[owner]||1;
     const max=isAuction?(LEAGUE.rosterSize||LEAGUE.rounds||16):(LEAGUE.maxKeepers!=null?LEAGUE.maxKeepers:'?');
@@ -2223,13 +3097,28 @@ function renderTeams(){
     head.innerHTML=isAuction?`${isMe?'★ ':''}${owner} <span class="muted">· ${chosen.length}/${max} kept · $${st.keeperSpend} keep $ · $${st.left} left · max bid $${st.maxBid}${isMe?' · you':''}</span>`:`${isMe?'★ ':''}${owner} <span class="muted">· slot ${OWNER_SLOT[owner]} · ${chosen.length}/${max} kept${isMe?' · you':''}</span>`;
     c.appendChild(head);
     eligible.forEach(r=>{
-      const key=owner+'|'+r.player, checked=assigned.has(key);
-      const row=document.createElement('label'); row.className='mypick-row'; row.style.cursor='pointer';
+      const key=owner+'|'+r.player;
+      // A keeper the league has already locked in is a fact, not a choice: show it
+      // checked and disabled so it can't be toggled off into a board that doesn't
+      // match reality. Everything else stays yours to model with.
+      const locked=isLeagueKeeper(owner,r.player);
+      const checked=locked||assigned.has(key);
+      const row=document.createElement('label'); row.className='mypick-row'; row.style.cursor=locked?'default':'pointer';
       const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=checked; cb.dataset.k=key;
-      const left=document.createElement('span'); left.innerHTML=` <span class="pos ${r.pos}">${r.pos||'?'}</span> ${r.player}`;
-      const right=document.createElement('span'); right.className='small '+(r.val>=3?'val-good':(r.val<=-3?'val-bad':'muted'));
-      right.textContent=isAuction?`cost $${r.keeper} · target ~$${r.keeper+r.val} · surplus ${r.val>=0?'+':''}$${r.val}`:`cost R${r.keeper} · val ${r.val>0?'+':''}${r.val}`;
-      const wrapL=document.createElement('span'); wrapL.appendChild(cb); wrapL.appendChild(left);row.appendChild(wrapL);row.appendChild(right);c.appendChild(row);
+      if(locked){cb.disabled=true; cb.title='Locked in by the league at the keeper deadline';}
+      const left=document.createElement('span');
+      left.innerHTML=` <span class="pos ${r.pos}">${r.pos||'?'}</span> ${r.player}`;
+      const right=document.createElement('span');
+      right.className='small '+(r.val===null?'muted':(r.val>=3?'val-good':(r.val<=-3?'val-bad':'muted')));
+      right.textContent = r.val===null
+        ? (isAuction?`cost $${r.keeper} · target —`:`cost R${r.keeper} · val —`)
+        : (isAuction
+            ? `cost $${r.keeper} · target ~$${r.keeper+r.val} · surplus ${r.val>=0?'+':''}$${r.val}`
+            : `cost R${r.keeper} · val ${valText(r.val)}`);
+      if(r.val===null)right.title='Not in the player pool — nothing to compare against';
+      if(locked){const lk=document.createElement('span'); lk.className='kchip'; lk.textContent='LOCKED'; left.appendChild(lk);}
+      const wrapL=document.createElement('span'); wrapL.appendChild(cb); wrapL.appendChild(left);
+      row.appendChild(wrapL); row.appendChild(right); c.appendChild(row);
     });
     wrap.appendChild(c);
   });
@@ -2257,7 +3146,8 @@ function autoKeepers(){
   }
   const max=LEAGUE.maxKeepers||0;
   OWNERS.forEach(owner=>{ if(owner===ME_OWNER)return;
-    const elig=(ROSTERS[owner]||[]).filter(r=>r.keeper!=null).map(r=>({...r,val:keepValue(r.player,r.keeper)})).sort((a,b)=>b.val-a.val);
+    const elig=(ROSTERS[owner]||[]).filter(r=>r.keeper!=null)
+      .map(r=>({...r,val:keepValue(r.player,r.keeper)})).sort(byValueDesc);
     elig.slice(0,max).forEach(r=>assigned.add(owner+'|'+r.player));
   });
   applyAndReset();
@@ -2398,20 +3288,34 @@ function parsePlayers(txt){
     const c=lines[i].split(',').map(x=>x.trim()); if(c.length<2)continue;
     const rawPos=(at(c,'pos',1)||'').toUpperCase(), adp=num(at(c,'adp',3))||i;
     arr.push({id:i, name:at(c,'name',0), pos:rawPos==='DEF'?'DST':rawPos, team:at(c,'team',2)||'',
-      adp, ecr:num(at(c,'ecr',4))||adp, proj:num(at(c,'proj',5))||0,
+      adp, ecr:num(at(c,'ecr',4))||adp, proj:num(at(c,'proj',5))||0, tier:num(at(c,'tier',6))||0,
       yahooDefault:num(at(c,'yahoo_default')), yahooAvgSalary:num(at(c,'yahoo_avg_salary')),
       fpValue:num(at(c,'fp_value')), dsMarket:num(at(c,'ds_market')), dsValue:num(at(c,'ds_value')),
       rotowireValue:num(at(c,'rotowire_value')), customValue:num(at(c,'custom_value')),
+      myRank:num(at(c,'my_rank')),   // Hovo's own philosophy-adjusted rank, separate from ADP/ECR
+      age:num(at(c,'age')),                 // drives ageTrajectory() when present
+      trajectory:num(at(c,'trajectory')),   // 1.0 neutral, >1 ascending, <1 aging
+      sleeperId:at(c,'sleeper_id')||'', rookie:!!at(c,'rookie'),
       drafted:false, keeper:null});
   }
   return arr;
 }
+// Headshot + rookie badge helpers. Hotlinked from Sleeper's public CDN via
+// sleeper_id — no image storage, no crosswalk to maintain beyond the CSV
+// column. onerror hides a broken/missing image rather than showing a
+// broken-image icon, since coverage isn't guaranteed for every player.
+function headshotImg(p){
+  return p.sleeperId
+    ? `<img class="headshot" src="https://sleepercdn.com/content/nfl/players/${p.sleeperId}.jpg" onerror="this.style.display='none'" alt="">`
+    : '';
+}
+function rookieBadge(p){ return p.rookie ? '<span class="rkchip" title="Rookie">RK</span>' : ''; }
 function loadPlayersData(txt){const arr=parsePlayers(txt); if(arr.length){PLAYERS=arr; const w=el('seedWarn'); if(w)w.style.display='none';} return arr.length;}
 function loadPlayersCSV(txt){
   if(loadPlayersData(txt)){ applyKeepers(); resetDraft(); setStatus('Loaded '+PLAYERS.length+' players.'); }
 }
 function exportText(txt,name){const b=new Blob([txt],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();}
-function poolToCSV(){return 'name,pos,team,adp,ecr,proj,yahoo_default,yahoo_avg_salary,fp_value,ds_market,ds_value,rotowire_value,custom_value\n'+PLAYERS.map(p=>[p.name,p.pos,p.team,p.adp,p.ecr,p.proj,p.yahooDefault||'',p.yahooAvgSalary||'',p.fpValue||'',p.dsMarket||'',p.dsValue||'',p.rotowireValue||'',p.customValue||''].join(',')).join('\n');}
+function poolToCSV(){return 'name,pos,team,adp,ecr,proj,tier,yahoo_default,yahoo_avg_salary,fp_value,ds_market,ds_value,rotowire_value,custom_value,age,trajectory,sleeper_id,rookie,my_rank\n'+PLAYERS.map(p=>[p.name,p.pos,p.team,p.adp,p.ecr,p.proj,p.tier||'',p.yahooDefault||'',p.yahooAvgSalary||'',p.fpValue||'',p.dsMarket||'',p.dsValue||'',p.rotowireValue||'',p.customValue||'',p.age||'',p.trajectory||'',p.sleeperId||'',p.rookie?1:'',p.myRank||''].join(',')).join('\n');}
 function loadKeepersCSV(txt){
   const lines=txt.trim().split(/\r?\n/).filter(l=>l.trim());
   lines.forEach(l=>{const c=l.split(',').map(x=>x.trim()); if(c.length>=3){
@@ -2478,6 +3382,7 @@ function loadLeagueIntoForm(id){
   editingLeagueId=id;
   el('lgName').value=p.name||'';
   el('lgTeams').value=p.teams||12;
+  el('lgRounds').value=p.rounds||16;
   el('lgDraftType').value=p.draftType||'snake';
   el('lgLeagueType').value=p.leagueType||'keeper';
   updateLgKeeperFieldsVisibility();
@@ -2625,7 +3530,7 @@ function collectLeagueForm(){
     ...existing,
     name: el('lgName').value.trim()||'New League',
     teams: +el('lgTeams').value||12,
-    rounds: existing.rounds||16,
+    rounds: +el('lgRounds').value||existing.rounds||16,
     mySlot: el('lgMySlot').value!==''? +el('lgMySlot').value : null,
     draftType: el('lgDraftType').value,
     leagueType: el('lgLeagueType').value,
@@ -2667,7 +3572,7 @@ async function saveLeagueForm(){
 }
 function newLeagueForm(){
   editingLeagueId=null;
-  el('lgName').value='New League'; el('lgTeams').value=12; el('lgDraftType').value='snake';
+  el('lgName').value='New League'; el('lgTeams').value=12; el('lgRounds').value=16; el('lgDraftType').value='snake';
   el('lgLeagueType').value='keeper'; updateLgKeeperFieldsVisibility();
   el('lgSuperflex').checked=false; el('lgScoring').value='TBD'; el('lgDraftDate').value='TBD';
   el('lgKeeperDeadline').value='TBD'; el('lgMaxKeepers').value=''; el('lgKeeperCostType').value='round';
@@ -2761,13 +3666,36 @@ async function importFromMfl(){
 // yet (Yahoo's JSON shape is easy to get wrong un-tested). "List my leagues" is
 // a diagnostic to confirm the connection and see the raw shape.
 function connectYahoo(){ window.open('/auth/yahoo/start','_blank'); el('yahooStatus').textContent='Opened Yahoo sign-in in a new tab — come back here once you approve access.'; }
+// Diagnostics for the "permission is on but Yahoo still says no" case: which
+// credential this deploy actually holds, and how old the grant behind the
+// stored token is (a grant older than the permission change can never work,
+// however many times it is refreshed).
+async function yahooStatusCheck(){
+  el('yahooStatus').textContent='Checking…'; el('yahooRaw').textContent='';
+  try{
+    const r=await fetch('/api/yahoo/status'); const d=await r.json();
+    if(!r.ok){ el('yahooStatus').textContent='⚠ '+(d.error||('HTTP '+r.status)); return; }
+    const when=d.connected_at?new Date(d.connected_at).toLocaleString():'unknown (connected before this was tracked)';
+    el('yahooStatus').textContent=d.connected
+      ? `Connected · grant made ${when} · this Worker's client id: ${d.client_id_hint||'not configured'}`
+      : `Not connected · this Worker's client id: ${d.client_id_hint||'not configured'}`;
+  }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
+}
+async function yahooDisconnect(){
+  if(!confirm('Drop the stored Yahoo grant? You will need to connect again — which is the point if the old grant is missing fantasy permission.'))return;
+  el('yahooStatus').textContent='Disconnecting…'; el('yahooRaw').textContent='';
+  try{
+    const r=await fetch('/api/yahoo/disconnect',{method:'POST'}); const d=await r.json();
+    el('yahooStatus').textContent=r.ok?'Disconnected. Revoke the app at Yahoo account security too, then click Connect Yahoo account.':'⚠ '+(d.error||('HTTP '+r.status));
+  }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
+}
 async function listYahooLeagues(){
   el('yahooStatus').textContent='Checking…'; el('yahooRaw').textContent='';
   try{
     const r=await fetch('/api/yahoo/leagues');
     const data=await r.json();
     if(!r.ok){
-      el('yahooStatus').textContent='⚠ '+(data.error||('HTTP '+r.status));
+      el('yahooStatus').textContent='⚠ '+(data.error||('HTTP '+r.status))+(data.hint?' — '+data.hint:'');
       if(data.body)el('yahooRaw').textContent=data.body;
       return;
     }
@@ -2794,6 +3722,9 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 });
 el('autoKeepers').onclick=autoKeepers;
 el('auctionAwardBtn').onclick=recordAuctionSale;
+if(el('auctionPosFilter'))el('auctionPosFilter').onchange=renderAuctionRoom;
+if(el('auctionSearch'))el('auctionSearch').oninput=renderAuctionRoom;
+if(el('auctionRosterOwner'))el('auctionRosterOwner').onchange=renderAuctionRoom;
 el('auctionSim1').onclick=()=>simAuctionSales(1);
 el('auctionSim5').onclick=()=>simAuctionSales(5);
 el('auctionResetBtn').onclick=()=>{if(confirm('Reset auction purchases but keep the selected keepers?')){resetDraft();saveSetup();}};
@@ -2802,6 +3733,7 @@ el('tendAllOn').onclick=()=>{OWNERS.forEach(o=>{TENDENCIES[o].enabled=true;});re
 el('tendAllOff').onclick=()=>{OWNERS.forEach(o=>{TENDENCIES[o].enabled=false;});renderTendencies();saveSetup();};
 el('tendReset').onclick=()=>{OWNERS.forEach(o=>{TEND_POS.forEach(p=>{TENDENCIES[o].bias[p]=0;});});renderTendencies();saveSetup();};
 el('addPickTrade').onclick=addPickTrade; el('addPlayerTrade').onclick=addPlayerTrade;
+if(el('ptFrom'))el('ptFrom').onchange=fillPickOptions;
 el('toggleDelta').onchange=e=>document.body.classList.toggle('hide-delta',!e.target.checked);
 el('saveMock').onclick=saveMock; el('refreshMocks').onclick=renderMocks;
 el('saveToken').onclick=()=>{localStorage.setItem('aeoToken',el('tokenInput').value.trim());setStatus&&setStatus('Token set.');renderMocks();};
@@ -2811,6 +3743,7 @@ el('undo').onclick=undo;
 el('resetDraft').onclick=()=>{resetDraft();saveSetup();};
 el('posFilter').onchange=renderPool; el('search').oninput=renderPool;
 el('rosterOwnerSelect').onchange=renderRoster;
+el('gradeDraft').onclick=renderDraftAnalysis;
 el('noise').oninput=()=>{el('noiseVal').textContent='±'+el('noise').value;};
 el('runLab').onclick=runLab;
 el('loadPlayers').onclick=()=>loadPlayersCSV(el('importPlayers').value);
@@ -2830,6 +3763,8 @@ el('saveLeagueBtn').onclick=saveLeagueForm;
 el('importSleeperBtn').onclick=importFromSleeper;
 el('importMflBtn').onclick=importFromMfl;
 el('yahooConnectBtn').onclick=connectYahoo;
+el('yahooStatusBtn').onclick=yahooStatusCheck;
+el('yahooDisconnectBtn').onclick=yahooDisconnect;
 el('yahooListBtn').onclick=listYahooLeagues;
 el('lgOpenRosterBuilderBtn').onclick=openRosterBuilder;
 el('lgOwners').oninput=()=>{
@@ -2889,28 +3824,62 @@ async function loadMock(id){ try{const rec=await api('/'+id); applyMock(rec.data
 async function delMock(id){ if(!confirm('Delete this mock?'))return; try{ await api('/'+id,{method:'DELETE'}); renderMocks(); }catch(e){ setStatus('Delete failed.'); } }
 
 // ---------- TRADES ----------
+// Every pick this slot owns right now — original picks it still has, plus any
+// acquired by trade, minus any traded away. This is what makes re-trading work:
+// the options come from current ownership, not from who the pick started with.
+function picksHeldBy(slot){
+  const out=[];
+  for(let ov=1; ov<=totalPicks; ov++){ if(ownerOf(ov)===slot) out.push(ov); }
+  return out;
+}
+function fillPickOptions(){
+  const sel=el('ptPick'); if(!sel)return;
+  const from=el('ptFrom') && el('ptFrom').value;
+  const slot=OWNER_SLOT[from];
+  if(!slot){ sel.innerHTML='<option value="">—</option>'; return; }
+  const held=picksHeldBy(slot);
+  sel.innerHTML = held.length
+    ? held.map(ov=>{
+        const {round,slot:orig}=slotForOverall(ov);
+        const via = orig!==slot ? ` · via ${ownerLabel(orig)}` : '';
+        const taken = pickTakenAt(ov) ? ' (used)' : '';
+        return `<option value="${ov}">R${round} — ${label(round,orig)} · #${ov}${via}${taken}</option>`;
+      }).join('')
+    : '<option value="">no picks left</option>';
+}
 function fillTradeSelects(){
   const owg=OWNERS.slice().sort((a,b)=>OWNER_SLOT[a]-OWNER_SLOT[b]);
   const optOwners=owg.map(o=>`<option value="${o}">${o} (T${OWNER_SLOT[o]})</option>`).join('');
   const rounds=[];for(let r=1;r<=LEAGUE.rounds;r++)rounds.push(`<option value="${r}">R${r}</option>`);
-  if(el('ptRound'))el('ptRound').innerHTML=rounds.join('');
   if(el('ptFrom'))el('ptFrom').innerHTML=optOwners;
   if(el('ptTo'))el('ptTo').innerHTML=optOwners;
   if(el('plTo'))el('plTo').innerHTML=optOwners;
   if(el('allPlayers'))el('allPlayers').innerHTML=Object.keys(ORIG_OWNER).sort().map(n=>`<option value="${n}">`).join('');
+  fillPickOptions();
 }
 function renderTrades(){
   if(!el('pickTradeList'))return;
   const pickCard=el('pickTradeList').closest('.card');if(pickCard)pickCard.style.display=LEAGUE.draftType==='auction'?'none':'';
   fillTradeSelects();
   const pl=Object.keys(pickOwnerOverride).map(Number).sort((a,b)=>a-b);
-  el('pickTradeList').innerHTML = pl.length? pl.map(ov=>{const {round,slot}=slotForOverall(ov);return `<span class="pill">${label(round,slot)} (#${ov}) → T${pickOwnerOverride[ov]} <a href="#" data-rmpick="${ov}">✕</a></span>`;}).join('') : '<span class="muted small">No pick trades.</span>';
+  el('pickTradeList').innerHTML = pl.length? pl.map(ov=>{const {round,slot}=slotForOverall(ov);return `<span class="pill">${label(round,slot)} (#${ov}) ${ownerLabel(slot)} → ${ownerLabel(pickOwnerOverride[ov])} <a href="#" data-rmpick="${ov}">✕</a></span>`;}).join('') : '<span class="muted small">No pick trades.</span>';
   const keys=Object.keys(playerTrades);
   el('playerTradeList').innerHTML = keys.length? keys.map(p=>`<span class="pill">${p} → ${playerTrades[p]} <a href="#" data-rmpt="${p}">✕</a></span>`).join('') : '<span class="muted small">No player trades.</span>';
   el('pickTradeList').querySelectorAll('[data-rmpick]').forEach(a=>a.onclick=e=>{e.preventDefault();delete pickOwnerOverride[+a.dataset.rmpick];applyAndReset();});
   el('playerTradeList').querySelectorAll('[data-rmpt]').forEach(a=>a.onclick=e=>{e.preventDefault();delete playerTrades[a.dataset.rmpt];applyAndReset();});
 }
-function addPickTrade(){const rd=+el('ptRound').value,from=el('ptFrom').value,to=el('ptTo').value;if(!from||!to||from===to)return;pickOwnerOverride[overall(rd,OWNER_SLOT[from])]=OWNER_SLOT[to];applyAndReset();}
+function addPickTrade(){
+  const ov=+el('ptPick').value, from=el('ptFrom').value, to=el('ptTo').value;
+  if(!ov||!from||!to||from===to)return;
+  const toSlot=OWNER_SLOT[to];
+  // Sanity: only trade a pick the "from" manager actually holds right now.
+  if(ownerOf(ov)!==OWNER_SLOT[from])return;
+  // Trading a pick back to whoever it originally belonged to clears the override
+  // rather than recording a redundant one.
+  if(slotForOverall(ov).slot===toSlot) delete pickOwnerOverride[ov];
+  else pickOwnerOverride[ov]=toSlot;
+  applyAndReset();
+}
 function addPlayerTrade(){const raw=el('plPlayer').value.trim(),to=el('plTo').value;if(!raw||!to)return;const nm=Object.keys(ORIG_OWNER).find(n=>n.toLowerCase()===raw.toLowerCase())||raw;playerTrades[nm]=to;el('plPlayer').value='';applyAndReset();}
 
 // ---------- BACKUP HISTORY (cloud: /api/setup/history, /api/setup/restore) ----------
@@ -2981,7 +3950,7 @@ function renderCommish(){
 }
 let _commishSaveT=null;
 function saveCommish(){
-  if(GUEST_MODE)return;
+  if(!canSave())return;
   if(_commishSaveT)clearTimeout(_commishSaveT);
   _commishSaveT=setTimeout(async()=>{
     try{ await apiCommish('PUT',COMMISH); const s=el('commishStatus'); if(s)s.textContent='☁ Saved '+new Date().toLocaleTimeString(); }
@@ -2995,7 +3964,7 @@ async function loadCommish(){
 let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
-function saveSetup(){if(GUEST_MODE)return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
+function saveSetup(){if(!canSave())return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
 function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},v.bias||{})};}); }
 async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||(Array.isArray(s.picks)&&s.picks.length)||(Array.isArray(s.auctionPicks)&&s.auctionPicks.length))){
   if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
@@ -3045,6 +4014,14 @@ function applyLeagueProfile(id){
     starters:profile.starters||{}, flexEligible:profile.flexEligible||['RB','WR','TE'], myKeepers:profile.myKeepers||[],
     draftType:profile.draftType||'snake', leagueType:profile.leagueType||'keeper', superflex:!!profile.superflex,
     maxKeepers:(profile.maxKeepers!=null?profile.maxKeepers:null), keeperCostType:profile.keeperCostType||'round',
+    leagueKeepers:profile.leagueKeepers||[],   // keepers the league itself locked in
+    // Auction valuation settings. These are per-league on purpose — each league's
+    // curve is fitted to its own realized prices — so they must be carried through
+    // here or the fitted values silently fall back to the generic defaults.
+    auctionDecay:profile.auctionDecay||null, auctionShape:profile.auctionShape||null,
+    auctionMaxPriceShare:profile.auctionMaxPriceShare||null,
+    keeperHorizon:(profile.keeperHorizon!=null?profile.keeperHorizon:null),
+    keeperRules:profile.keeperRules||{},
     auctionBudget:profile.auctionBudget||200,rosterSize:profile.rosterSize||profile.rounds||16,irSlots:profile.irSlots||0,minBid:profile.minBid||1,
     scoringLabel:profile.scoringLabel||'TBD', draftDateLabel:profile.draftDateLabel||'TBD', keeperDeadlineLabel:profile.keeperDeadlineLabel||'TBD',
   };
@@ -3080,17 +4057,18 @@ function applyLeagueProfile(id){
 
   initKeepers(); applyKeepers(); resetDraft();
   renderHeader(); updateKeeperCopy();
-  if(!GUEST_MODE){
-    // Guest mode already stripped these views' DOM sections entirely (see
-    // applyGuestModeUI) — skip populating them too, both to avoid touching
-    // elements that no longer exist and so nothing sensitive is ever computed
-    // into memory/DOM for a guest session in the first place.
+  if(!roomOnly()){
+    // Views the current viewer isn't allowed had their DOM sections removed
+    // outright by applyAccessUI() — skip populating them too, both to avoid
+    // touching elements that no longer exist and so nothing they shouldn't see
+    // is ever computed into memory/DOM in the first place. Hence the el()
+    // guards: each one is really "does this viewer still have that view?".
     fillTradeSelects(); renderTrades(); renderBackupHistory();
     if(el('teamsWrap')){renderTeams();renderTendencies();}
     renderStratCards();
     renderMocks();
     if(el('leaguesList'))renderLeaguesTab();
-    loadCommish();
+    if(el('commishTable'))loadCommish();
   }
   loadSetup();
 }
@@ -3113,6 +4091,33 @@ async function fetchCloudLeagues(){
       const missing=Object.values(LEAGUES_DEFAULT).filter(p=>!map[p.id]);
       await Promise.all(missing.map(p=>fetch('/api/leagues/'+encodeURIComponent(p.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}).catch(()=>{})));
       missing.forEach(p=>map[p.id]=p);
+      // A cloud profile, once seeded, is never overwritten by later code defaults
+      // above — by design, so a manual edit in the Leagues tab always wins. But
+      // that also means a field added to a built-in profile *after* it was first
+      // seeded (leagueKeepers, added 2026-08-31) never reaches an already-seeded
+      // cloud copy on its own. Backfill it once, only when the cloud copy has
+      // none at all, so a real (even empty-on-purpose) edit is never clobbered.
+      //
+      // Same story for any built-in field the Leagues tab has no editor for: the
+      // fitted auction curve settings shipped after both auction profiles were
+      // already in KV, so production kept running the generic defaults and priced
+      // a backup quarterback at $9. Backfill each such field independently, and
+      // only where the cloud copy has no value at all.
+      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules'];
+      const isEmpty=v=>v==null||v===''||(Array.isArray(v)&&!v.length)||(typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length);
+      const toPatch=[];
+      Object.values(LEAGUES_DEFAULT).forEach(def=>{
+        const cur=map[def.id]; if(!cur)return;
+        const add={};
+        BACKFILL.forEach(f=>{ if(isEmpty(cur[f]) && !isEmpty(def[f])) add[f]=def[f]; });
+        if(Object.keys(add).length){
+          const merged={...cur, ...add};
+          map[def.id]=merged; toPatch.push(merged);
+        }
+      });
+      if(toPatch.length){
+        await Promise.all(toPatch.map(p=>fetch('/api/leagues/'+encodeURIComponent(p.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}).catch(()=>{})));
+      }
       return map;
     }
     // Empty cloud (first run ever) — seed it with the defaults verbatim. Uses PUT
@@ -3127,10 +4132,13 @@ async function fetchCloudLeagues(){
   }
 }
 async function boot(){
+  await loadMe();          // decides which tabs exist — must run before applyAccessUI()
+  applyAccessUI();
+  renderAcct();
+  renderSignInNote();
   LEAGUES=await fetchCloudLeagues();
   fillLeagueSelect();
-  applyGuestModeUI();
-  if(GUEST_MODE){ applyLeagueProfile('aeo-keepers'); return; }
+  if(roomOnly()){ applyLeagueProfile('aeo-keepers'); return; }
   const params=new URLSearchParams(location.search);
   const urlLeague=params.get('league');
   let saved=null; try{saved=localStorage.getItem('league');}catch(e){}
