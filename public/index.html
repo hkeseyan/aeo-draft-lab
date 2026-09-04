@@ -2041,6 +2041,34 @@ function effOwner(pl){return playerTrades[pl]||ORIG_OWNER[pl];}
 function effRoster(owner){const out=[];Object.keys(ROSTERS).forEach(o=>ROSTERS[o].forEach(r=>{if(effOwner(r.player)===owner)out.push(r);}));return out;}
 function ownerOf(ov){return pickOwnerOverride[ov]||slotForOverall(ov).slot;}
 function computePosRanks(){const byPos={};PLAYERS.forEach(p=>{(byPos[p.pos]=byPos[p.pos]||[]).push(p);});Object.values(byPos).forEach(a=>{a.slice().sort((x,y)=>x.adp-y.adp).forEach((p,i)=>p.posRank=i+1);});}
+// "My Rank" (Draft Room "My" column): a formula over live ECR/pos/rookie data,
+// not a hand-edited list — re-deriving it from ECR means a player's rank moves
+// on its own as news/injuries move their ECR, instead of a stale manual override
+// silently outranking someone hurt yesterday. Adjustable knobs live here:
+const MY_RANK_WEIGHTS={
+  eliteQbTeBoost: 8,   // ECR-position-rank<=eliteQbTeCutoff at QB/TE moves up this many spots
+  eliteQbTeCutoff: 6,
+  rookiePenalty: 10,   // this year's rookie class moves down this many spots
+  // Floor-vs-ceiling / consistency preference (favor safer, more established
+  // players over high-variance boom/bust ones) is NOT modeled yet — there's no
+  // volatility/target-share/injury-history data in the player pool to compute it
+  // from. Add a weight here once that data exists instead of hand-picking names.
+};
+function computeMyRanks(){
+  const byPos={};
+  PLAYERS.forEach(p=>{(byPos[p.pos]=byPos[p.pos]||[]).push(p);});
+  Object.values(byPos).forEach(a=>{
+    a.slice().sort((x,y)=>(x.ecr||x.adp||999)-(y.ecr||y.adp||999)).forEach((p,i)=>p.ecrPosRank=i+1);
+  });
+  const w=MY_RANK_WEIGHTS;
+  const adjScore=(p)=>{
+    let v=p.ecr||p.adp||999;
+    if((p.pos==='QB'||p.pos==='TE') && p.ecrPosRank<=w.eliteQbTeCutoff) v-=w.eliteQbTeBoost;
+    if(p.rookie) v+=w.rookiePenalty;
+    return v;
+  };
+  PLAYERS.slice().sort((a,b)=>adjScore(a)-adjScore(b)).forEach((p,i)=>{p.myRank=i+1;});
+}
 function adpRoundOf(name){const p=findPlayer(name); return p?Math.ceil(p.adp/LEAGUE.teams):null;}
 // Auction pricing deliberately has TWO layers: (1) opponent market behavior,
 // anchored to Yahoo/default-market prices, and (2) Hovo target value, which can
@@ -3292,7 +3320,6 @@ function parsePlayers(txt){
       yahooDefault:num(at(c,'yahoo_default')), yahooAvgSalary:num(at(c,'yahoo_avg_salary')),
       fpValue:num(at(c,'fp_value')), dsMarket:num(at(c,'ds_market')), dsValue:num(at(c,'ds_value')),
       rotowireValue:num(at(c,'rotowire_value')), customValue:num(at(c,'custom_value')),
-      myRank:num(at(c,'my_rank')),   // Hovo's own philosophy-adjusted rank, separate from ADP/ECR
       age:num(at(c,'age')),                 // drives ageTrajectory() when present
       trajectory:num(at(c,'trajectory')),   // 1.0 neutral, >1 ascending, <1 aging
       sleeperId:at(c,'sleeper_id')||'', rookie:!!at(c,'rookie'),
@@ -3315,7 +3342,7 @@ function loadPlayersCSV(txt){
   if(loadPlayersData(txt)){ applyKeepers(); resetDraft(); setStatus('Loaded '+PLAYERS.length+' players.'); }
 }
 function exportText(txt,name){const b=new Blob([txt],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();}
-function poolToCSV(){return 'name,pos,team,adp,ecr,proj,tier,yahoo_default,yahoo_avg_salary,fp_value,ds_market,ds_value,rotowire_value,custom_value,age,trajectory,sleeper_id,rookie,my_rank\n'+PLAYERS.map(p=>[p.name,p.pos,p.team,p.adp,p.ecr,p.proj,p.tier||'',p.yahooDefault||'',p.yahooAvgSalary||'',p.fpValue||'',p.dsMarket||'',p.dsValue||'',p.rotowireValue||'',p.customValue||'',p.age||'',p.trajectory||'',p.sleeperId||'',p.rookie?1:'',p.myRank||''].join(',')).join('\n');}
+function poolToCSV(){return 'name,pos,team,adp,ecr,proj,tier,yahoo_default,yahoo_avg_salary,fp_value,ds_market,ds_value,rotowire_value,custom_value,age,trajectory,sleeper_id,rookie\n'+PLAYERS.map(p=>[p.name,p.pos,p.team,p.adp,p.ecr,p.proj,p.tier||'',p.yahooDefault||'',p.yahooAvgSalary||'',p.fpValue||'',p.dsMarket||'',p.dsValue||'',p.rotowireValue||'',p.customValue||'',p.age||'',p.trajectory||'',p.sleeperId||'',p.rookie?1:''].join(',')).join('\n');}
 function loadKeepersCSV(txt){
   const lines=txt.trim().split(/\r?\n/).filter(l=>l.trim());
   lines.forEach(l=>{const c=l.split(',').map(x=>x.trim()); if(c.length>=3){
@@ -4053,6 +4080,7 @@ function applyLeagueProfile(id){
     Object.entries(profile.superflexAdpOverrides).forEach(([name,adp])=>{const p=findPlayer(name);if(p){p.adp=+adp;p.ecr=+adp;}});
   }
   computePosRanks();
+  computeMyRanks();
   MY_LOCKED.forEach(n=>assigned.add(ME_OWNER+'|'+n));
 
   initKeepers(); applyKeepers(); resetDraft();
