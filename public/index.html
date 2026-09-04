@@ -95,6 +95,8 @@
   textarea{width:100%;min-height:120px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
   .dcol{}
   body.hide-delta .dcol{display:none}
+  th.sortcol{cursor:pointer;user-select:none} th.sortcol:hover{color:var(--ink)}
+  th.sortcol.active{color:var(--accent)}
   .tradetag{font-size:9px;color:var(--warn);border:1px solid var(--warn);border-radius:8px;padding:0 4px;margin-left:3px}
   .acct{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
   .acct img{width:24px;height:24px;border-radius:50%;border:1px solid var(--line)}
@@ -169,7 +171,7 @@
           </div>
           <div class="scroll">
             <table id="poolTable">
-              <thead><tr><th title="Queue">Q</th><th>ADP</th><th>ECR</th><th title="Your own philosophy-adjusted rank, lower=better">My</th><th>Pos</th><th>Player</th><th>P.Rk</th><th>Proj</th><th class="dcol">Δ</th><th></th></tr></thead>
+              <thead><tr><th title="Queue">Q</th><th class="sortcol active" data-sort="adp" title="Click to sort by ADP">ADP</th><th class="sortcol" data-sort="ecr" title="Click to sort by ECR">ECR</th><th class="sortcol" data-sort="myRank" title="Click to sort by your own philosophy-adjusted rank, lower=better">My</th><th>Pos</th><th>Player</th><th>P.Rk</th><th>Proj</th><th class="dcol">Δ</th><th></th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -2033,6 +2035,7 @@ let cutPlayers=new Set(); // "owner|player" removed from a dynasty roster, back 
 let pickOwnerOverride={}; // overall pick# -> owning slot (pick trades)
 let playerTrades={};      // player name -> new owner (roster/keeper trades)
 let queued=new Set();     // player name -> targeted for an upcoming pick; auto-drops once drafted
+let poolSort='adp';       // Best Available sort column: 'adp' | 'ecr' | 'myRank' — click a header to change
 // Dynasty has no "cost round" concept like classic keepers — every rostered
 // player is assumed kept by default, so this isn't checkbox opt-IN like
 // `assigned`, it's opt-OUT via `cutPlayers`.
@@ -2827,6 +2830,19 @@ function renderPool(){
   const pos=el('posFilter').value, q=el('search').value.trim().toLowerCase();
   const ov=nextOpenPick(curPick); const {slot}=ov<=totalPicks?slotForOverall(ov):{slot:0};
   let rows=available();
+  // available() itself always stays ADP-sorted -- sim/analysis code elsewhere
+  // depends on that order -- so re-sort only this rendered copy when the user
+  // picked a different column. Missing values (e.g. no My Rank yet) sort last.
+  if(poolSort!=='adp'){
+    const key=poolSort;
+    rows=rows.slice().sort((a,b)=>{
+      const av=a[key], bv=b[key];
+      if(av==null&&bv==null)return 0;
+      if(av==null)return 1;
+      if(bv==null)return -1;
+      return av-bv;
+    });
+  }
   if(pos!=='ALL')rows=rows.filter(p=>p.pos===pos);
   if(q)rows=rows.filter(p=>p.name.toLowerCase().includes(q));
   el('poolCount').textContent=`(${available().length} left)`;
@@ -3769,6 +3785,11 @@ el('advance1').onclick=advanceOne;
 el('undo').onclick=undo;
 el('resetDraft').onclick=()=>{resetDraft();saveSetup();};
 el('posFilter').onchange=renderPool; el('search').oninput=renderPool;
+document.querySelectorAll('#poolTable th.sortcol').forEach(th=>th.onclick=()=>{
+  poolSort=th.dataset.sort;
+  document.querySelectorAll('#poolTable th.sortcol').forEach(h=>h.classList.toggle('active',h===th));
+  renderPool();
+});
 el('rosterOwnerSelect').onchange=renderRoster;
 el('gradeDraft').onclick=renderDraftAnalysis;
 el('noise').oninput=()=>{el('noiseVal').textContent='±'+el('noise').value;};
