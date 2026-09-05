@@ -20,6 +20,52 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-09-05 — **Refresh ADP and ECR for all league types — data was stale
+  (Josh Jacobs still showing up high, especially in guillotine).** Confirmed
+  the root cause: the last pull was 2026-08-23, before Week 1 usage/backfield
+  changes; Jacobs's real ECR fell from 36 (RB tier 3) to **138 (RB46, tier
+  9)** — exactly the staleness reported. Pulled a fresh 522-player ECR set
+  from FantasyPros (`ecrData`, dated 9/05) and rebuilt the top-250 pool: all
+  250 existing players matched by name, 11 fell out of the top 250 (e.g.
+  Fernando Mendoza, Jaydon Blue) and 11 new ones entered (e.g. Najee Harris,
+  Kaleb Johnson, Cleveland Browns DST) — the 11 new entrants got fresh
+  `sleeper_id`/`rookie` via a Sleeper lookup, matching last session's method.
+  Pushed the refreshed pool to **every league carrying this generic NFL
+  pool** — not just AEO-Keepers: `aeo-keepers`, `ncaa-power-5-football-sec`
+  and `nfl-promotion-relegation-league-one` (both literal copies of the same
+  pool), `scg-irs`, the two guillotine leagues `off-with-their-heads` /
+  `-too` (same pool minus K, matching their existing no-K convention), and
+  both auction leagues `fantastic-auction` / `aeok-auction` (250 base + their
+  ~79-player deep-keeper extension — regenerated to 87 rows since 8 of the
+  players who fell out of the top 250 are still real auction-league keeper
+  pieces and needed to carry forward; 70 of the 87 extras refreshed by name
+  match, 17 obscure backups kept unchanged — they're outside FantasyPros'
+  522-deep consensus, so there was nothing to refresh them against). Pushed
+  directly to KV via `wrangler kv key put` rather than the app's own admin
+  API, since this needed to happen faster than a session round-trip.
+  **Important limitation, flagged honestly rather than faked:** true
+  independent ADP (FantasyPros' own per-site ADP page, and Yahoo's draft
+  analysis) could not be refreshed this round — both are JS-rendered/
+  login-walled and unreachable from this sandbox right now (curl gets an
+  empty shell; a headless browser gets the connection reset specifically by
+  FantasyPros, confirmed after several retries and one that hung
+  indefinitely). So this round sets **`adp` and `fp_adp` equal to fresh ECR**
+  rather than a genuine ADP pull — documented in a code comment above
+  `PLAYERS_CSV_AEO`. `yahoo_adp` is untouched from the prior pull and is
+  correspondingly still stale. If a working ADP source turns up, that column
+  should be revisited independently of this fix.
+- 🆕 2026-09-05 — **"My Rank" model: Jacobs (and similar) way too high,
+  especially for guillotine.** User's own words: *"we don't need to fix that
+  now especially considering I've finished drafting both my guillotine
+  leagues, but let's work on fixing that as part of the My Rank model."*
+  Explicitly deferred — do not build this without the user. This is the
+  personal/league-aware custom ranking column from CLAUDE.md roadmap item 5
+  (in active design, phone/Remote Control session), not a quick ECR-refresh
+  fix — the underlying problem is that a personal ranking needs to react to
+  real in-season signal (backfield committee, injury, role change) faster
+  than consensus ECR does, which is a modeling question, not a data-staleness
+  one. Revisit together when that design conversation happens.
+
 - 🔧 2026-09-03 — **Yahoo Fantasy API access application confirmed received.**
   Got a confirmation email from the Yahoo Fantasy API Team for the
   resubmission under the new "AEO Draft Lab" app: *"our team has begun
