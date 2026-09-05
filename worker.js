@@ -160,7 +160,7 @@ async function getYahooAccessToken(env, kv, url) {
 }
 __name(getYahooAccessToken, "getYahooAccessToken");
 var worker_default = {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
     if (path === "/auth/google/start") {
@@ -402,7 +402,7 @@ var worker_default = {
           } catch {
             return J({ error: "bad json" }, 400);
           }
-          const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+          const id = Date.now().toString(36) + "-" + crypto.randomUUID().slice(0, 8);
           const ts = Date.now();
           const name = b.name && String(b.name).slice(0, 80) || "Mock " + new Date(ts).toISOString().slice(0, 16).replace("T", " ");
           const summary = b.summary && String(b.summary).slice(0, 300) || "";
@@ -595,7 +595,7 @@ var worker_default = {
             await kv.put(playersCacheKey, JSON.stringify(players));
             await kv.put(`${playersCacheKey}:ts`, String(Date.now()));
           } else if (stale) {
-            mflGet("players").then((pd) => {
+            ctx.waitUntil(mflGet("players").then((pd) => {
               const list = pd && pd.players && pd.players.player || [];
               const fresh = {};
               list.forEach((p) => {
@@ -605,7 +605,7 @@ var worker_default = {
                 kv.put(playersCacheKey, JSON.stringify(fresh)),
                 kv.put(`${playersCacheKey}:ts`, String(Date.now()))
               ]);
-            });
+            }));
           }
           const nameFor = /* @__PURE__ */ __name((id) => {
             const p = players[id];
