@@ -20,6 +20,30 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-09-06 — **Same-day ADP/ECR refresh for Corrupt Commish (drafts today)
+  and Degenerates Anonymous (drafts tomorrow), rolled out to all league
+  types.** User: *"these are regular redraft leagues so it's not going to be
+  too fancy... but just get this data so it can also apply to other leagues.
+  Of course we will also need to prepare for the auction keeper leagues as
+  well."* Repeated yesterday's refresh pipeline against a fresh 9/06
+  FantasyPros ECR pull (small day-over-day churn: Ted Hurst III and Demond
+  Claiborne entered the top 250, Keon Coleman and David Njoku dropped out;
+  Jacobs stayed correctly buried at ECR 137/RB tier 9). Pushed to **all 10**
+  league profiles that carry this generic pool — the 8 from yesterday plus
+  **Corrupt Commish and Degenerates Anonymous, which had never had a
+  `playersCsv` at all** (both were relying on the client-side embedded
+  fallback; they now have their own explicit KV copy like every other
+  league). Same ADP limitation as yesterday still applies — didn't
+  re-attempt the browser fetch since it was already conclusively blocked;
+  `adp`/`fp_adp` still track fresh ECR, `yahoo_adp` still stale.
+  **Flagging something bigger than what was asked, not fixed here:** both
+  Corrupt Commish and Degenerates Anonymous have **`owners: []`,
+  `ownerSlot: {}`, `mySlot: null`** — completely empty draft-order setup. A
+  data refresh doesn't help a league that doesn't know who's drafting or
+  where the user picks; these need owners/draft-order/mySlot filled in
+  (Leagues tab, or tell me the list + the user's slot) before either draft
+  can actually run in the app.
+
 - ✅ 2026-09-05 — **Refresh ADP and ECR for all league types — data was stale
   (Josh Jacobs still showing up high, especially in guillotine).** Confirmed
   the root cause: the last pull was 2026-08-23, before Week 1 usage/backfield
