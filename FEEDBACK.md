@@ -20,6 +20,36 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-09-07 — **Pulled real settings/lineups for all 4 Peak dynasty
+  leagues from Sleeper's public API** (league IDs given directly by user).
+  Corrected several things my earlier guess-copy from the generic placeholder
+  got wrong: **these are superflex** (`SUPER_FLEX` roster slot — the earlier
+  fix incorrectly left `superflex:false`), **no K/DST at all** (scored in
+  Sleeper's settings but never actually rostered — the earlier fix wrongly
+  kept K:1/DST:1), **3 FLEX not 1** for D24/27/28 (**2 FLEX** for D23, an
+  older/different season), real round counts from Sleeper's own draft object
+  (22 for D24/27/28, 20 for D23 — not derived by hand-counting roster slots,
+  which is error-prone), and 4 taxi + 4 reserve slots for D24/27/28 (3+3 for
+  D23; taxi isn't a concept this app models, noted in `notes` instead).
+  TE premium confirmed at the stated 0.5 for D24/27/28, but **D23 is
+  actually 1.0** (a full extra point, not half) — left as its own real value
+  rather than copying D27's.
+  **Real draft order pulled for D27/D24/D23** (Sleeper's `draft_order`
+  object) — user is **kyos**, confirmed at slot **11 in D27, 4 in D24, 12 in
+  D23**. **D28 has no draft order yet** (`draft_order: null`, matches its
+  `pre_draft` status) — owners are known (11 real users + 1 unclaimed
+  roster) but slots aren't assigned until Sleeper sets them, so `mySlot`
+  stays unset there; re-pull once the draft actually starts.
+  **rostersRaw populated from real data**: D27 is actively mid-draft in
+  Sleeper (confirmed **135 of 22×12=264 picks made, through round 12**) —
+  since Sleeper doesn't sync a roster's `players` list until a draft
+  completes, D27's rostersRaw was built from the live pick list itself
+  (`/draft/:id/picks`) rather than the rosters endpoint; kyos has made 10
+  picks so far. D24 and D23 are in-season with completed drafts, so their
+  rostersRaw came directly from each roster's real player list (264 and 240
+  entries). D28 has nothing yet — genuinely empty roster, matches
+  `pre_draft`.
+
 - ✅ 2026-09-07 — **Corrupt Commish and Degenerates Anonymous league facts
   confirmed correct.** User verified all the discrepancies flagged
   yesterday (10 teams not 12, return yards actually counted not excluded,
