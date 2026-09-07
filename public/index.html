@@ -159,7 +159,6 @@
           <div class="row" style="margin-bottom:8px">
             <select id="posFilter">
               <option value="ALL">All positions</option>
-              <option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>K</option><option>DST</option>
             </select>
             <input type="text" id="search" placeholder="search player…" style="flex:1;min-width:120px">
             <span class="legend muted">
@@ -223,7 +222,6 @@
             <div class="row" style="margin-bottom:8px">
               <select id="auctionPosFilter">
                 <option value="ALL">All positions</option>
-                <option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>K</option><option>DST</option>
               </select>
               <input type="text" id="auctionSearch" placeholder="search player…" style="flex:1;min-width:120px">
               <span class="small muted" id="auctionPosCounts"></span>
@@ -2694,10 +2692,10 @@ function renderAuctionRoom(){
     .map(x=>{const t=tiers[x]||{green:0,yellow:0,red:byPos[x].length};
       return `<span class="pos ${x}">${x}</span>&nbsp;<span class="tier-g" title="top tier left">${t.green}</span>/<span class="tier-y" title="still rosterable">${t.yellow}</span>/<span class="tier-r" title="past replacement level">${t.red}</span>`;})
     .join(' &nbsp;');
+  syncPosFilterOptions('auctionPosFilter');
   const posF=(el('auctionPosFilter')&&el('auctionPosFilter').value)||'ALL';
   const q=((el('auctionSearch')&&el('auctionSearch').value)||'').trim().toLowerCase();
-  let avail=allAvail;
-  if(posF!=='ALL')avail=avail.filter(p=>p.pos===posF);
+  let avail=allAvail.filter(p=>matchesPosFilter(p,posF));
   if(q)avail=avail.filter(p=>p.name.toLowerCase().includes(q));
   const src=auctionPriceSourceStatus();
   el('auctionPoolCount').textContent=`(${avail.length}${posF!=='ALL'||q?` of ${allAvail.length}`:''})${src.market?'':' · market est.'}${src.target?'':' · target est.'}`;
@@ -2804,12 +2802,53 @@ function renderCues(){
   box.innerHTML=parts.join('') || '<span>Draft complete.</span>';
 }
 function valClass(d){return d>=8?'val-good':(d<=-8?'val-bad':'');}
+// Which position-filter entries make sense for the active league, so a
+// non-K/DST redraft league doesn't show K/DST options that will always be
+// empty. Individual positions come straight from the league's own starters
+// (a position with no starter slot isn't offered), then two combined
+// entries at the bottom: FLEX (RB/WR/TE) for a normal flex, skipped for
+// superflex leagues since there the flex includes QB and "All Offense"
+// already covers that; and "All Offense" (everything except K/DST) — always
+// shown for superflex (it's the natural stand-in for a QB-eligible flex),
+// otherwise only when the league actually rosters K or DST, since that's
+// the clutter it exists to filter out.
+function leaguePosFilterOptions(){
+  const st=LEAGUE.starters||{};
+  const order=['QB','RB','WR','TE','K','DST'];
+  const opts=order.filter(p=>(+st[p]||0)>0).map(p=>({value:p,label:p}));
+  if(!LEAGUE.superflex && (+st.FLEX||0)>0) opts.push({value:'FLEX',label:'FLEX (RB/WR/TE)'});
+  if(LEAGUE.superflex || (+st.K||0)>0 || (+st.DST||0)>0) opts.push({value:'OFF',label:'All Offense'});
+  return opts;
+}
+// Rebuilds a position-filter <select>'s options from the active league, but
+// only when the applicable set actually changed (tracked via a signature on
+// the element) — otherwise every render would reset whatever the user has
+// selected mid-draft.
+function syncPosFilterOptions(selId){
+  const sel=el(selId); if(!sel)return;
+  const opts=leaguePosFilterOptions();
+  const sig=LEAGUE.name+'|'+opts.map(o=>o.value).join(',');
+  if(sel.dataset.sig===sig)return;
+  const prevVal=sel.value;
+  sel.dataset.sig=sig;
+  sel.innerHTML='<option value="ALL">All positions</option>'+opts.map(o=>`<option value="${o.value}">${o.label}</option>`).join('');
+  sel.value=[...sel.options].some(o=>o.value===prevVal)?prevVal:'ALL';
+}
+// Shared by the snake pool filter and the auction pool filter so FLEX/OFF
+// mean the same thing in both rooms.
+function matchesPosFilter(p,filterVal){
+  if(filterVal==='ALL')return true;
+  if(filterVal==='FLEX')return (LEAGUE.flexEligible||['RB','WR','TE']).includes(p.pos);
+  if(filterVal==='OFF')return p.pos!=='K' && p.pos!=='DST';
+  return p.pos===filterVal;
+}
 function renderPool(){
   if(LEAGUE.draftType==='auction')return; // placeholder shown by render(); search/filter inputs shouldn't clobber it
+  syncPosFilterOptions('posFilter');
   const pos=el('posFilter').value, q=el('search').value.trim().toLowerCase();
   const ov=nextOpenPick(curPick); const {slot}=ov<=totalPicks?slotForOverall(ov):{slot:0};
   let rows=available();
-  if(pos!=='ALL')rows=rows.filter(p=>p.pos===pos);
+  rows=rows.filter(p=>matchesPosFilter(p,pos));
   if(q)rows=rows.filter(p=>p.name.toLowerCase().includes(q));
   el('poolCount').textContent=`(${available().length} left)`;
   const tb=el('poolTable').querySelector('tbody'); tb.innerHTML='';

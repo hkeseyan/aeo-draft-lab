@@ -70,6 +70,22 @@ since the queue is a live filter over the pool's `drafted` flag rather than
 a one-time removal — nothing to manually re-add after backing up a pick.
 Persists via `/api/setup` alongside keepers/trades/tendencies.
 
+**Position filter**: the dropdown next to Best Available (and the auction
+pool's equivalent) only offers positions the active league actually rosters
+— built from `LEAGUE.starters` at render time (`leaguePosFilterOptions()`),
+so a league with no K/DST slot never shows a K or DST option that would
+always come back empty. Two combined entries sit at the bottom when
+applicable: **FLEX** (RB/WR/TE) when the league has a flex slot and isn't
+superflex, and **All Offense** (everything except K/DST) — always offered
+for superflex leagues, since there a flex includes QB and All Offense is the
+natural stand-in; otherwise only offered when the league rosters K or DST,
+since stripping those out is the point. `syncPosFilterOptions()` rebuilds a
+select's options only when the applicable set actually changes (tracked via
+a signature), so switching leagues updates the list but an ordinary re-render
+mid-draft never resets whatever the user has selected. `matchesPosFilter()`
+is shared between the snake and auction pools so FLEX/All Offense mean the
+same thing in both rooms.
+
 **Tiers**: Best Available shows a tier separator row (`Tier 3 · 7 left`) from
 the players CSV's `tier` column, and the count turns red at 3 or fewer left.
 Counts are computed over the *filtered* rows, so with the position filter on

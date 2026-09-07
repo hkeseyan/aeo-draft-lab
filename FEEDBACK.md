@@ -20,6 +20,36 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- ✅ 2026-09-07 — **Corrupt Commish and Degenerates Anonymous league facts
+  confirmed correct.** User verified all the discrepancies flagged
+  yesterday (10 teams not 12, return yards actually counted not excluded,
+  no K/DST, 2 FLEX) were the right calls.
+- ✅ 2026-09-07 — **Best Available position filter shows positions that
+  don't exist in the league (K/DST on leagues with no K/DST slot, etc).**
+  Now built dynamically from `LEAGUE.starters` — a league only offers the
+  positions it actually rosters. Added two combined entries at the bottom:
+  **FLEX** (RB/WR/TE) for non-superflex leagues with a flex slot, and
+  **All Offense** (everything except K/DST) — the superflex stand-in for "a
+  flex that includes QB" (always shown there), and elsewhere shown only when
+  the league rosters K or DST, since stripping those out is the actual use
+  case. Applies to both the snake Best Available pool and the auction pool
+  filter, sharing the same `matchesPosFilter()` logic so FLEX/All Offense
+  mean the same thing in both rooms. Selection persists across re-renders
+  (only rebuilds options when the applicable set actually changes) so it
+  doesn't reset mid-draft.
+- ✅ 2026-09-07 — **Cloned Peak D27 (dynasty) into Peak D28 for a Sleeper
+  slow draft starting today.** Along the way, corrected D27 itself: the
+  league profile was still the untouched generic placeholder (WR:2, FLEX:1,
+  no TE premium) despite the user describing its real settings as **3 WR, 3
+  FLEX, 0.5 TE premium (TEs at 1.5 PPR vs 1.0 PPR elsewhere)** — fixed both
+  D27 and its D28 copy to match. Populated `playersCsv` on both with the
+  current refreshed pool so the slow draft has real players to draft from
+  (neither had any before). **Left untouched, flagged rather than guessed:**
+  full scoring rules beyond the TE premium, K/DST roster presence, bench/IR
+  depth, and — most importantly — **owners/draft order/mySlot are still
+  empty on both**, so neither league can actually run a draft in the app
+  until that's provided.
+
 - ✅ 2026-09-06 — **Same-day ADP/ECR refresh for Corrupt Commish (drafts today)
   and Degenerates Anonymous (drafts tomorrow), rolled out to all league
   types.** User: *"these are regular redraft leagues so it's not going to be
