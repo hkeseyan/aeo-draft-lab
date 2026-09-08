@@ -20,6 +20,31 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 <!-- Newest first. One line per item: date, status, short description. -->
 
+- 🔧 2026-09-08 — **Identify weekly waiver-clear timing per league, as step
+  one before tracking/alerting.** User's own sequencing: figure out the
+  recurring weekly unlock time first, individual-player waiver dates later,
+  alerting after that. Confirmed for the record (Yahoo help center,
+  independently verified via two fetches): **"Game Time - Tuesday"** means
+  a dropped/unrostered player goes on waivers the moment their first game of
+  the week kicks off (or 5:30pm PT Monday if they have no game that week),
+  and **all claims clear/process Tuesday 11:59pm PT** — the same moment
+  every week, all season. That's the setting on **Corrupt Commish,
+  Degenerates Anonymous, Fantastic Keeper Auction, and AEOK Auction League**
+  (all confirmed via each league's captured `settings.weeklyWaivers`).
+  **AEO-Keepers has no `settings` object captured at all** — the flagship
+  league is missing this entirely, needs pulling from Yahoo.
+  **The 4 Peak Sleeper dynasty leagues (D23/24/27/28) all share identical
+  raw values** (`waiver_type:2, waiver_day_of_week:2, daily_waivers:1,
+  daily_waivers_hour:0`) but Sleeper's numeric encoding for these isn't
+  documented publicly enough to confidently decode which weekday/hour that
+  actually is — guessing wrong here defeats the entire point of an alert.
+  Needs a direct look at one Peak league's waiver settings screen in the
+  Sleeper app to confirm in plain terms (e.g. "waivers run daily at
+  midnight ET" vs a single weekly clear day). Every other league in KV
+  either has no `settings.weeklyWaivers` captured or is a bare placeholder.
+  **Not yet built: any tracking, storage, or alerting mechanism** — this
+  entry is purely the fact-finding step the user asked for first.
+
 - ✅ 2026-09-07 — **Pulled real settings/lineups for all 4 Peak dynasty
   leagues from Sleeper's public API** (league IDs given directly by user).
   Corrected several things my earlier guess-copy from the generic placeholder
