@@ -1112,6 +1112,81 @@ var worker_default = {
           return J({ error: "Sleeper import failed: " + e.message }, 502);
         }
       }
+      if (path.startsWith("/api/import/fantrax/")) {
+        const denied = requireAdmin();
+        if (denied) return denied;
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const fxId = decodeURIComponent(path.split("/").pop());
+        if (!fxId) return J({ error: "Missing Fantrax league ID" }, 400);
+        try {
+          const base = "https://www.fantrax.com/fxea/general";
+          const [info, rosterResp] = await Promise.all([
+            fetch(`${base}/getLeagueInfo?leagueId=${encodeURIComponent(fxId)}`).then((r) => r.json()),
+            fetch(`${base}/getTeamRosters?leagueId=${encodeURIComponent(fxId)}`).then((r) => r.json())
+          ]);
+          // Fantrax answers 200 with an error object rather than an HTTP status,
+          // so the body is the only signal that the league id was wrong.
+          const errOf = /* @__PURE__ */ __name((x) => x && x.error && (x.error.message || x.error.code), "errOf");
+          if (errOf(info)) return J({ error: "Fantrax: " + errOf(info) }, 404);
+          const rostersRaw = rosterResp && rosterResp.rosters || {};
+          if (errOf(rosterResp) && !Object.keys(rostersRaw).length) {
+            return J({ error: "Fantrax: " + errOf(rosterResp) }, 404);
+          }
+          const playerInfo = info && info.playerInfo || {};
+          // playerInfo's per-player shape isn't contractually documented, so try the
+          // plausible spellings and fall back to the raw id rather than dropping a
+          // roster spot silently.
+          const nameOf = /* @__PURE__ */ __name((pid) => {
+            const m = playerInfo[pid] || playerInfo[String(pid)];
+            if (!m) return String(pid);
+            return m.name || m.playerName || m.fullName || [m.firstName, m.lastName].filter(Boolean).join(" ").trim() || String(pid);
+          }, "nameOf");
+          const teamInfo = info && info.teamInfo || {};
+          const teamIds = Object.keys(rostersRaw).length ? Object.keys(rostersRaw) : Object.keys(teamInfo);
+          const owners = [];
+          const ownerSlot = {};
+          const rosterLines = [];
+          let unresolved = 0;
+          teamIds.forEach((tid, i) => {
+            const entry = rostersRaw[tid] || {};
+            const meta = teamInfo[tid] || {};
+            let owner = entry.teamName || meta.name || `Team ${i + 1}`;
+            // Two franchises may share a display name; the app keys rosters by owner
+            // name, so a collision would merge two rosters into one.
+            let uniq = owner, n = 2;
+            while (owners.includes(uniq)) uniq = `${owner} (${n++})`;
+            owner = uniq;
+            owners.push(owner);
+            ownerSlot[owner] = i + 1;
+            (entry.rosterItems || []).forEach((it) => {
+              const nm = nameOf(it && it.id);
+              if (nm === String(it && it.id)) unresolved++;
+              rosterLines.push(`${owner}|${nm}|FA|NONE`);
+            });
+          });
+          const fxDraft = String(info && (info.draftType || info.draftSettings && info.draftSettings.draftType) || "").toUpperCase();
+          const draftType = fxDraft.includes("AUCTION") ? "auction" : fxDraft.includes("SNAKE") ? "snake" : fxDraft.includes("LINEAR") || fxDraft.includes("STRAIGHT") ? "linear" : "";
+          const rosterSize = info && info.rosterInfo && info.rosterInfo.maxTotalPlayers || null;
+          const notes = ["Structure only \u2014 review scoring, keeper rules and dates before saving."];
+          if (draftType) notes.push(`Fantrax reports a ${draftType} draft.`);
+          if (unresolved) notes.push(`${unresolved} roster entries kept their Fantrax player id because the league's player dictionary didn't name them \u2014 fix those names before saving.`);
+          notes.push("Fantrax's roster endpoint carries no drafted round or keeper flag, so every player is marked FA/NONE; set keepers on Teams & Keepers after saving.");
+          return J({
+            name: info && info.leagueName || "Imported Fantrax League",
+            teams: teamIds.length || 12,
+            owners,
+            ownerSlot,
+            rostersRaw: rosterLines.join("\n"),
+            draftType,
+            rosterSize,
+            _source: "fantrax",
+            _fantraxLeagueId: fxId,
+            _note: notes.join(" ")
+          });
+        } catch (e) {
+          return J({ error: "Fantrax import failed: " + e.message }, 502);
+        }
+      }
       if (path.startsWith("/api/import/mfl/")) {
         const denied = requireAdmin();
         if (denied) return denied;

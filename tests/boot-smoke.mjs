@@ -86,6 +86,25 @@ ok &= check('projected category totals parsed', 'PLAYERS[0].st.sog', v => v > 10
 ok &= check('only hockey positions in pool', '[...new Set(PLAYERS.map(p=>p.pos))].sort().join(",")', 'C,D,G,LW,RW');
 ok &= check('goalies present', 'PLAYERS.filter(p=>p.pos==="G").length', v => v > 10);
 ok &= check('NHL starting slots', slots, 'C,C,LW,LW,RW,RW,D,D,D,D,G,G');
+ok &= check('board is in real market order, not our projection order', 'PLAYERS[0].name', 'Connor McDavid');
+ok &= check('market ADP differs from our own projection rank', () => {
+  // MacKinnon out-projects McDavid on our numbers but goes second in the market.
+  // If these ever coincide exactly, the pool has silently fallen back to our rank.
+  const byProj = ev('PLAYERS.slice().sort((a,b)=>b.proj-a.proj)[0].name');
+  const byAdp = ev('PLAYERS.slice().sort((a,b)=>a.adp-b.adp)[0].name');
+  return byProj + ' / ' + byAdp;
+}, 'Nathan MacKinnon / Connor McDavid');
+ok &= check('ADP is a real draft position, not a row index', 'PLAYERS.filter(p=>p.adp!==p.id).length', v => v > 200);
+ok &= check('multi-position eligibility parsed', () => {
+  const d = ev('JSON.stringify((PLAYERS.find(p=>p.name==="Leon Draisaitl")||{}).posEligible||[])');
+  return d;
+}, '["C","LW"]');
+ok &= check('a multi-position player can fill either slot', () => {
+  const both = ev('(function(){const p=PLAYERS.find(x=>x.name==="Leon Draisaitl");return playerFillsPos(p,"C")&&playerFillsPos(p,"LW")&&!playerFillsPos(p,"D");})()');
+  return both;
+}, true);
+ok &= check('multi-position players keep a single primary for display', 'PLAYERS.filter(p=>p.pos.includes("/")).length', 0);
+
 ok &= check('no flex slot in hockey', 'LEAGUE.flexEligible.length', 0);
 ok &= check('blankCounts follows the sport', 'Object.keys(blankCounts()).join(",")', 'C,LW,RW,D,G');
 ok &= check('goalie depth cap is tighter than skaters', 'SPORT.depthCap("G",2)+":"+SPORT.depthCap("C",2)', '3:4');

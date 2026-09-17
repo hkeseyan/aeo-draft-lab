@@ -28,6 +28,27 @@ were, not to the first league alphabetically.
 Nothing in `/api/*` changed to support this: every route was already `?league=`-scoped
 and every KV entity already per-league, so a new sport is just more league profiles.
 
+**The NHL pool's three sources.** Hockey has no single feed that gives both a
+market and a projection, so the pool merges three and keeps them as separate
+columns rather than blending them into one number:
+
+- `adp` — **real Yahoo average draft position**, taken from FantasyPros' ADP table
+  (which breaks ADP out per host site). This is the backbone the rival model drafts
+  against, so mocks play out against the market the league actually drafts in.
+- `ecr` — FantasyPros expert consensus rank. Thin (2 experts, roto-flavoured), but
+  it's an outside opinion sitting next to ours, which is the point of having it.
+- `proj` — ours: the NHL's public stats API, prior-season per-game rates shrunk
+  toward the positional mean by games played (so a short call-up can't out-rank a
+  full season on rate alone), times projected games, scored through the league's own
+  point values.
+
+The gap between `adp` and `proj` is the useful signal — it's where our numbers
+disagree with the market. The standing caveat is that `proj` carries no aging curve
+or role change, so it overrates declining veterans; treat a big gap on a 34-year-old
+as a flag on our projection, not a bargain. Players FantasyPros doesn't rank sort in
+behind those it does, ordered by our projection, so the deep pool the Add Radar needs
+doesn't interleave with real draft picks.
+
 **Multi-position eligibility.** A player's `pos` cell may name several positions
 (`C/LW` — slash or plus separated, never comma, since the CSV owns the comma). The
 first is primary and drives the colour chip and roster counts; the rest make the
@@ -281,6 +302,18 @@ pull that league's owners and current rosters into the edit form for review.
 Sleeper doesn't expose ADP/ECR/projections or a reliable draft-type/superflex
 flag, so those aren't guessed — only owners/rosters get pre-filled, and
 nothing saves until you review the form and click Save, same as manual entry.
+
+**Fantrax import**: paste a Fantrax league ID to pull owners and rosters via
+Fantrax's `fxea` external API — no login, no OAuth, and no app-approval queue, which
+is what makes it a more dependable integration target than Yahoo. Unlike Sleeper and
+MFL it does report draft type and roster size, so those are filled in too. Two
+details the importer has to handle: Fantrax answers **HTTP 200 with an `error`
+object** when a league ID is wrong, so the body is the only failure signal; and two
+franchises may share a display name, which would merge two rosters into one under
+the app's name-keyed roster model, so duplicates are suffixed. Its roster endpoint
+carries no drafted round or keeper flag, so players import as FA/NONE and any that
+the league's player dictionary doesn't name keep their Fantrax id (counted in the
+import note) rather than silently vanishing. Review-before-save, same as the others.
 
 **MFL import**: same idea, for MyFantasyLeague.com — paste a league ID (and
 year, defaults to the current one) to pull owners/rosters via MFL's public
