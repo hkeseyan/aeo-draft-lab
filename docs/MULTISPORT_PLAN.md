@@ -8,6 +8,30 @@ Nothing here is built yet. This is the plan and the reasoning behind it.
 
 ---
 
+## 0. Confirmed by the user (2026-09-17)
+
+- **Scoring format:** not settled yet, may vary by league. So we build
+  **categories first** — it's the harder case and the Yahoo default, and points-league
+  support falls out of it for free (a points league is a categories league with one
+  category). No decision is blocked on this.
+- **Retention:** **redraft only, for now.** No existing keeper or dynasty hockey
+  leagues. The user would consider joining one *only if we can build great in-season
+  management automation* — see §7, because that reframes a non-goal.
+- **If a keeper/dynasty league does happen, it would be a startup** — a first-year
+  draft with no existing keepers. That matters more than it sounds: a startup draft
+  is mechanically an ordinary redraft draft. Nothing in the keeper machinery
+  (`assigned`, cost rounds, `cutPlayers`, keeper budget legality) is needed on draft
+  night. What differs is *valuation* — age curves and multi-year value — which is the
+  rankings engine's job, not the draft room's. **Dynasty is cheap on the draft side
+  and expensive on the in-season side**, which is exactly the opposite of how it
+  looks from the football profiles.
+- **First NHL draft: 1–2 weeks out.** The §6 sequencing stands as written.
+
+**Net effect on week 1:** don't touch keeper/dynasty code paths for hockey at all.
+Redraft plus the category core is the whole job.
+
+---
+
 ## 1. The toggle question, answered
 
 **Yes to a sport switcher — but sport should be a field on the league profile, not
@@ -221,7 +245,8 @@ working, then sharpen it.
 ### Week 1 (Sep 17–24) — usable
 - Sport field, sport packs, de-hardcode the position constants (§3). Header sport
   filter. Fix the `collectLeagueForm()` flex bug while in there.
-- Create the real NHL league profile(s) from actual settings.
+- Create the real NHL league profile(s) from actual settings — `leagueType:'redraft'`,
+  so none of the keeper/dynasty machinery is in play (§0).
 - Multi-position eligibility through `needScore` / roster panel / board (§4.1).
 - NHL player pool: NHL API + MoneyPuck → composite value (z-scores if it's a cats
   league, `proj` if points) → saved onto the league profile as CSV.
@@ -264,18 +289,30 @@ which is the entire payoff of building the category core for hockey first.
 - **Don't fork the deployment.** One codebase, one URL, sport as data. See §1.
 - **Scope discipline.** Per this repo's own conventions: no features beyond what's
   asked. In-season hockey tools — streaming optimizer, waiver/FAAB, daily lineup
-  setting — are out, the same way football's in-season tools are deferred.
+  setting — are out **of the two-week NHL window**.
+- **…but that non-goal has a condition on it now.** The user's stated reason for not
+  being in a keeper or dynasty hockey league is that they'd only join one if we can
+  build great in-season management automation (§0). So in-season tooling isn't the
+  perpetual "someday" it is on the football side — it's the specific thing that would
+  unlock a whole league type for them. Deferred past the drafts, not written off; it
+  belongs in the NBA month's scope conversation, and daily-lineup sports are where it
+  pays off most anyway.
 
 ---
 
-## 8. Open questions — needed before week 1 starts
+## 8. Open questions — still needed before week 1 starts
 
-1. **Per NHL league:** platform, team count, roster slots, draft date and draft type
-   (snake/auction), and critically — **categories or points?** and **roto or H2H?**
-   and **keeper/dynasty or redraft?** The cats-vs-points answer decides whether §4.2
-   is critical path or a week-2 nicety.
-2. **How many NHL leagues**, and which one drafts first.
-3. **Did the Yahoo developer app's Fantasy Sports API access clear its manual
-   review?** (Blocked as of 2026-08-23.)
-4. **Anything already known about the NBA or MLB leagues** that should shape the
-   shared core — e.g. if an NBA league is points-only, that re-weights the effort.
+Retention (redraft), draft timing (1–2 weeks) and the categories-first call are
+settled in §0. What's left:
+
+1. **Per NHL league:** platform, team count, roster slots (how many C/LW/RW/D/G/Util/
+   bench/IR), draft date, and draft type (snake or auction). This is the one that
+   actually blocks creating a real profile.
+2. **Categories or points, once each league is joined** — not blocking, since we build
+   categories first either way, but it decides which board is the default view.
+3. **How many NHL leagues**, and which one drafts first.
+4. **Did the Yahoo developer app's Fantasy Sports API access clear its manual
+   review?** (Blocked as of 2026-08-23.) Everything Yahoo-dependent needs a
+   manual-entry fallback until this is confirmed.
+5. **Anything already known about the NBA or MLB leagues** that should shape the
+   shared core — e.g. a points-only NBA league would re-weight the effort.
