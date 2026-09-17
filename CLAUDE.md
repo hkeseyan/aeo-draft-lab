@@ -146,17 +146,36 @@ eligibility, a Yahoo-default NHL league profile, a 400-player pool projected fro
 the NHL's public stats API and scored through Yahoo's point values, and the **Add
 Radar** daily pickup shortlist backed by `GET /api/nhl/schedule`.
 
-Known gaps, deliberate: `adp`/`ecr` in the NHL pool are *our projection rank*, not
-market ADP (no free NHL ADP feed exists), so mock rivals draft to our board rather
-than to a real market — layer in Yahoo or Hashtag ADP by hand when it matters. The
-pool is prior-season rates with no aging curve, role change, or line/PP context.
-Category (roto/H2H-cat) scoring is not built — Yahoo's default public league is
-points, so it wasn't needed for the first leagues; it lands in the NBA month, where
-9-cat makes it unavoidable.
+The NHL pool merges three sources kept as separate columns: `adp` is **real Yahoo
+ADP** (FantasyPros' ADP table breaks it out per host site), `ecr` is FantasyPros
+expert consensus, `proj` is ours from the NHL public stats API scored through the
+league's point values. Rivals draft against `adp`, so mocks run against the real
+market. Refresh method: FantasyPros' NHL rankings page embeds `ecrData` as JSON in
+the HTML (same trick as the NFL page) and its ADP page is a plain HTML table with a
+Yahoo column; the NHL stats API needs no key but **must be fetched with curl, not
+python urllib — the agent proxy 403s the latter**.
 
-Testing: `node tests/boot-smoke.mjs` boots the whole page in jsdom and asserts both
-sports still work (needs `npm install --no-save jsdom`). Run it plus
-`node tests/validate-fantastic-data.mjs` before any push.
+A **Fantrax import** (`GET /api/import/fantrax/:leagueId`) is the recommended
+integration path over Yahoo: league-ID keyed, no OAuth, no approval queue. Note
+Fantrax returns HTTP 200 with an `error` body on a bad id.
+
+Known gaps, deliberate: `proj` is prior-season rates with no aging curve, role
+change, or line/PP context, so it overrates declining veterans — a large `adp` vs
+`proj` gap on an older player is a flag on our projection, not a bargain. Category
+(roto/H2H-cat) scoring is not built — Yahoo's default public league is points, so it
+wasn't needed for the first leagues; it lands in the NBA month, where 9-cat makes it
+unavoidable.
+
+Testing, before any push: `node tests/boot-smoke.mjs` (boots the whole page in
+jsdom, 45 assertions across both sports; needs `npm install --no-save jsdom`),
+`node tests/fantrax-import.test.mjs` (drives the real worker route with stubbed
+Fantrax responses), plus the existing `faab-engine`, `source-sync` and
+`validate-fantastic-data` tests.
+
+Careful with `tests/validate-fantastic-data.mjs`: it slices
+`FANTASTIC_2026_STRATEGY` out of `index.html` by scanning forward to the
+`// ---------- LEAGUE PROFILES` banner, so **nothing may be inserted between those
+two markers** or it breaks.
 
 1. ~~Get `wrangler deploy` working and verify KV~~ — done.
 2. ~~Multi-league support~~ — done (see above); auction keeper profiles and the
