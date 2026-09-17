@@ -119,6 +119,10 @@
   .cell.done{cursor:pointer}
   .cell.traded{border-color:var(--warn)}
   .tradebox{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+  .faab-metrics{display:grid;grid-template-columns:repeat(3,minmax(82px,1fr));gap:6px;min-width:250px}
+  .faab-metric{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px;text-align:center}
+  .faab-metric b{display:block;font-size:18px;color:var(--accent)}
+  .faab-good{color:var(--good);font-weight:700}.faab-pass{color:var(--warn);font-weight:700}
 </style>
 </head>
 <body>
@@ -131,6 +135,7 @@
   <span class="seedwarn" id="seedWarn">⚠ Baseline ranking (SEED) — replace with FantasyPros/Yahoo ADP in the Data tab</span>
   <nav>
     <button data-view="room" class="active">Draft Room</button>
+    <button data-view="inseason">FAAB Lab</button>
     <button data-view="teams">Teams & Keepers</button>
     <button data-view="trades">Trades</button>
     <button data-view="mocks">Mocks</button>
@@ -328,6 +333,66 @@
     </div>
   </section>
 
+  <!-- IN-SEASON / FAAB -->
+  <section class="view" id="view-inseason">
+    <div class="card">
+      <h2>In-season FAAB Lab</h2>
+      <p class="small muted">Built for the Tuesday guillotine run after Monday Night Football. It separates the bid that fits your roster, the amount the market is projected to require, and your absolute stretch ceiling. The model uses the preserved 2025 history plus the 2026 bid results; opponent remaining budgets are the next calibration layer.</p>
+      <div class="row">
+        <label class="small">Week <input id="faabWeek" type="number" min="1" max="18" value="2" style="width:60px"></label>
+        <label class="small">Starting FAAB $<input id="faabStartingBudget" type="number" min="1" value="1000" style="width:80px"></label>
+        <label class="small">Remaining $<input id="faabRemainingBudget" type="number" min="0" value="1000" style="width:80px"></label>
+        <label class="small">Teams alive <input id="faabTeamsAlive" type="number" min="2" max="32" value="18" style="width:65px"></label>
+        <label class="small">Discipline <select id="faabAggression"><option value="0.65">Conservative</option><option value="0.8" selected>Balanced</option><option value="0.95">Aggressive</option></select></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" id="faabYahooRun">Sync sources + run</button>
+        <button class="btn ghost" id="faabManualRun">Run pasted pool</button>
+        <button class="btn ghost" id="faabSave">Save inputs</button>
+        <button class="btn ghost" id="faabCalendar">Add Tuesday calendar reminder</button>
+        <span class="small muted" id="faabStatus"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>League data sources</h2>
+      <p class="small muted">One normalized league snapshot powers FAAB now and is the foundation for future lineup, waiver, trade, and roster tools. Yahoo is the authoritative source for ownership and newly dropped players. FantasyPros MyPlaybook supplies a fallback roster plus weekly projections, injuries, opponents, ECR, and schedule context. If neither source returns a current waiver pool, Draft Lab keeps the last good pool instead of replacing it with an empty result.</p>
+      <div class="row">
+        <label class="small"><input id="faabYahooEnabled" type="checkbox" checked> use Yahoo</label>
+        <label class="small"><input id="faabFantasyProsEnabled" type="checkbox" checked> use FantasyPros fallback</label>
+        <input id="faabFantasyProsKey" type="password" autocomplete="off" placeholder="FantasyPros MyPlaybook league URL or nfl~ key" style="flex:1;min-width:280px">
+        <button class="btn ghost" id="faabSourceSave">Save sources</button>
+        <button class="btn ghost" id="faabSourceSync">Refresh now</button>
+      </div>
+      <div class="small muted" id="faabSourceStatus" style="margin-top:8px">No source refresh has run yet.</div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h2>My current roster</h2>
+        <p class="small muted">CSV columns: <code>name,pos,team,week_proj,ros_rank,status,bye_week</code>. Source sync replaces this automatically; otherwise the app pre-fills the saved league roster and estimates weekly points from its player pool.</p>
+        <textarea id="faabRosterCsv" style="min-height:210px"></textarea>
+      </div>
+      <div class="card">
+        <h2>Available / newly dropped players</h2>
+        <p class="small muted">Minimum: <code>name,pos,team</code>. Optional decision inputs: <code>week_proj,ros_rank,endgame,role,schedule,injury,teammate,bye_week,status,notes</code>. Scores may be 0–1 or percentages; schedule is 1–5.</p>
+        <textarea id="faabAvailableCsv" style="min-height:210px"></textarea>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row">
+        <h2 style="margin:0">Recommendations</h2>
+        <span class="small muted" id="faabReportMeta"></span>
+        <label class="small" style="margin-left:auto">Email <input id="faabEmail" type="email" placeholder="you@example.com" style="min-width:210px"></label>
+        <label class="small"><input id="faabEmailEnabled" type="checkbox"> auto-email Tuesday</label>
+        <label class="small"><input id="faabScheduleEnabled" type="checkbox" checked> run Tuesdays 1am Pacific</label>
+        <button class="btn ghost" id="faabEmailNow">Email this report</button>
+      </div>
+      <div class="scroll" style="margin-top:8px">
+        <table><thead><tr><th>Player</th><th>Roster impact</th><th>Bid levels</th><th>Reasoning</th></tr></thead><tbody id="faabResults"><tr><td colspan="4" class="muted">Run the analysis after the waiver pool updates.</td></tr></tbody></table>
+      </div>
+      <details style="margin-top:10px"><summary class="small muted">Prior Tuesday reports</summary><div class="scroll"><table><thead><tr><th>When</th><th>Week</th><th>Top recommendations</th><th></th></tr></thead><tbody id="faabHistory"></tbody></table></div></details>
+    </div>
+  </section>
+
   <!-- MOCKS -->
   <section class="view" id="view-mocks">
     <div class="card">
@@ -482,7 +547,7 @@
     </div>
     <div class="card">
       <h2>Connect Yahoo (in progress)</h2>
-      <p class="small muted">This is where Yahoo gets connected — admin only, one grant covers every Yahoo league. Click <b>Connect Yahoo account</b>, approve in the tab that opens, then come back and click <b>List my leagues</b> (a diagnostic to see what Yahoo returns; the roster-import mapping isn't built yet).</p>
+      <p class="small muted">This is where Yahoo gets connected — admin only, one grant covers every Yahoo league. Click <b>Connect Yahoo account</b>, approve in the tab that opens, then come back and click <b>List my leagues</b>. The FAAB Lab uses this connection for its best-effort Tuesday roster and waiver-pool sync; full league-profile import is still separate work.</p>
       <p class="small muted">If listing fails with <code>additional_authorization_required</code>, Yahoo is saying the <i>grant this token was issued under</i> has no fantasy access. A refresh token can never gain a permission it wasn't granted, so refreshing or reconnecting on top of the old grant won't help — and Yahoo skips the consent screen for an app you've already approved, quietly reissuing on the same grant. Two things to check, in order: (1) <b>Check status</b> below shows which client id this Worker actually holds — confirm it matches the app you edited in the Yahoo Developer console; (2) if it matches, revoke the app at <a href="https://login.yahoo.com/account/security" target="_blank" rel="noopener">Yahoo account security → apps</a>, click <b>Disconnect</b> here, then Connect again so Yahoo has to ask you fresh.</p>
       <div class="row">
         <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account</button>
@@ -4304,9 +4369,9 @@ async function importFromMfl(){
   }catch(e){ el('mflImportStatus').textContent='⚠ Import failed: '+e.message; }
 }
 
-// Yahoo import — OAuth handshake is wired; roster-import mapping is not built
-// yet (Yahoo's JSON shape is easy to get wrong un-tested). "List my leagues" is
-// a diagnostic to confirm the connection and see the raw shape.
+// Yahoo OAuth powers league diagnostics and the FAAB Lab's best-effort Tuesday
+// roster/waiver sync. Manual CSV remains available whenever Yahoo is late or its
+// response does not yet expose the newly eliminated roster.
 function connectYahoo(){ window.open('/auth/yahoo/start','_blank'); el('yahooStatus').textContent='Opened Yahoo sign-in in a new tab — come back here once you approve access.'; }
 // Diagnostics for the "permission is on but Yahoo still says no" case: which
 // credential this deploy actually holds, and how old the grant behind the
@@ -4350,6 +4415,148 @@ async function listYahooLeagues(){
   }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
 }
 
+// ---------- IN-SEASON / FAAB LAB ----------
+let FAAB_REPORT=null;
+const FAAB_ROSTER_HEADERS=['name','pos','team','week_proj','ros_rank','status','bye_week'];
+const FAAB_AVAILABLE_HEADERS=['name','pos','team','week_proj','ros_rank','endgame','role','schedule','injury','teammate','bye_week','status','notes'];
+function faabEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function faabCsvCell(v){const s=String(v==null?'':v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
+function faabRowsCsv(rows,headers){return headers.join(',')+'\n'+(rows||[]).map(r=>headers.map(h=>faabCsvCell(r[h])).join(',')).join('\n');}
+function defaultFaabRosterCsv(){
+  const rows=effRoster(ME_OWNER).map(r=>{const p=findPlayer(r.player)||{};return {name:r.player,pos:p.pos||'',team:p.team||'',week_proj:p.proj?Math.round((p.proj/17)*10)/10:'',ros_rank:p.ecr||'',status:'',bye_week:''};});
+  return faabRowsCsv(rows,FAAB_ROSTER_HEADERS);
+}
+function faabSourceSummary(d={}){
+  const coverage=d.coverage||{};
+  const parts=[];
+  if(d.syncedAt)parts.push('Last refresh '+new Date(d.syncedAt).toLocaleString());
+  if(coverage.roster)parts.push('roster: '+coverage.roster);
+  if(coverage.available)parts.push('available pool: '+coverage.available);
+  if(coverage.projections)parts.push('projections: '+coverage.projections);
+  if(d.fantasyProsConfigured===false)parts.push('FantasyPros not configured');
+  const failures=Object.entries(d.sourceStatus||{}).filter(([,s])=>!s.ok).map(([name,s])=>name+' unavailable: '+s.error);
+  return parts.concat(failures).join(' · ')||'No source refresh has run yet.';
+}
+async function loadFaabSources(){
+  const controls=[el('faabYahooEnabled'),el('faabFantasyProsEnabled'),el('faabFantasyProsKey'),el('faabSourceSave'),el('faabSourceSync')];
+  if(!ME.admin){controls.forEach(x=>{if(x)x.disabled=true;});el('faabSourceStatus').textContent='Source configuration is managed by the Draft Lab admin.';return;}
+  try{
+    const r=await fetch('/api/data-sources?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    el('faabYahooEnabled').checked=d.yahooEnabled!==false;
+    el('faabFantasyProsEnabled').checked=d.fantasyProsEnabled!==false;
+    el('faabFantasyProsKey').value='';
+    el('faabFantasyProsKey').placeholder=d.fantasyProsConfigured?'FantasyPros league configured — paste a new URL to replace it':'FantasyPros MyPlaybook league URL or nfl~ key';
+    el('faabSourceStatus').textContent=faabSourceSummary(d);
+  }catch(e){el('faabSourceStatus').textContent='⚠ '+e.message;}
+}
+async function saveFaabSources(){
+  const status=el('faabSourceStatus');status.textContent='Saving source configuration…';
+  try{
+    const payload={yahooEnabled:el('faabYahooEnabled').checked,fantasyProsEnabled:el('faabFantasyProsEnabled').checked,fantasyProsUrlOrKey:el('faabFantasyProsKey').value.trim()};
+    const r=await fetch('/api/data-sources?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method:'PUT',headers:{'Content-Type':'application/json',...tokenHdr()},body:JSON.stringify(payload)});const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    status.textContent='✓ Sources saved. League data will refresh every four hours.';
+    await loadFaabSources();
+  }catch(e){status.textContent='⚠ '+e.message;}
+}
+async function syncFaabSources(){
+  const status=el('faabSourceStatus');status.textContent='Refreshing the best available league sources…';
+  try{
+    const r=await fetch('/api/data-sources/sync?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method:'POST',headers:tokenHdr()});const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    if(d.roster&&d.roster.length)el('faabRosterCsv').value=faabRowsCsv(d.roster,FAAB_ROSTER_HEADERS);
+    if(d.available&&d.available.length)el('faabAvailableCsv').value=faabRowsCsv(d.available,FAAB_AVAILABLE_HEADERS);
+    status.textContent='✓ '+faabSourceSummary(d);
+  }catch(e){status.textContent='⚠ '+e.message;}
+}
+function faabStateFromForm(){return {
+  week:+el('faabWeek').value||1,
+  startingBudget:+el('faabStartingBudget').value||1000,
+  remainingBudget:+el('faabRemainingBudget').value||0,
+  teamsAlive:+el('faabTeamsAlive').value||LEAGUE.teams||12,
+  initialTeams:LEAGUE.teams||12,
+  aggression:+el('faabAggression').value||0.8,
+  rosterCsv:el('faabRosterCsv').value,
+  availableCsv:el('faabAvailableCsv').value,
+  scheduleEnabled:el('faabScheduleEnabled').checked,
+  emailEnabled:el('faabEmailEnabled').checked,
+  emailTo:el('faabEmail').value.trim()
+};}
+function applyFaabState(s={}){
+  el('faabWeek').value=s.week||2;
+  el('faabStartingBudget').value=s.startingBudget||1000;
+  el('faabRemainingBudget').value=s.remainingBudget==null?(s.startingBudget||1000):s.remainingBudget;
+  el('faabTeamsAlive').value=s.teamsAlive||LEAGUE.teams||12;
+  el('faabAggression').value=String(s.aggression||0.8);
+  el('faabScheduleEnabled').checked=s.scheduleEnabled!==false;
+  el('faabEmailEnabled').checked=!!s.emailEnabled;
+  el('faabEmail').value=s.emailTo||s.emailDefault||(ME.user&&ME.user.email)||'';
+  el('faabRosterCsv').value=s.rosterCsv||(s.roster?faabRowsCsv(s.roster,FAAB_ROSTER_HEADERS):defaultFaabRosterCsv());
+  el('faabAvailableCsv').value=s.availableCsv||(s.available?faabRowsCsv(s.available,FAAB_AVAILABLE_HEADERS):FAAB_AVAILABLE_HEADERS.join(',')+'\n');
+  if(s.dataSyncedAt)el('faabStatus').textContent='League data last refreshed '+new Date(s.dataSyncedAt).toLocaleString();
+  else if(s.yahooSyncedAt)el('faabStatus').textContent='Yahoo last synced '+new Date(s.yahooSyncedAt).toLocaleString();
+}
+async function saveFaabState(show=true){
+  const r=await fetch('/api/inseason/state?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method:'PUT',headers:{'Content-Type':'application/json',...tokenHdr()},body:JSON.stringify(faabStateFromForm())});
+  const d=await r.json();if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+  if(show)el('faabStatus').textContent='☁ Inputs saved '+new Date().toLocaleTimeString();
+  return d;
+}
+async function loadFaabHistory(openLatest=false){
+  const body=el('faabHistory');if(!body)return;
+  try{
+    const r=await fetch('/api/inseason/reports?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});const rows=await r.json();
+    body.innerHTML=(rows||[]).map(x=>`<tr><td>${new Date(x.createdAt).toLocaleString()}</td><td>${x.week}</td><td>${faabEsc(x.top||'')}</td><td><button class="btn ghost" data-faab-report="${faabEsc(x.id)}">Open</button></td></tr>`).join('')||'<tr><td colspan="4" class="muted">No reports yet.</td></tr>';
+    body.querySelectorAll('[data-faab-report]').forEach(b=>b.onclick=()=>openFaabReport(b.dataset.faabReport));
+    if(openLatest && rows && rows[0])await openFaabReport(rows[0].id);
+  }catch(e){body.innerHTML='<tr><td colspan="4" class="muted">History unavailable.</td></tr>';}
+}
+function renderFaabReport(report){
+  FAAB_REPORT=report;
+  el('faabReportMeta').textContent=`Week ${report.week} · ${report.teamsAlive} alive · $${report.remainingBudget} left · ${new Date(report.createdAt).toLocaleString()}`;
+  const body=el('faabResults');
+  body.innerHTML=(report.recommendations||[]).map(p=>`<tr>
+    <td><b>${faabEsc(p.name)}</b><div class="small muted">${faabEsc(p.team)} · ${faabEsc(p.pos)} · ${faabEsc(p.tier)}</div><div class="small ${p.marketReachable?'faab-good':'faab-pass'}">${p.marketReachable?'Market is within your ceiling':'Disciplined pass at projected market'}</div></td>
+    <td><b>${p.adjustedWeekProjection} pts</b><div class="small muted">lineup upgrade +${p.lineupUpgrade}${p.replacement?' over '+faabEsc(p.replacement):''}</div><div class="small muted">ROS rank ${p.rosRank<999?p.rosRank:'—'} · endgame ${Math.round(p.endgame*100)}%</div></td>
+    <td><div class="faab-metrics"><div class="faab-metric"><span class="small muted">Bid</span><b>$${p.recommendedBid}</b></div><div class="faab-metric"><span class="small muted">Projected win</span><b>$${p.projectedWinningBid}</b></div><div class="faab-metric"><span class="small muted">Stretch max</span><b>$${p.stretchBid}</b></div></div><div class="small muted" style="margin-top:4px">Independent fair value: $${p.fairBid}</div></td>
+    <td class="small">${(p.reasons||[]).map(faabEsc).join(' · ')}${p.notes?'<div class="muted" style="margin-top:4px">'+faabEsc(p.notes)+'</div>':''}</td>
+  </tr>`).join('')||'<tr><td colspan="4" class="muted">No available players were supplied.</td></tr>';
+}
+async function openFaabReport(id){
+  const r=await fetch('/api/inseason/reports/'+encodeURIComponent(id)+'?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});const d=await r.json();if(!r.ok)throw new Error(d.error||('HTTP '+r.status));renderFaabReport(d);
+}
+async function runFaab(syncSources){
+  const status=el('faabStatus');status.textContent=syncSources?'Refreshing league sources and calculating bids…':'Calculating bids…';
+  try{
+    const payload={...faabStateFromForm(),syncSources};
+    const r=await fetch('/api/inseason/reports?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method:'POST',headers:{'Content-Type':'application/json',...tokenHdr()},body:JSON.stringify(payload)});const d=await r.json();
+    if(!r.ok)throw new Error((d.error||('HTTP '+r.status))+(d.fallback?' — '+d.fallback:''));
+    renderFaabReport(d);status.textContent='✓ Report saved';
+    if(syncSources){const s=await fetch('/api/inseason/state?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()}).then(x=>x.json());applyFaabState(s);renderFaabReport(d);loadFaabSources();}
+    loadFaabHistory();
+  }catch(e){status.textContent='⚠ '+e.message;}
+}
+async function emailFaabNow(){
+  const status=el('faabStatus');if(!FAAB_REPORT){status.textContent='Run or open a report first.';return;}
+  try{
+    const r=await fetch('/api/inseason/email?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method:'POST',headers:{'Content-Type':'application/json',...tokenHdr()},body:JSON.stringify({id:FAAB_REPORT.id,to:el('faabEmail').value.trim()})});const d=await r.json();if(!r.ok)throw new Error(d.error||('HTTP '+r.status));status.textContent=d.sent?'✓ Email sent':'Email not sent: '+d.reason;
+  }catch(e){status.textContent='⚠ '+e.message;}
+}
+function downloadFaabCalendar(){
+  const d=new Date(),delta=(2-d.getDay()+7)%7||7;d.setDate(d.getDate()+delta);
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0'),stamp=`${y}${m}${day}`;
+  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Draft Lab//FAAB Lab//EN','BEGIN:VEVENT','UID:faab-'+CURRENT_LEAGUE_ID+'@draft-lab','DTSTART;TZID=America/Los_Angeles:'+stamp+'T010500','DTEND;TZID=America/Los_Angeles:'+stamp+'T013500','RRULE:FREQ=WEEKLY;BYDAY=TU;COUNT=18','SUMMARY:'+String(LEAGUE.name||'League').replace(/[,;]/g,' ')+' FAAB Lab review','DESCRIPTION:Open Draft Lab after Monday Night Football to review the eliminated roster and Tuesday bid recommendations.','BEGIN:VALARM','TRIGGER:-PT5M','ACTION:DISPLAY','DESCRIPTION:FAAB Lab report is ready','END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download='draft-lab-faab-tuesdays.ics';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+async function loadInSeasonState(){
+  if(!el('faabWeek'))return;
+  FAAB_REPORT=null;
+  try{const r=await fetch('/api/inseason/state?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});const d=await r.json();if(r.ok)applyFaabState(d);}catch(e){applyFaabState({});}
+  loadFaabSources();
+  loadFaabHistory(true);
+}
+
 // ---------- EVENTS ----------
 wireRadar();
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
@@ -4362,7 +4569,15 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   if(b.dataset.view==='trades'){renderTrades();renderBackupHistory();}
   if(b.dataset.view==='leagues')renderLeaguesTab();
   if(b.dataset.view==='commish')renderCommish();
+  if(b.dataset.view==='inseason')loadInSeasonState();
 });
+el('faabYahooRun').onclick=()=>runFaab(true);
+el('faabManualRun').onclick=()=>runFaab(false);
+el('faabSave').onclick=()=>saveFaabState().catch(e=>el('faabStatus').textContent='⚠ '+e.message);
+el('faabSourceSave').onclick=saveFaabSources;
+el('faabSourceSync').onclick=syncFaabSources;
+el('faabCalendar').onclick=downloadFaabCalendar;
+el('faabEmailNow').onclick=emailFaabNow;
 el('autoKeepers').onclick=autoKeepers;
 el('auctionAwardBtn').onclick=recordAuctionSale;
 if(el('auctionPosFilter'))el('auctionPosFilter').onchange=renderAuctionRoom;
@@ -4866,6 +5081,7 @@ function applyLeagueProfile(id){
     renderMocks();
     if(el('leaguesList'))renderLeaguesTab();
     if(el('commishTable'))loadCommish();
+    if(el('faabWeek'))loadInSeasonState();
   }
   loadSetup();
 }
