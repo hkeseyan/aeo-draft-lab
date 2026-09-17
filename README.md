@@ -2,6 +2,8 @@
 
 Interactive keeper-league draft tool (12-team, Half-PPR, snake) with rival rosters, keeper modeling, a mock-draft simulator, and **cloud-saved mock history** that syncs across your phone and laptop.
 
+The app now also includes an **In-season FAAB Lab** for guillotine leagues. It can sync the connected Yahoo roster and current waiver pool (with a manual CSV fallback), calculate recommended/projected-winning/stretch bids, save weekly reports, and run automatically at approximately 1:00am Pacific on Tuesdays. Recurring calendar reminders are available in the UI. Optional email delivery requires `RESEND_API_KEY` and `FAAB_REPORT_FROM` Worker secrets.
+
 The built-in **Fantastic Keeper Auction 2026** profile includes the finalized 14-team keeper declaration and Yahoo nomination order. See [`docs/FANTASTIC_2026.md`](docs/FANTASTIC_2026.md) for validated totals, persistence behavior, and the current auction strategy layer.
 
 - `public/index.html` — the whole app (self-contained; player data embedded).
@@ -42,4 +44,5 @@ Then in the app: **Mocks** tab → **Privacy token** → paste the same string �
 - The Data tab's export/import config still works as an offline backup, independent of the cloud KV store.
 - **Multiple leagues**: the **Leagues** tab manages league profiles (settings, owners/draft slots, rosters, player pool) in KV — create/edit/delete without touching code. A header dropdown switches the active league; every `/api/*` route accepts a `?league=` param to scope its data. You can also pull a league's owners/rosters from a public Sleeper league ID as a starting point to review before saving.
 - **Backups**: every setup save (keepers/trades/tendencies/picks) keeps a rolling history of the last 30 snapshots, restorable from the Trades tab if something gets overwritten.
+- **FAAB calibration**: projected market prices use the preserved 2025 Off With Their Heads history plus the Sep. 16, 2026 18-team and 12-team results. Competitor remaining budgets are not yet included; every report discloses that assumption.
 - See `CLAUDE.md` for the full project brief and conventions.

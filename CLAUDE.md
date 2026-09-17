@@ -158,11 +158,12 @@ current than this list.
    with their own save data (today it's one shared setup per league; guest
    mode is read-only and doesn't address this). Explicitly low priority;
    user wants it after commissioner mode, alongside the two items above.
-8. Later, still deferred: in-season tools — waivers/FAAB, start/sit, trade
-   analysis; ESPN/FanTracks import; Yahoo Fantasy import (needs the user to
-   register an OAuth app first — see conversation history, not recorded here
-   since it involves credentials; also blocked on Yahoo's manual Fantasy
-   Sports API access review as of 2026-08-23).
+8. **In-season tools** — FAAB v1 is now built: Yahoo/manual roster + waiver-pool
+   input, league-specific calibrated bid levels, saved Tuesday reports, cron,
+   calendar reminders, and optional email. Next: competitor remaining-budget
+   modeling, then start/sit and trade analysis; ESPN/FanTracks import remains
+   deferred. Native iPhone push is a later evolution after the web workflow is
+   proven.
 
 ## Conventions
 - Keep `public/index.html` self-contained (data embedded) — no external JS/CSS
