@@ -253,15 +253,62 @@ FantasyPros' hockey section exists but is **draft-only**: consensus rankings for
 2026-27 filterable by C/LW/RW/D/G, and a Draft Mode. No league sync, no start/sit, no
 waiver or trade assistant. The crutch the user relies on for football isn't there.
 
-Two consequences:
+But **FantasyPros is not the only option** — see §6.1. Revised consequences:
 
-1. **For NHL, in-season management is ours to build or it doesn't exist.** This is no
-   longer "deferred past the drafts" as the first draft of this plan had it — it's the
-   thing that decides how many leagues the user joins, and whether dynasty ever
-   happens.
+1. **In-season management for NHL is not all ours to build.** Hashtag Hockey covers a
+   real share of it for $2.50/mo (§6.1). What remains ours is the part nobody sells:
+   management *across* several leagues at once, driven by our own valuation.
 2. **NBA has My Playbook**, so the Oct–Nov basketball phase has a fallback hockey
    doesn't. That's an argument for spending the NHL fortnight on drafting and the
    in-season basics, and the NBA month on the deeper engine work.
+
+### 6.1 Hashtag Hockey — what it is, and what it isn't
+
+The user has an account at [hashtaghockey.com](https://hashtaghockey.com/) and asked
+whether we can pull and sync teams from its API.
+
+**There is no public API.** Nothing on the site, the premium page, the basketball
+sibling, or anywhere findable documents one, and no developer access is offered. What
+looks like an API is the site's **league import**: you paste a Yahoo or ESPN *League
+ID* into their site and *they* pull your league in, for use inside *their* tools. It's
+an import into their product, not an interface we can call.
+
+What it does offer is substantial, and cheap:
+
+| Tier | Tools |
+|---|---|
+| Free | Category **and points-league** rankings + projections, Advanced NHL Schedule Grid, Trade Analyzer, Auction Values, Sleepers, ADP, NHL Starting Goalies |
+| Premium ($2.50/mo via Patreon) | Premium Schedule Grid (waiver availability + projections), Waiver Wire Rankings, Draft Tracker, Trade Machine, Waiver Machine, League Scouting Report, Beast Mode (Yahoo only, weekly matchup results) |
+
+Two things stand out:
+
+- **Their points-league projections carry exactly the component stats Yahoo's default
+  scoring needs** — GP, TOI, G, A, +/−, SOG, BLK, PPP for skaters; SV, GA, SHO, W for
+  goalies (§5). They are *not* customizable to a league's own point values, but that
+  doesn't matter: the components are all there, so **we** apply Yahoo's values
+  ourselves. That is precisely the scoring-aware projection §7 asked for, without
+  building one from raw MoneyPuck data.
+- **Hashtag Basketball is further along than the hockey site** — it syncs Yahoo, ESPN,
+  **Fantrax and Sleeper**, and adds a Mock Draft Simulator and Matchup Planner. Worth
+  knowing for the NBA month.
+
+**Getting data into Draft Lab, in order of preference:**
+
+1. **Manual paste — works today, zero code.** The Data tab already accepts a pasted
+   player CSV and saves it to the league profile. Copy their projections table, reshape
+   the columns, paste. This is the pragmatic week-1 path and needs nothing built.
+2. **Yahoo's own API for roster/league sync** (§7) — strictly better than routing
+   through Hashtag for that purpose, since Hashtag doesn't expose what it imports.
+3. **Scraping their pages** — technically possible, but there's no contract so it
+   breaks whenever they change markup, and the premium data is per-user behind a
+   Patreon login. Their terms prohibit "redistribution or republication of any part of
+   this site or its content … without the express written consent of the Company," and
+   say nothing explicit about automated access. Pulling their numbers into the user's
+   own private tool for personal use isn't republication on any plain reading; the
+   guest-link sharing this app already supports (FEEDBACK.md, 2026-08-25) is where that
+   would stop being true. Not recommended as a dependency either way.
+4. **Just ask them.** Small operator, active Patreon and Slack community — an email
+   about data access costs nothing and might get a real answer.
 
 ### The good news: hockey's management problem is unusually automatable
 
@@ -299,9 +346,14 @@ ours — which is roadmap item 5 arriving early:
 
 - **NHL public API** — prior-season per-player stats, rosters, and the full schedule
   (which is where §4.2's games/off-night counts come from). Free, no key.
+- **Hashtag Hockey's points-league projections** (§6.1) — the shortest path to a
+  usable pool. Already carries GP/TOI/G/A/+−/SOG/BLK/PPP and goalie SV/GA/SHO/W, which
+  is every component Yahoo's default scoring needs; we apply the point values. Hand-
+  copied into the Data tab, this alone gets week 1 to a real board.
 - **MoneyPuck / Natural Stat Trick** — free CSV exports with rate and on-ice data;
-  good projection inputs (TOI, power-play time, shot rates). Shot rates matter more
-  than usual here because SOG is a scored category at 0.9/shot (§5).
+  good projection inputs (TOI, power-play time, shot rates) when we want our own
+  numbers rather than someone else's. Shot rates matter more than usual here because
+  SOG is scored at 0.9/shot (§5).
 - **Yahoo's own ranks/ADP for the specific league** — the market anchor, and the
   cheapest win in the plan: `worker.js:697` hardcodes `game_keys=nfl` on
   `/api/yahoo/leagues`. Yahoo's Fantasy API is the same shape across sports, so
@@ -402,7 +454,10 @@ Remaining:
    for hockey — automated salaries/contracts, tradeable future picks, deep settings
    customization. Yahoo and ESPN are weaker there. Sleeper does not do NHL at all.
    Worth knowing before joining a dynasty league, not before the redraft ones.
-4. **Anything known about the NBA or MLB leagues** that should shape the shared core.
+4. **Is the user already on Hashtag Hockey's $2.50/mo premium tier**, or only the free
+   tools? Decides whether the premium Schedule Grid and Waiver Wire Rankings are
+   available to lean on this season, or whether we build that view ourselves.
+5. **Anything known about the NBA or MLB leagues** that should shape the shared core.
 
 ---
 
@@ -417,3 +472,4 @@ Remaining:
 - [Daily Faceoff — weekly strength of schedule and streaming targets](https://www.dailyfaceoff.com/news/fantasy-hockey-2025-26-weekly-strength-of-schedule-and-streaming-targets-week-22)
 - [Left Wing Lock — NHL weekly schedule](https://leftwinglock.com/schedules/)
 - [Fantrax](https://www.fantrax.com/)
+- [Hashtag Hockey](https://hashtaghockey.com/) · [premium tools](https://hashtaghockey.com/premium) · [terms](https://hashtaghockey.com/terms-conditions) · [Hashtag Basketball](https://hashtagbasketball.com/)
