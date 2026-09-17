@@ -12,7 +12,7 @@ incomplete, not final.
 
 ## App shape
 
-Single-page app (`public/index.html`), eight tabs:
+Single-page app (`public/index.html`), nine tabs:
 
 ### Draft Room
 Live mock draft UI. Snake/linear leagues use the best-available pool, roster
@@ -85,6 +85,16 @@ devices. Save the current draft, list saved mocks newest-first, load or
 delete one. Snake/linear mocks persist pick state; auction mocks persist
 winning team + price for every completed sale. Falls back to local-only
 ("Save config" in the Data tab) when the cloud API isn't reachable.
+
+### FAAB Lab
+
+League-specific in-season management for guillotine waivers. The page stores the user's current FAAB, teams alive, risk/discipline setting, roster and available-player pool. A normalized league snapshot sits in front of providers so FAAB and future lineup/waiver/trade/roster modules consume one schema instead of provider-specific payloads. Yahoo is preferred for authoritative ownership and the complete waiver pool. A privately stored FantasyPros MyPlaybook league key provides fallback roster/lineup data plus weekly projections, injuries, opponents, ECR, and schedule context. The last good snapshot and manual CSV remain available when a provider is late or unavailable. Each recommendation keeps four separate concepts visible: independent fair value, the exact recommended bid for this roster, the projected winning market bid, and the stretch/absolute maximum.
+
+The deterministic engine accounts for optimal-lineup improvement, the current player displaced, immediate weekly projection, rest-of-season/endgame tier, role certainty, upcoming-schedule grade, candidate injury/bye availability, teammate-driven opportunity, position scarcity, league size, season phase, and remaining user budget. Market priors are versioned (`off-with-their-heads-2025-plus-2026-09-16`) and distinguish the 18-team league from the 12-team league. Projected winning bids currently use opening-budget shares rather than pretending competitor remaining balances are known; that limitation is stated in every report and is the next planned calibration input.
+
+Inputs live at `GET/PUT /api/inseason/state`; reports are created/listed/read through `/api/inseason/reports` and retain the latest 30 index entries per user/league. Source configuration and manual refresh use `/api/data-sources` and `/api/data-sources/sync`; the normalized read model is `GET /api/league-data`. Provider credentials/keys are stored in separate KV records and are not echoed back to the client. Cloudflare cron refreshes configured league sources every four hours, and also runs at both UTC hours that may correspond to Tuesday 1:00am Pacific. The FAAB path performs a timezone and idempotency check so exactly one report runs across PDT/PST. The UI generates an 18-week recurring `.ics` reminder. `/api/inseason/email` and scheduled delivery use Resend only when `RESEND_API_KEY` and `FAAB_REPORT_FROM` are configured.
+
+The current FantasyPros direct feed covers the user's roster/matchup and decision context but not the complete free-agent pool. Therefore the normalized snapshot tracks coverage per field (`roster`, `available`, `projections`) and never presents a partial provider as complete. Yahoo or the last saved/manual pool remains the availability authority until a supported complete FantasyPros availability feed is added.
 
 ### Strategy Lab
 Compares draft paths/strategies side by side (`renderStratCards`). Rival picks

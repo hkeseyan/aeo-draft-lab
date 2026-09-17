@@ -26,6 +26,12 @@ var leagueProfileKey = /* @__PURE__ */ __name((id) => `league:${id}`, "leaguePro
 var leagueHistoryKey = /* @__PURE__ */ __name((id) => `leagueHistory:${id}`, "leagueHistoryKey");
 var commishKey = /* @__PURE__ */ __name((lg) => `commish:${lg}`, "commishKey");
 var commishHistoryKey = /* @__PURE__ */ __name((lg) => `commishHistory:${lg}`, "commishHistoryKey");
+var inSeasonStateKey = /* @__PURE__ */ __name((lg) => `inseason:${lg}`, "inSeasonStateKey");
+var inSeasonReportsKey = /* @__PURE__ */ __name((lg) => `inseasonReports:${lg}`, "inSeasonReportsKey");
+var inSeasonReportKey = /* @__PURE__ */ __name((lg, id) => `inseasonReport:${lg}:${id}`, "inSeasonReportKey");
+var leagueSourceConfigKey = /* @__PURE__ */ __name((lg) => `leagueSource:${lg}`, "leagueSourceConfigKey");
+var leagueSnapshotKey = /* @__PURE__ */ __name((lg) => `leagueSnapshot:${lg}`, "leagueSnapshotKey");
+var FAAB_CALIBRATION_VERSION = "off-with-their-heads-2025-plus-2026-09-16";
 function slugify(s) {
   return String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-+|-+$)/g, "").slice(0, 40) || "league";
 }
@@ -159,6 +165,496 @@ async function getYahooAccessToken(env, kv, url) {
   return updated.access_token;
 }
 __name(getYahooAccessToken, "getYahooAccessToken");
+function csvMatrix(text) {
+  const rows = [];
+  let row = [], field = "", quoted = false;
+  const src = String(text || "").replace(/\r\n?/g, "\n");
+  for (let i = 0; i <= src.length; i++) {
+    const ch = i < src.length ? src[i] : "\n";
+    if (quoted) {
+      if (ch === '"' && src[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (ch === '"') quoted = false;
+      else field += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ",") {
+      row.push(field.trim());
+      field = "";
+    } else if (ch === "\n") {
+      row.push(field.trim());
+      field = "";
+      if (row.some((v) => v !== "")) rows.push(row);
+      row = [];
+    } else field += ch;
+  }
+  return rows;
+}
+__name(csvMatrix, "csvMatrix");
+function parseCsvObjects(text) {
+  const rows = csvMatrix(text);
+  if (rows.length < 2) return [];
+  const header = rows[0].map((h) => String(h).toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""));
+  return rows.slice(1).map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] == null ? "" : r[i]]))).filter((r) => r.name || r.player);
+}
+__name(parseCsvObjects, "parseCsvObjects");
+var n = /* @__PURE__ */ __name((v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback, "n");
+var clamp = /* @__PURE__ */ __name((v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, v)), "clamp");
+function ratio(v, fallback = 0) {
+  const x = n(v, fallback);
+  return clamp(x > 1 ? x / 100 : x);
+}
+__name(ratio, "ratio");
+function playerPoolMap(profile) {
+  const map = new Map();
+  parseCsvObjects(profile && profile.playersCsv || "").forEach((p) => {
+    const name = String(p.name || p.player || "").trim();
+    if (!name) return;
+    map.set(name.toLowerCase(), {
+      name,
+      pos: String(p.pos || p.position || "").toUpperCase(),
+      team: String(p.team || "").toUpperCase(),
+      rosRank: n(p.ros_rank || p.ecr || p.adp, 999),
+      seasonProjection: n(p.proj || p.projection, 0),
+      weekProjection: n(p.week_proj || p.week_projection, 0)
+    });
+  });
+  return map;
+}
+__name(playerPoolMap, "playerPoolMap");
+function normalizeFaabPlayer(raw, pool, currentWeek) {
+  const named = String(raw.name || raw.player || "").trim();
+  const base = pool.get(named.toLowerCase()) || {};
+  const pos = String(raw.pos || raw.position || base.pos || "").toUpperCase();
+  const rank = n(raw.ros_rank || raw.rank || raw.ecr, base.rosRank || 999);
+  const seasonProjection = n(raw.season_projection || raw.proj, base.seasonProjection || 0);
+  const weekProjection = n(raw.week_proj || raw.week_projection, base.weekProjection || (seasonProjection ? seasonProjection / 17 : 0));
+  const status = String(raw.status || "").toUpperCase();
+  const byeWeek = n(raw.bye_week || raw.bye, 0);
+  const unavailable = status === "O" || status === "IR" || status === "SUSP" || status === "NA" || byeWeek === currentWeek;
+  const injuryRisk = raw.injury === "" || raw.injury == null ? status === "Q" || status === "D" ? 0.45 : unavailable ? 1 : 0.08 : ratio(raw.injury);
+  let derivedEndgame = rank <= 5 ? 0.95 : rank <= 12 ? 0.75 : rank <= 30 ? 0.5 : rank <= 60 ? 0.25 : 0.08;
+  if (pos === "QB" || pos === "TE") derivedEndgame *= 0.75;
+  return {
+    name: named || base.name || "Unknown",
+    pos,
+    team: String(raw.team || base.team || "").toUpperCase(),
+    rosRank: rank,
+    weekProjection,
+    endgame: raw.endgame === "" || raw.endgame == null ? derivedEndgame : ratio(raw.endgame),
+    role: raw.role === "" || raw.role == null ? 0.75 : ratio(raw.role),
+    schedule: clamp(n(raw.schedule || raw.schedule_grade, 3), 1, 5),
+    injuryRisk,
+    teammateOpportunity: raw.teammate === "" || raw.teammate == null ? ratio(raw.teammate_opportunity, 0) : ratio(raw.teammate),
+    byeWeek,
+    status,
+    unavailable,
+    notes: String(raw.notes || "").trim()
+  };
+}
+__name(normalizeFaabPlayer, "normalizeFaabPlayer");
+function starterLineup(roster, profile) {
+  const used = new Set(), starters = [];
+  const pick = /* @__PURE__ */ __name((eligible) => {
+    const p = roster.filter((x) => !used.has(x) && eligible.includes(x.pos)).sort((a, b) => b.adjustedWeek - a.adjustedWeek)[0];
+    if (p) {
+      used.add(p);
+      starters.push(p);
+    }
+  }, "pick");
+  const slots = profile && profile.starters || { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 2 };
+  ["QB", "RB", "WR", "TE", "K", "DST"].forEach((pos) => {
+    for (let i = 0; i < n(slots[pos], 0); i++) pick([pos]);
+  });
+  const flexEligible = profile && profile.flexEligible || ["RB", "WR", "TE"];
+  for (let i = 0; i < n(slots.FLEX || slots.flex, 0); i++) pick(flexEligible);
+  for (let i = 0; i < n(slots.SUPERFLEX || slots.superflex, 0); i++) pick(["QB", "RB", "WR", "TE"]);
+  return { starters, total: starters.reduce((sum, p) => sum + p.adjustedWeek, 0) };
+}
+__name(starterLineup, "starterLineup");
+function marketShareFor(player, tier, teamsAlive) {
+  const is12 = teamsAlive <= 13;
+  const table18 = {
+    elite: { QB: 0.055, RB: 0.351, WR: 0.351, TE: 0.065 },
+    core: { QB: 0.03, RB: 0.201, WR: 0.201, TE: 0.03 },
+    starter: { QB: 0.02, RB: 0.076, WR: 0.057, TE: 0.021 },
+    depth: { QB: 0.005, RB: 0.012, WR: 0.01, TE: 0.005 }
+  };
+  const table12 = {
+    elite: { QB: 0.04, RB: 0.2, WR: 0.18, TE: 0.057 },
+    core: { QB: 0.025, RB: 0.1, WR: 0.075, TE: 0.025 },
+    starter: { QB: 0.012, RB: 0.047, WR: 0.051, TE: 0.013 },
+    depth: { QB: 0.003, RB: 0.007, WR: 0.005, TE: 0.003 }
+  };
+  const lo = table12[tier][player.pos] || table12[tier].WR;
+  const hi = table18[tier][player.pos] || table18[tier].WR;
+  const t = clamp((teamsAlive - 12) / 6);
+  return is12 ? lo : lo + (hi - lo) * t;
+}
+__name(marketShareFor, "marketShareFor");
+function tierFor(player, upgrade) {
+  if ((player.pos === "RB" || player.pos === "WR") && (player.endgame >= 0.85 || player.rosRank <= 5)) return "elite";
+  if ((player.pos === "RB" || player.pos === "WR") && (player.endgame >= 0.65 || player.rosRank <= 12)) return "core";
+  if (player.rosRank <= 40 || upgrade >= 0.75) return "starter";
+  return "depth";
+}
+__name(tierFor, "tierFor");
+function maxShareFor(player, tier, teamsAlive) {
+  const t = clamp((teamsAlive - 12) / 6);
+  const lo = { elite: 0.24, core: 0.14, starter: player.pos === "RB" ? 0.07 : player.pos === "WR" ? 0.06 : 0.025, depth: 0.015 }[tier];
+  const hi = { elite: 0.36, core: 0.22, starter: player.pos === "RB" ? 0.1 : player.pos === "WR" ? 0.08 : player.pos === "TE" ? 0.04 : 0.05, depth: 0.02 }[tier];
+  return lo + (hi - lo) * t;
+}
+__name(maxShareFor, "maxShareFor");
+function analyzeFaab(input, profile = {}) {
+  const currentWeek = Math.max(1, n(input.week, 1));
+  const startingBudget = Math.max(1, n(input.startingBudget || input.starting_budget, 1e3));
+  const remainingBudget = clamp(n(input.remainingBudget || input.remaining_budget, startingBudget), 0, startingBudget);
+  const teamsAlive = Math.max(2, n(input.teamsAlive || input.teams_alive, profile.teams || 18));
+  const initialTeams = Math.max(teamsAlive, n(input.initialTeams || input.initial_teams, profile.teams || teamsAlive));
+  const aggression = clamp(n(input.aggression, 0.8), 0.4, 1.1);
+  const pool = playerPoolMap(profile);
+  const rosterRaw = Array.isArray(input.roster) ? input.roster : parseCsvObjects(input.rosterCsv || input.roster_csv || "");
+  const availableRaw = Array.isArray(input.available) ? input.available : parseCsvObjects(input.availableCsv || input.available_csv || "");
+  const roster = rosterRaw.map((p) => normalizeFaabPlayer(p, pool, currentWeek)).map((p) => ({ ...p, adjustedWeek: p.unavailable ? 0 : p.weekProjection * (1 - p.injuryRisk * 0.28) }));
+  const baseLineup = starterLineup(roster, profile);
+  const recommendations = availableRaw.map((raw) => {
+    const p = normalizeFaabPlayer(raw, pool, currentWeek);
+    const adjustedWeek = p.unavailable ? 0 : p.weekProjection * (1 - p.injuryRisk * 0.32);
+    const withPlayer = starterLineup([...roster, { ...p, adjustedWeek }], profile);
+    const upgrade = Math.max(0, withPlayer.total - baseLineup.total);
+    const displaced = baseLineup.starters.find((x) => !withPlayer.starters.some((y) => y.name === x.name));
+    const need = clamp(upgrade / 6 + (displaced ? 0.12 : 0));
+    const immediate = clamp(adjustedWeek / 18);
+    const tier = tierFor(p, upgrade);
+    const scarcity = clamp((teamsAlive - 10) / 10) * ({ RB: 1, WR: 0.88, TE: 0.55, QB: 0.35 }[p.pos] || 0.5);
+    const phaseFactor = 0.78 + 0.22 * teamsAlive / initialTeams;
+    const marketShare = marketShareFor(p, tier, teamsAlive) * phaseFactor * (0.82 + 0.18 * p.role) * (1 + (p.schedule - 3) * 0.025) * (1 - p.injuryRisk * 0.2);
+    const projectedWinningBid = Math.max(0, Math.round(startingBudget * marketShare));
+    const utilityMultiplier = 0.7 + 0.45 * need + 0.2 * p.endgame + 0.1 * immediate + 0.06 * scarcity + 0.05 * p.teammateOpportunity;
+    const rawFair = Math.min(maxShareFor(p, tier, teamsAlive), marketShare * utilityMultiplier) * remainingBudget * aggression;
+    const fairBid = Math.max(0, Math.round(rawFair));
+    const chaseThreshold = tier === "elite" ? 1.15 : tier === "core" ? 1.2 : 1.6;
+    const marketReachable = projectedWinningBid + 1 <= fairBid * chaseThreshold;
+    const recommendedBid = Math.min(remainingBudget, Math.max(0, Math.round(marketReachable ? Math.max(fairBid, projectedWinningBid + 1) : fairBid)));
+    const stretchBid = Math.min(remainingBudget, Math.max(recommendedBid, Math.round(marketReachable ? Math.max(fairBid * 1.2, projectedWinningBid + (tier === "starter" ? 3 : 1)) : fairBid * 1.15)));
+    const reasons = [];
+    if (p.endgame >= 0.8) reasons.push("endgame-caliber profile");
+    else if (p.endgame >= 0.55) reasons.push("possible long-term starter");
+    if (upgrade >= 2) reasons.push(`adds ${upgrade.toFixed(1)} projected lineup points this week`);
+    else if (upgrade > 0) reasons.push(`small ${upgrade.toFixed(1)}-point immediate upgrade`);
+    else reasons.push("does not currently improve the optimal starting lineup");
+    if (p.byeWeek === currentWeek) reasons.push("on bye this week");
+    if (p.injuryRisk >= 0.45) reasons.push("material injury/availability risk");
+    if (p.schedule >= 4) reasons.push("favorable upcoming schedule input");
+    if (p.teammateOpportunity >= 0.4) reasons.push("teammate news raises opportunity");
+    if (!marketReachable) reasons.push("projected market exceeds this roster's disciplined price");
+    return {
+      ...p,
+      tier,
+      replacement: displaced ? displaced.name : null,
+      replacementProjection: displaced ? Number(displaced.adjustedWeek.toFixed(1)) : null,
+      adjustedWeekProjection: Number(adjustedWeek.toFixed(1)),
+      lineupUpgrade: Number(upgrade.toFixed(1)),
+      projectedWinningBid,
+      fairBid,
+      recommendedBid,
+      stretchBid,
+      marketReachable,
+      reasons,
+      confidence: p.weekProjection && p.rosRank < 999 ? "medium" : "low"
+    };
+  }).sort((a, b) => b.recommendedBid - a.recommendedBid || b.lineupUpgrade - a.lineupUpgrade);
+  return {
+    id: `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`,
+    createdAt: Date.now(),
+    leagueId: profile.id || "",
+    leagueName: profile.name || "League",
+    week: currentWeek,
+    teamsAlive,
+    startingBudget,
+    remainingBudget,
+    calibrationVersion: FAAB_CALIBRATION_VERSION,
+    assumptions: [
+      "Projected winning bids use the 2025 Off With Their Heads history plus the Sep. 16, 2026 18-team and 12-team bid stacks.",
+      "Competitor remaining budgets are not yet modeled; projected market prices use calibrated opening-budget shares with a modest season-phase adjustment.",
+      "Schedule, injury, bye, role, and teammate-opportunity inputs are applied when supplied; missing fields use conservative defaults."
+    ],
+    recommendations
+  };
+}
+__name(analyzeFaab, "analyzeFaab");
+function flattenYahooMeta(value, out = {}) {
+  if (Array.isArray(value)) value.forEach((v) => flattenYahooMeta(v, out));
+  else if (value && typeof value === "object") Object.entries(value).forEach(([k, v]) => {
+    if (v == null || typeof v !== "object") out[k] = v;
+    else if (k === "name" && v.full) out.name = v.full;
+    else if (k === "bye_weeks" && v.week) out.bye_week = v.week;
+    else flattenYahooMeta(v, out);
+  });
+  return out;
+}
+__name(flattenYahooMeta, "flattenYahooMeta");
+function collectYahooEntities(value, entityName, found = []) {
+  if (Array.isArray(value)) value.forEach((v) => collectYahooEntities(v, entityName, found));
+  else if (value && typeof value === "object") Object.entries(value).forEach(([k, v]) => {
+    if (k === entityName) found.push(flattenYahooMeta(v));
+    collectYahooEntities(v, entityName, found);
+  });
+  return found;
+}
+__name(collectYahooEntities, "collectYahooEntities");
+async function yahooJson(token, endpoint) {
+  const r = await fetch(`https://fantasysports.yahooapis.com/fantasy/v2/${endpoint}${endpoint.includes("?") ? "&" : "?"}format=json`, { headers: { Authorization: `Bearer ${token}` } });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`Yahoo API ${r.status}: ${text.slice(0, 240)}`);
+  return JSON.parse(text);
+}
+__name(yahooJson, "yahooJson");
+async function resolveYahooLeagueKey(token, profile) {
+  if (profile.yahooLeagueKey) return profile.yahooLeagueKey;
+  const raw = await yahooJson(token, "users;use_login=1/games;game_keys=nfl/leagues");
+  const leagues = collectYahooEntities(raw, "league");
+  const id = String(profile.yahooLeagueId || "");
+  const byId = leagues.find((l) => id && String(l.league_key || "").endsWith(`.l.${id}`));
+  const byName = leagues.find((l) => String(l.name || "").toLowerCase() === String(profile.name || "").toLowerCase());
+  const hit = byId || byName;
+  if (!hit || !hit.league_key) throw new Error("Could not match this Draft Lab profile to a connected Yahoo league.");
+  return hit.league_key;
+}
+__name(resolveYahooLeagueKey, "resolveYahooLeagueKey");
+function yahooPlayerRows(raw) {
+  const seen = new Set();
+  return collectYahooEntities(raw, "player").filter((p) => p.player_key && !seen.has(p.player_key) && seen.add(p.player_key)).map((p) => ({
+    name: p.name || "Unknown",
+    pos: p.display_position || p.position || "",
+    team: p.editorial_team_abbr || "",
+    status: p.status || "",
+    bye_week: p.bye_week || "",
+    notes: p.injury_note || ""
+  }));
+}
+__name(yahooPlayerRows, "yahooPlayerRows");
+function fantasyProsLeagueKey(value) {
+  const raw = String(value || "").trim();
+  let candidate = raw;
+  try {
+    if (/^https?:\/\//i.test(raw)) candidate = new URL(raw).searchParams.get("key") || raw;
+  } catch {
+  }
+  return /^nfl~[0-9a-f-]{36}$/i.test(candidate) ? candidate : "";
+}
+__name(fantasyProsLeagueKey, "fantasyProsLeagueKey");
+function fantasyProsPlayerRow(player, slot) {
+  const ecrMatch = String(player && player.ecr || "").match(/(\d+)/);
+  return {
+    name: String(player && (player.full || player.player_name) || "").trim(),
+    pos: String(player && (player.real_position || player.player_pos) || "").toUpperCase(),
+    team: String(player && (player.real_team || player.player_team) || "").toUpperCase(),
+    week_proj: n(player && (player.original_proj ?? player.week_proj), 0),
+    ros_rank: ecrMatch ? Number(ecrMatch[1]) : "",
+    status: String(player && (player.injuryStatus || player.injury_status) || "").toUpperCase(),
+    schedule: n(player && player.sos, 3),
+    opponent: String(player && player.opponent || ""),
+    roster_slot: slot || String(player && player.position || ""),
+    source: "fantasypros"
+  };
+}
+__name(fantasyProsPlayerRow, "fantasyProsPlayerRow");
+function normalizeFantasyProsMatchup(raw, profile = {}) {
+  const matchup = raw && raw.matchup || {};
+  const candidates = [matchup.team1, matchup.team2].filter(Boolean);
+  const wanted = String(raw && raw.teamName || profile.meOwner || "").trim().toLowerCase();
+  const team = candidates.find((t) => String(t.name || "").trim().toLowerCase() === wanted) || candidates[0];
+  if (!team) throw new Error("FantasyPros returned no matchup roster for this league.");
+  const starters = (team.starters || []).map((p) => fantasyProsPlayerRow(p, p.position || "START"));
+  const bench = (team.bench || []).map((p) => fantasyProsPlayerRow(p, "BN"));
+  const roster = [...starters, ...bench].filter((p) => p.name);
+  if (!roster.length) throw new Error("FantasyPros returned an empty roster for this league.");
+  return {
+    fantasyProsLeagueKey: fantasyProsLeagueKey(raw && raw.key),
+    syncedAt: Date.now(),
+    teamName: team.name || raw.teamName || profile.meOwner || "",
+    roster,
+    available: [],
+    lineup: { starters: starters.map((p) => p.name), bench: bench.map((p) => p.name) }
+  };
+}
+__name(normalizeFantasyProsMatchup, "normalizeFantasyProsMatchup");
+async function fantasyProsSnapshot(key, profile) {
+  const validKey = fantasyProsLeagueKey(key);
+  if (!validKey) throw new Error("FantasyPros MyPlaybook needs a valid NFL league URL or key.");
+  const r = await fetch(`https://mpbnfl.fantasypros.com/json/matchup?key=${encodeURIComponent(validKey)}`, {
+    headers: { "User-Agent": "aeo-draft-lab/1.0", Accept: "application/json" }
+  });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`FantasyPros MyPlaybook returned ${r.status}: ${text.slice(0, 180)}`);
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new Error("FantasyPros MyPlaybook returned invalid JSON.");
+  }
+  return normalizeFantasyProsMatchup(raw, profile);
+}
+__name(fantasyProsSnapshot, "fantasyProsSnapshot");
+function mergePlayerRows(primary, enrichment) {
+  const extras = new Map((enrichment || []).map((p) => [String(p.name || "").trim().toLowerCase(), p]));
+  return (primary || []).map((p) => {
+    const extra = extras.get(String(p.name || "").trim().toLowerCase());
+    return extra ? { ...extra, ...p, week_proj: p.week_proj || extra.week_proj, ros_rank: p.ros_rank || extra.ros_rank, schedule: p.schedule || extra.schedule, opponent: p.opponent || extra.opponent, status: p.status || extra.status } : p;
+  });
+}
+__name(mergePlayerRows, "mergePlayerRows");
+async function yahooFaabSnapshot(env, kv, originUrl, profile) {
+  const token = await getYahooAccessToken(env, kv, originUrl);
+  if (!token) throw new Error("Yahoo account is not connected.");
+  const key = await resolveYahooLeagueKey(token, profile);
+  const teamsRaw = await yahooJson(token, `league/${key}/teams`);
+  const teams = collectYahooEntities(teamsRaw, "team").filter((t) => t.team_key);
+  const mine = teams.find((t) => String(t.is_owned_by_current_login) === "1") || teams.find((t) => String(t.name || "").toLowerCase() === String(profile.meOwner || "").toLowerCase());
+  if (!mine || !mine.team_key) throw new Error("Yahoo league matched, but the current user's team could not be identified.");
+  const [rosterRaw, waiversRaw] = await Promise.all([
+    yahooJson(token, `team/${mine.team_key}/roster`),
+    yahooJson(token, `league/${key}/players;status=W;sort=OR;count=100`)
+  ]);
+  const roster = yahooPlayerRows(rosterRaw);
+  const available = yahooPlayerRows(waiversRaw);
+  if (!available.length) throw new Error("Yahoo returned no players currently on waivers; the eliminated roster may not be released yet.");
+  return { yahooLeagueKey: key, syncedAt: Date.now(), roster, available };
+}
+__name(yahooFaabSnapshot, "yahooFaabSnapshot");
+async function syncLeagueSnapshot(env, kv, originUrl, profile) {
+  const config = await kv.get(leagueSourceConfigKey(profile.id), { type: "json" }) || {};
+  const previous = await kv.get(leagueSnapshotKey(profile.id), { type: "json" }) || {};
+  const sourceStatus = {};
+  let yahoo = null;
+  let fantasyPros = null;
+  if (config.yahooEnabled !== false) {
+    try {
+      yahoo = await yahooFaabSnapshot(env, kv, originUrl, profile);
+      sourceStatus.yahoo = { ok: true, syncedAt: yahoo.syncedAt };
+    } catch (e) {
+      sourceStatus.yahoo = { ok: false, error: e.message };
+    }
+  }
+  if (config.fantasyProsEnabled !== false && config.fantasyProsLeagueKey) {
+    try {
+      fantasyPros = await fantasyProsSnapshot(config.fantasyProsLeagueKey, profile);
+      sourceStatus.fantasypros = { ok: true, syncedAt: fantasyPros.syncedAt };
+    } catch (e) {
+      sourceStatus.fantasypros = { ok: false, error: e.message };
+    }
+  }
+  let roster = yahoo && yahoo.roster && yahoo.roster.length ? yahoo.roster : fantasyPros && fantasyPros.roster && fantasyPros.roster.length ? fantasyPros.roster : previous.roster || [];
+  if (fantasyPros && fantasyPros.roster && roster.length) roster = mergePlayerRows(roster, fantasyPros.roster);
+  const available = yahoo && yahoo.available && yahoo.available.length ? yahoo.available : previous.available || [];
+  const rosterSource = yahoo && yahoo.roster && yahoo.roster.length ? "yahoo" : fantasyPros && fantasyPros.roster && fantasyPros.roster.length ? "fantasypros" : previous.coverage && previous.coverage.roster || "saved";
+  const availabilitySource = yahoo && yahoo.available && yahoo.available.length ? "yahoo" : previous.coverage && previous.coverage.available || (available.length ? "saved" : "none");
+  if (!roster.length && !available.length) {
+    const failures = Object.entries(sourceStatus).filter(([, s]) => !s.ok).map(([name, s]) => `${name}: ${s.error}`).join("; ");
+    throw new Error(failures || "No configured data source returned league data.");
+  }
+  const snapshot = {
+    leagueId: profile.id,
+    leagueName: profile.name || "League",
+    syncedAt: Date.now(),
+    roster,
+    available,
+    lineup: fantasyPros && fantasyPros.lineup || previous.lineup || null,
+    coverage: { roster: rosterSource, available: availabilitySource, projections: fantasyPros ? "fantasypros" : previous.coverage && previous.coverage.projections || "embedded" },
+    sourceStatus
+  };
+  await kv.put(leagueSnapshotKey(profile.id), JSON.stringify(snapshot));
+  return snapshot;
+}
+__name(syncLeagueSnapshot, "syncLeagueSnapshot");
+async function saveInSeasonReport(kv, lg, report, me = null) {
+  const reportKey = me ? scoped(inSeasonReportKey(lg, report.id), me) : inSeasonReportKey(lg, report.id);
+  const reportsKey = me ? scoped(inSeasonReportsKey(lg), me) : inSeasonReportsKey(lg);
+  await kv.put(reportKey, JSON.stringify(report));
+  const idx = await kv.get(reportsKey, { type: "json" }) || [];
+  idx.unshift({ id: report.id, createdAt: report.createdAt, week: report.week, count: report.recommendations.length, top: report.recommendations.slice(0, 3).map((p) => `${p.name} $${p.recommendedBid}`).join(", ") });
+  await kv.put(reportsKey, JSON.stringify(idx.slice(0, 30)));
+  return report;
+}
+__name(saveInSeasonReport, "saveInSeasonReport");
+function reportEmailHtml(report) {
+  const h = /* @__PURE__ */ __name((v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]), "h");
+  const rows = report.recommendations.slice(0, 20).map((p) => `<tr><td>${h(p.name)}</td><td>${h(p.pos)}</td><td>$${p.recommendedBid}</td><td>$${p.projectedWinningBid}</td><td>$${p.stretchBid}</td><td>${h(p.reasons.join("; "))}</td></tr>`).join("");
+  return `<h1>${h(report.leagueName)} — Week ${report.week} FAAB</h1><p>Budget remaining: $${report.remainingBudget}. Calibration: ${h(report.calibrationVersion)}</p><table border="1" cellpadding="6" cellspacing="0"><thead><tr><th>Player</th><th>Pos</th><th>Bid</th><th>Projected win</th><th>Stretch</th><th>Why</th></tr></thead><tbody>${rows}</tbody></table><p>${h(report.assumptions.join(" "))}</p>`;
+}
+__name(reportEmailHtml, "reportEmailHtml");
+async function emailInSeasonReport(env, to, report) {
+  if (!env.RESEND_API_KEY || !env.FAAB_REPORT_FROM) return { sent: false, reason: "Email is not configured (RESEND_API_KEY and FAAB_REPORT_FROM are required)." };
+  if (!to) return { sent: false, reason: "No report email address is configured." };
+  const r = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: env.FAAB_REPORT_FROM, to: [to], subject: `${report.leagueName} Week ${report.week} FAAB recommendations`, html: reportEmailHtml(report) })
+  });
+  if (!r.ok) throw new Error(`Email provider returned ${r.status}: ${(await r.text()).slice(0, 240)}`);
+  return { sent: true };
+}
+__name(emailInSeasonReport, "emailInSeasonReport");
+function pacificParts(date = /* @__PURE__ */ new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "short", hour: "numeric", hour12: false }).formatToParts(date);
+  return Object.fromEntries(parts.map((p) => [p.type, p.value]));
+}
+__name(pacificParts, "pacificParts");
+async function runScheduledFaab(env) {
+  if (!env.MOCKS) return;
+  const local = pacificParts();
+  if (local.weekday !== "Tue" || n(local.hour, -1) !== 1) return;
+  const kv = env.MOCKS;
+  const list = await kv.list({ prefix: "league:" });
+  const profiles = (await Promise.all(list.keys.map((k) => kv.get(k.name, { type: "json" })))).filter((p) => p && p.leagueType === "guillotine");
+  const originUrl = new URL(env.PUBLIC_ORIGIN || "https://aeo-draft-lab.hkeseyan.workers.dev");
+  for (const profile of profiles) {
+    const state = await kv.get(inSeasonStateKey(profile.id), { type: "json" }) || {};
+    if (state.scheduleEnabled === false) continue;
+    const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(/* @__PURE__ */ new Date());
+    if (state.lastScheduledDate === dateKey) continue;
+    let input = { ...state };
+    try {
+      const snapshot = await syncLeagueSnapshot(env, kv, originUrl, profile);
+      input = { ...input, roster: snapshot.roster && snapshot.roster.length ? snapshot.roster : input.roster, available: snapshot.available && snapshot.available.length ? snapshot.available : input.available, dataSyncedAt: snapshot.syncedAt, dataCoverage: snapshot.coverage, dataSourceStatus: snapshot.sourceStatus };
+    } catch (e) {
+      input.dataSyncError = e.message;
+    }
+    if ((input.available && input.available.length) || String(input.availableCsv || "").trim()) {
+      const report = await saveInSeasonReport(kv, profile.id, analyzeFaab(input, profile));
+      if (state.emailEnabled) {
+        try {
+          report.email = await emailInSeasonReport(env, state.emailTo, report);
+          await kv.put(inSeasonReportKey(profile.id, report.id), JSON.stringify(report));
+        } catch (e) {
+          report.email = { sent: false, reason: e.message };
+          await kv.put(inSeasonReportKey(profile.id, report.id), JSON.stringify(report));
+        }
+      }
+    }
+    await kv.put(inSeasonStateKey(profile.id), JSON.stringify({ ...state, dataSyncedAt: input.dataSyncedAt || state.dataSyncedAt, dataCoverage: input.dataCoverage || state.dataCoverage, dataSourceStatus: input.dataSourceStatus || state.dataSourceStatus, dataSyncError: input.dataSyncError || "", lastScheduledDate: dateKey }));
+  }
+}
+__name(runScheduledFaab, "runScheduledFaab");
+async function runScheduledLeagueRefresh(env) {
+  if (!env.MOCKS) return;
+  const kv = env.MOCKS;
+  const list = await kv.list({ prefix: "league:" });
+  const profiles = (await Promise.all(list.keys.map((k) => kv.get(k.name, { type: "json" })))).filter(Boolean);
+  const originUrl = new URL(env.PUBLIC_ORIGIN || "https://aeo-draft-lab.hkeseyan.workers.dev");
+  for (const profile of profiles) {
+    const config = await kv.get(leagueSourceConfigKey(profile.id), { type: "json" }) || {};
+    if (config.enabled === false) continue;
+    if (!config.fantasyProsLeagueKey && !profile.yahooLeagueId && !profile.yahooLeagueKey && profile.leagueType !== "guillotine") continue;
+    try {
+      await syncLeagueSnapshot(env, kv, originUrl, profile);
+    } catch {
+    }
+  }
+}
+__name(runScheduledLeagueRefresh, "runScheduledLeagueRefresh");
 var worker_default = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -509,8 +1005,11 @@ var worker_default = {
           await kv.delete(setupKey(id));
           await kv.delete(historyKey(id));
           await kv.delete(mocksIndexKey(id));
+          await kv.delete(inSeasonStateKey(id));
+          await kv.delete(inSeasonReportsKey(id));
           const mockList = await kv.list({ prefix: `mock:${id}:` });
-          await Promise.all(mockList.keys.map((k) => kv.delete(k.name)));
+          const reportList = await kv.list({ prefix: `inseasonReport:${id}:` });
+          await Promise.all([...mockList.keys, ...reportList.keys].map((k) => kv.delete(k.name)));
           return J({ ok: true });
         }
         return J({ error: "method" }, 405);
@@ -666,6 +1165,154 @@ var worker_default = {
           return J({ error: "MFL import failed: " + e.message }, 502);
         }
       }
+      if (path === "/api/data-sources/sync") {
+        const denied = requireAdmin();
+        if (denied) return denied;
+        if (request.method !== "POST") return J({ error: "method" }, 405);
+        const profile = await kv.get(leagueProfileKey(lg), { type: "json" });
+        if (!profile) return J({ error: "league profile not found" }, 404);
+        try {
+          return J(await syncLeagueSnapshot(env, kv, url, profile), 201);
+        } catch (e) {
+          return J({ error: e.message }, 502);
+        }
+      }
+      if (path === "/api/data-sources") {
+        const denied = requireAdmin();
+        if (denied) return denied;
+        const configKey = leagueSourceConfigKey(lg);
+        if (request.method === "GET") {
+          const config = await kv.get(configKey, { type: "json" }) || {};
+          const snapshot = await kv.get(leagueSnapshotKey(lg), { type: "json" });
+          return J({
+            enabled: config.enabled !== false,
+            yahooEnabled: config.yahooEnabled !== false,
+            fantasyProsEnabled: config.fantasyProsEnabled !== false,
+            fantasyProsConfigured: !!config.fantasyProsLeagueKey,
+            syncedAt: snapshot && snapshot.syncedAt || null,
+            coverage: snapshot && snapshot.coverage || null,
+            sourceStatus: snapshot && snapshot.sourceStatus || null
+          });
+        }
+        if (request.method === "PUT") {
+          let b;
+          try {
+            b = await request.json();
+          } catch {
+            return J({ error: "bad json" }, 400);
+          }
+          const existing = await kv.get(configKey, { type: "json" }) || {};
+          const supplied = b.fantasyProsUrlOrKey || b.fantasyProsLeagueKey || "";
+          const parsed = supplied ? fantasyProsLeagueKey(supplied) : "";
+          if (supplied && !parsed) return J({ error: "Paste a valid FantasyPros NFL MyPlaybook league URL or nfl~ league key." }, 400);
+          const config = {
+            ...existing,
+            enabled: b.enabled == null ? existing.enabled !== false : !!b.enabled,
+            yahooEnabled: b.yahooEnabled == null ? existing.yahooEnabled !== false : !!b.yahooEnabled,
+            fantasyProsEnabled: b.fantasyProsEnabled == null ? existing.fantasyProsEnabled !== false : !!b.fantasyProsEnabled,
+            updatedAt: Date.now()
+          };
+          if (parsed) config.fantasyProsLeagueKey = parsed;
+          if (b.clearFantasyProsKey) delete config.fantasyProsLeagueKey;
+          await kv.put(configKey, JSON.stringify(config));
+          return J({ ok: true, fantasyProsConfigured: !!config.fantasyProsLeagueKey });
+        }
+        return J({ error: "method" }, 405);
+      }
+      if (path === "/api/league-data") {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const snapshot = await kv.get(leagueSnapshotKey(lg), { type: "json" });
+        return snapshot ? J(snapshot) : J({ error: "no league snapshot yet" }, 404);
+      }
+      if (path === "/api/inseason/state") {
+        const key = scoped(inSeasonStateKey(lg), me);
+        if (request.method === "GET") {
+          const state = await kv.get(key, { type: "json" }) || {};
+          return J({ ...state, emailDefault: state.emailTo || me.email || "" });
+        }
+        if (request.method === "PUT") {
+          let b;
+          try {
+            b = await request.json();
+          } catch {
+            return J({ error: "bad json" }, 400);
+          }
+          const state = {
+            ...b,
+            week: Math.max(1, n(b.week, 1)),
+            startingBudget: Math.max(1, n(b.startingBudget, 1e3)),
+            remainingBudget: Math.max(0, n(b.remainingBudget, 1e3)),
+            teamsAlive: Math.max(2, n(b.teamsAlive, 12)),
+            aggression: clamp(n(b.aggression, 0.8), 0.4, 1.1),
+            timezone: "America/Los_Angeles",
+            updatedAt: Date.now()
+          };
+          await kv.put(key, JSON.stringify(state));
+          return J(state);
+        }
+        return J({ error: "method" }, 405);
+      }
+      if (path === "/api/inseason/reports") {
+        const reportsKey = scoped(inSeasonReportsKey(lg), me);
+        if (request.method === "GET") return J(await kv.get(reportsKey, { type: "json" }) || []);
+        if (request.method === "POST") {
+          let b;
+          try {
+            b = await request.json();
+          } catch {
+            return J({ error: "bad json" }, 400);
+          }
+          const profile = await kv.get(leagueProfileKey(lg), { type: "json" });
+          if (!profile) return J({ error: "league profile not found" }, 404);
+          const stateKey = scoped(inSeasonStateKey(lg), me);
+          const saved = await kv.get(stateKey, { type: "json" }) || {};
+          let input = { ...saved, ...b };
+          if (b.syncSources || b.syncYahoo) {
+            const denied = requireAdmin();
+            if (denied) return denied;
+            try {
+              const snapshot = await syncLeagueSnapshot(env, kv, url, profile);
+              input = { ...input, roster: snapshot.roster && snapshot.roster.length ? snapshot.roster : input.roster, available: snapshot.available && snapshot.available.length ? snapshot.available : input.available, dataSyncedAt: snapshot.syncedAt, dataCoverage: snapshot.coverage, dataSourceStatus: snapshot.sourceStatus, dataSyncError: "" };
+            } catch (e) {
+              return J({ error: e.message, fallback: "Use the most recent saved snapshot or paste the roster and waiver pool CSV, then run without source sync." }, 502);
+            }
+          }
+          const report = await saveInSeasonReport(kv, lg, analyzeFaab(input, profile), me);
+          const nextState = { ...saved, ...b, dataSyncedAt: input.dataSyncedAt || saved.dataSyncedAt, dataCoverage: input.dataCoverage || saved.dataCoverage, dataSourceStatus: input.dataSourceStatus || saved.dataSourceStatus, dataSyncError: input.dataSyncError || "", updatedAt: Date.now() };
+          delete nextState.syncYahoo;
+          delete nextState.syncSources;
+          if (input.roster) nextState.roster = input.roster;
+          if (input.available) nextState.available = input.available;
+          await kv.put(stateKey, JSON.stringify(nextState));
+          return J(report, 201);
+        }
+        return J({ error: "method" }, 405);
+      }
+      if (/^\/api\/inseason\/reports\/[^/]+$/.test(path)) {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const id = decodeURIComponent(path.split("/").pop());
+        const report = await kv.get(scoped(inSeasonReportKey(lg, id), me), { type: "json" });
+        return report ? J(report) : J({ error: "report not found" }, 404);
+      }
+      if (path === "/api/inseason/email") {
+        if (request.method !== "POST") return J({ error: "method" }, 405);
+        let b;
+        try {
+          b = await request.json();
+        } catch {
+          return J({ error: "bad json" }, 400);
+        }
+        const idx = await kv.get(scoped(inSeasonReportsKey(lg), me), { type: "json" }) || [];
+        const id = b.id || idx[0] && idx[0].id;
+        if (!id) return J({ error: "no report to email" }, 404);
+        const report = await kv.get(scoped(inSeasonReportKey(lg, id), me), { type: "json" });
+        if (!report) return J({ error: "report not found" }, 404);
+        try {
+          return J(await emailInSeasonReport(env, b.to || me.email, report));
+        } catch (e) {
+          return J({ error: e.message }, 502);
+        }
+      }
       if (path === "/api/yahoo/status") {
         const denied = requireAdmin();
         if (denied) return denied;
@@ -737,9 +1384,19 @@ var worker_default = {
     }
     if (env.ASSETS) return env.ASSETS.fetch(request);
     return new Response("Not found", { status: 404 });
+  },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      await runScheduledLeagueRefresh(env);
+      await runScheduledFaab(env);
+    })());
   }
 };
 export {
+  analyzeFaab,
+  fantasyProsLeagueKey,
+  normalizeFantasyProsMatchup,
+  parseCsvObjects,
   worker_default as default
 };
 //# sourceMappingURL=worker.js.map

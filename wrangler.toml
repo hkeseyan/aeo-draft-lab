@@ -2,6 +2,13 @@ name = "aeo-draft-lab"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
+# Refresh configured league sources every four hours. Also run at both UTC
+# hours that can correspond to Tuesday 1:00am Pacific. The Worker checks local
+# time and an idempotency key, so exactly one FAAB report is produced through
+# both daylight- and standard-time weeks.
+[triggers]
+crons = ["17 */4 * * *", "0 8,9 * * 2"]
+
 [assets]
 directory = "./public"
 binding = "ASSETS"
