@@ -1014,6 +1014,51 @@ var worker_default = {
         }
         return J({ error: "method" }, 405);
       }
+      if (path === "/api/nhl/schedule") {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const start = url.searchParams.get("start") || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+        const days = Math.min(21, Math.max(1, Number(url.searchParams.get("days")) || 7));
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return J({ error: "start must be YYYY-MM-DD" }, 400);
+        const cacheKey = `nhl:sched:${start}:${days}`;
+        const cached = await kv.get(cacheKey, { type: "json" });
+        if (cached) return J(cached);
+        try {
+          // NHL's endpoint answers with one game-week per call and hands back the
+          // next week's start date, so walk it until `days` are covered. gameType 2
+          // is regular season — preseason and playoffs don't score in fantasy.
+          const byDate = {};
+          let cursor = start;
+          let seasonStart = null;
+          for (let i = 0; i < 4 && Object.keys(byDate).length < days; i++) {
+            const r = await fetch(`https://api-web.nhle.com/v1/schedule/${cursor}`);
+            if (!r.ok) return J({ error: "NHL API returned " + r.status }, 502);
+            const d = await r.json();
+            if (seasonStart === null) seasonStart = d.regularSeasonStartDate || null;
+            (d.gameWeek || []).forEach((day) => {
+              if (byDate[day.date]) return;
+              byDate[day.date] = (day.games || []).filter((g) => g.gameType === 2).map((g) => [g.awayTeam && g.awayTeam.abbrev, g.homeTeam && g.homeTeam.abbrev]);
+            });
+            if (!d.nextStartDate || d.nextStartDate === cursor) break;
+            cursor = d.nextStartDate;
+          }
+          const dates = Object.keys(byDate).sort().slice(0, days);
+          const teams = {};
+          const dayCounts = {};
+          dates.forEach((date) => {
+            const games = byDate[date] || [];
+            dayCounts[date] = games.length;
+            games.forEach((pair) => pair.forEach((ab) => {
+              if (!ab) return;
+              (teams[ab] = teams[ab] || []).push(date);
+            }));
+          });
+          const out = { start, seasonStart, days: dates, dayCounts, teams };
+          await kv.put(cacheKey, JSON.stringify(out), { expirationTtl: 6 * 60 * 60 });
+          return J(out);
+        } catch (e) {
+          return J({ error: "NHL schedule fetch failed: " + e.message }, 502);
+        }
+      }
       if (path.startsWith("/api/import/sleeper/")) {
         const denied = requireAdmin();
         if (denied) return denied;

@@ -9,6 +9,8 @@
     --bg:#0f1420; --panel:#161d2e; --panel2:#1d2739; --line:#2a3550; --ink:#e8edf7;
     --muted:#93a1bd; --accent:#4f8cff; --accent2:#22c55e; --warn:#f59e0b; --bad:#ef4444;
     --qb:#f97066; --rb:#34d399; --wr:#60a5fa; --te:#fbbf24; --k:#c084fc; --dst:#94a3b8;
+    /* Hockey. Same palette roles as football so the board reads identically. */
+    --posc:#f97066; --poslw:#34d399; --posrw:#60a5fa; --posd:#fbbf24; --posg:#c084fc;
     --me:#3b2f6b;
   }
   *{box-sizing:border-box}
@@ -48,6 +50,11 @@
   .pos{display:inline-block;min-width:30px;text-align:center;border-radius:5px;font-size:11px;font-weight:700;padding:1px 5px;color:#0b0f18}
   .pos.QB{background:var(--qb)} .pos.RB{background:var(--rb)} .pos.WR{background:var(--wr)}
   .pos.TE{background:var(--te)} .pos.K{background:var(--k)} .pos.DST{background:var(--dst)}
+  .pos.C{background:var(--posc)} .pos.LW{background:var(--poslw)} .pos.RW{background:var(--posrw)}
+  .pos.D{background:var(--posd)} .pos.G{background:var(--posg)}
+  .sportbar{display:inline-flex;gap:2px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:2px}
+  .sportbar button{background:transparent;border:none;color:var(--muted);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}
+  .sportbar button.active{background:var(--accent);color:#fff}
   .val-good{color:var(--accent2);font-weight:700} .val-bad{color:var(--bad)}
   /* Auction scarcity tiers: how much of the position that is left is still worth
      real money. Boundaries are detected from the remaining pool, never fixed
@@ -121,6 +128,7 @@
 <body>
 <header>
   <h1 id="leagueTitle">🏈 AEO-Keepers · Draft Lab</h1>
+  <span class="sportbar" id="sportBar"></span>
   <select id="leagueSelect"></select>
   <span class="tag" id="leagueTag1">12-team · Half-PPR · Snake · Slot 6</span>
   <span class="tag" id="leagueTag2">Draft Sep 8 · Keepers Sep 1</span>
@@ -131,6 +139,7 @@
     <button data-view="teams">Teams & Keepers</button>
     <button data-view="trades">Trades</button>
     <button data-view="mocks">Mocks</button>
+    <button data-view="radar">Add Radar</button>
     <button data-view="lab">Strategy Lab</button>
     <button data-view="data">Data</button>
     <button data-view="leagues">Leagues</button>
@@ -166,7 +175,6 @@
           <div class="row" style="margin-bottom:8px">
             <select id="posFilter">
               <option value="ALL">All positions</option>
-              <option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>K</option><option>DST</option>
             </select>
             <input type="text" id="search" placeholder="search player…" style="flex:1;min-width:120px">
             <span class="legend muted">
@@ -230,7 +238,6 @@
             <div class="row" style="margin-bottom:8px">
               <select id="auctionPosFilter">
                 <option value="ALL">All positions</option>
-                <option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>K</option><option>DST</option>
               </select>
               <input type="text" id="auctionSearch" placeholder="search player…" style="flex:1;min-width:120px">
               <span class="small muted" id="auctionPosCounts"></span>
@@ -286,7 +293,7 @@
       </div>
       <div class="scroll" style="max-height:340px">
         <table id="tendTable">
-          <thead><tr><th>Use</th><th>Owner</th><th>QB</th><th>RB</th><th>WR</th><th>TE</th></tr></thead>
+          <thead><tr id="tendHead"><th>Use</th><th>Owner</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -410,6 +417,40 @@
   </section>
 
   <!-- STRATEGY LAB -->
+  <!-- ADD RADAR — daily pickup shortlist, for daily-lineup sports -->
+  <section class="view" id="view-radar">
+    <div class="card">
+      <h2>Add radar — who to pick up</h2>
+      <p class="small muted">Our own shortlist, not a republished waiver list. Every player is scored on
+        <b>how many games their team plays</b> in the window and <b>how many fall on a light night</b> —
+        when few teams are playing, so a bench spot is actually free to start them — multiplied by what
+        they project to score per game under <i>this league's</i> point values.</p>
+      <div class="row">
+        <label class="small">From <input type="date" id="radarStart"></label>
+        <label class="small">Window <select id="radarDays">
+          <option value="1">Today</option>
+          <option value="3">3 days</option>
+          <option value="7" selected>7 days</option>
+          <option value="14">14 days</option>
+        </select></label>
+        <label class="small">Light night ≤ <input type="number" id="radarLight" value="8" min="2" max="16" style="width:58px"> games</label>
+        <label class="small">Assume top <input type="number" id="radarRostered" value="160" min="0" style="width:68px"> are rostered</label>
+        <button class="btn" id="radarRefresh">Refresh schedule</button>
+        <span class="muted small" id="radarStatus"></span>
+      </div>
+      <div class="row" id="radarRules" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <div class="scroll">
+        <table id="radarTable">
+          <thead><tr><th>#</th><th>Pos</th><th>Player</th><th>Team</th><th>Games</th><th>Light</th><th>FP/G</th><th>Window FP</th><th>Opportunity</th></tr></thead>
+          <tbody><tr><td colspan="9" class="muted small">Pick a date and hit <b>Refresh schedule</b>.</td></tr></tbody>
+        </table>
+      </div>
+      <p class="small muted" id="radarNote" style="margin-top:8px"></p>
+    </div>
+  </section>
+
   <section class="view" id="view-lab">
     <div class="card">
       <h2>Strategy Lab — compare draft paths</h2>
@@ -523,6 +564,7 @@
         <label class="small">Name <input type="text" id="lgName" style="min-width:200px"></label>
         <label class="small">Teams <input type="number" id="lgTeams" min="2" max="32" style="width:70px"></label>
         <label class="small">Rounds <input type="number" id="lgRounds" min="1" max="40" style="width:70px" title="Total draft rounds = starters + bench. There is no separate bench-count field: bench is however many rounds are left over after starters are filled."></label>
+        <label class="small">Sport <select id="lgSport"><option value="nfl">🏈 NFL</option><option value="nhl">🏒 NHL</option></select></label>
         <label class="small">Draft type <select id="lgDraftType"><option value="snake">Snake</option><option value="linear">Linear (no snake)</option><option value="auction">Auction</option></select></label>
         <label class="small"><input type="checkbox" id="lgSuperflex"> Superflex</label>
       </div>
@@ -1673,6 +1715,457 @@ Hovo|Travis Hunter|SHEET|14`;
 // Hovo's confirmed Fantastic draft plan. This is kept separate from the general
 // Market $ and Target $ layers: these numbers are roster-fit ceilings for the
 // actual $89 / eight-open-slot build after the keeper deadline.
+// ---------- SPORTS ----------
+// Everything that used to be hardcoded football. A league profile names its sport
+// (`sport:'nfl'` when absent, so every existing football profile keeps working
+// untouched) and these packs supply the position list, colours, the depth-cap rule
+// and the late-round quirk only football has. Adding a sport is adding an entry
+// here plus a league profile — the draft engine itself doesn't change.
+const SPORTS = {
+  nfl: {
+    id:'nfl', label:'NFL', icon:'\u{1F3C8}',
+    positions:['QB','RB','WR','TE','K','DST'],
+    tendencyPositions:['QB','RB','WR','TE'],
+    flexDefault:['RB','WR','TE'],
+    posAlias:{DEF:'DST'},
+    // Football hoards RB/WR and nothing else.
+    depthCap:(pos,base)=>(pos==='RB'||pos==='WR')?base+3:base+1,
+    // Kickers and defences taken early is the one quirk the rival model needs to
+    // know about; no other sport here has an equivalent, hence the empty list below.
+    lateRoundPositions:['K','DST'],
+    dailyLineups:false,   // weekly lineups: nothing to decide day to day
+    auctionPosMult:{QB:0.72,RB:1.08,WR:1.0,TE:0.88,K:0.12,DST:0.16},
+    auctionPosMultSuperflex:{QB:1.0},
+  },
+  nhl: {
+    id:'nhl', label:'NHL', icon:'\u{1F3D2}',
+    positions:['C','LW','RW','D','G'],
+    tendencyPositions:['C','LW','RW','D','G'],
+    flexDefault:[],   // Yahoo's default hockey league has no Util slot at all
+    posAlias:{L:'LW',R:'RW',LEFTWING:'LW',RIGHTWING:'RW',CENTER:'C',GOALIE:'G'},
+    // Hockey benches are shallow (4 spots in Yahoo's default) and every skater
+    // slot starts daily, so hoarding past a starter + 2 wastes the bench. Goalies
+    // are tighter still: a third goalie almost never starts.
+    depthCap:(pos,base)=>pos==='G'?base+1:base+2,
+    lateRoundPositions:[],
+    dailyLineups:true,    // daily lineups + a weekly add cap: the Add Radar applies
+    auctionPosMult:{C:1.0,LW:0.95,RW:0.95,D:0.9,G:1.05},
+  },
+};
+const SPORT_ORDER=['nfl','nhl'];
+let SPORT=SPORTS.nfl;
+function sportOf(profile){ return SPORTS[(profile&&profile.sport)||'nfl']||SPORTS.nfl; }
+
+// 2026-27 NHL pool. Built from the NHL's own public stats API (2025-26 regular
+// season) and scored through Yahoo's default point values. Per-game rates are
+// shrunk toward the positional mean by games played, so a short call-up stint
+// can't out-rank a full season on rate alone, then multiplied by projected games.
+// `adp`/`ecr` are our projection rank, NOT market ADP — there is no free NHL ADP
+// feed, so rivals currently draft to our board rather than to a real market.
+const PLAYERS_CSV_NHL = `
+name,pos,team,adp,ecr,proj,tier,gp,toi,g,a,pm,ppp,sog,blk,hit,w,sv,ga,sho,nhl_id
+Nathan MacKinnon,C,COL,1,1,922.3,1,75,22.3,49.7,69.4,53.4,28.1,328.1,32.8,60.0,,,,,8477492
+Connor McDavid,C,EDM,2,2,872.9,1,75,23.0,43.9,82.3,15.5,49.4,279.9,27.4,36.6,,,,,8478402
+Nikita Kucherov,RW,TBL,3,3,844.6,1,73,20.3,42.3,82.6,41.3,35.5,221.9,27.9,34.6,,,,,8476453
+Macklin Celebrini,C,SJS,4,4,761.1,1,75,21.3,41.2,64.0,7.3,30.2,262.5,48.5,48.5,,,,,8484801
+Jason Robertson,LW,DAL,5,5,728.5,1,75,20.3,41.2,46.6,20.1,37.5,268.9,31.1,43.9,,,,,8480027
+Martin Necas,C,COL,6,6,695.6,1,74,21.5,36.1,58.8,44.6,22.8,195.4,24.7,80.6,,,,,8480039
+Nick Suzuki,C,MTL,7,7,691.5,1,75,20.8,26.5,65.9,33.8,39.3,167.4,56.7,56.7,,,,,8480018
+Cole Caufield,RW,MTL,8,8,689.8,1,75,18.2,47.2,34.3,26.9,26.9,238.9,19.4,46.3,,,,,8481540
+Matt Boldy,LW,MIN,9,9,683.4,1,73,20.6,40.3,41.3,17.3,28.8,244.0,55.7,57.6,,,,,8481557
+David Pastrnak,RW,BOS,10,10,680.8,1,73,20.7,27.5,67.3,3.8,31.3,247.4,30.3,81.5,,,,,8477956
+Evan Bouchard,D,EDM,11,11,679.5,1,75,24.7,19.2,67.7,22.9,30.2,202.1,92.4,26.5,,,,,8480803
+Jack Eichel,C,VGK,12,12,675.4,1,72,21.2,26.3,61.3,22.4,27.2,253.0,38.9,34.1,,,,,8478403
+Kirill Kaprizov,LW,MIN,13,13,673.0,1,74,22.1,42.7,41.7,9.5,30.4,255.2,25.6,49.3,,,,,8478864
+Leon Draisaitl,C,EDM,14,14,663.8,1,67,21.6,36.1,63.9,13.4,43.3,191.7,15.5,35.0,,,,,8477934
+Cale Makar,D,COL,15,15,652.8,1,72,24.8,19.2,56.6,30.7,27.8,191.0,113.3,33.6,,,,,8480069
+Alex DeBrincat,RW,DET,16,16,652.2,1,75,18.5,37.5,40.2,7.3,21.0,262.5,35.7,34.8,,,,,8479337
+Logan Thompson,G,WSH,17,17,646.4,1,63,0,,,,,,,,33.7,1571.7,152.1,4.3,8480313
+Andrei Vasilevskiy,G,TBL,18,18,644.4,1,63,0,,,,,,,,42.4,1469.6,143.4,2.2,8476883
+Zach Werenski,D,CBJ,19,19,635.3,1,72,26.6,21.1,56.6,6.7,20.2,249.6,90.2,28.8,,,,,8478460
+Jake Guentzel,C,TBL,20,20,627.3,1,75,20.2,35.2,46.3,12.0,27.8,203.7,38.0,36.1,,,,,8477404
+Jeremy Swayman,G,BOS,21,21,617.9,2,61,0,,,,,,,,34.4,1581.6,161.9,2.2,8480280
+Clayton Keller,RW,UTA,22,22,617.8,2,75,19.1,23.8,56.7,19.2,24.7,205.8,29.3,7.3,,,,,8479343
+Wyatt Johnston,C,DAL,23,23,617.8,2,75,20.1,41.2,37.5,-4.6,38.4,188.4,50.3,51.2,,,,,8482740
+Kyle Connor,LW,WPG,24,24,616.0,2,75,21.5,35.7,48.5,-1.8,17.4,250.6,17.4,32.9,,,,,8478398
+Ilya Sorokin,G,NYI,25,25,615.4,2,61,0,,,,,,,,32.2,1537.2,159.7,7.8,8478009
+Tage Thompson,C,BUF,26,26,612.3,2,75,19.2,37.0,38.0,-5.6,22.2,251.9,44.4,78.7,,,,,8479420
+Mark Scheifele,C,WPG,27,27,606.1,2,75,21.5,32.9,61.3,0.0,20.1,160.1,43.0,29.3,,,,,8476460
+Brandon Hagel,LW,TBL,28,28,602.1,2,70,19.8,35.5,37.5,33.5,11.8,211.0,37.5,41.4,,,,,8479542
+Jack Hughes,C,NJD,29,29,591.4,2,65,21.3,28.8,53.3,0.0,24.5,243.0,34.1,4.3,,,,,8481559
+Igor Shesterkin,G,NYR,30,30,588.7,2,59,0,,,,,,,,28.9,1502.8,145.8,1.2,8478048
+Mark Stone,RW,VGK,31,31,588.0,2,65,19.2,30.3,48.8,28.2,29.2,140.8,50.9,33.6,,,,,8475913
+Dylan Guenther,RW,UTA,32,32,587.2,2,74,17.4,37.5,30.9,6.6,22.5,226.7,26.2,61.8,,,,,8482699
+Tim Stützle,C,OTT,33,33,586.8,2,75,20.3,31.9,45.9,6.6,27.2,181.9,41.2,118.1,,,,,8482116
+Jet Greaves,G,CBJ,34,34,583.4,2,60,0,,,,,,,,28.4,1524.0,154.9,2.2,8482982
+Darren Raddysh,D,TBL,35,35,583.3,2,71,22.7,21.4,46.7,20.4,25.3,206.2,67.1,65.2,,,,,8478178
+Cutter Gauthier,LW,ANA,36,36,578.4,2,73,17.3,39.4,26.9,-1.9,18.2,273.8,19.2,61.5,,,,,8483445
+Karel Vejmelka,G,UTA,37,37,576.4,2,65,0,,,,,,,,38.6,1480.8,171.6,2.0,8478872
+Jake Oettinger,G,DAL,38,38,575.8,2,61,0,,,,,,,,39.5,1394.0,155.9,4.5,8479979
+Lane Hutson,D,MTL,39,39,575.6,2,75,23.8,11.0,60.4,32.9,18.3,113.4,125.3,28.4,,,,,8483457
+Jakob Chychrun,D,WSH,40,40,575.4,2,75,23.3,24.4,31.9,18.8,16.9,207.2,106.9,54.4,,,,,8479345
+Moritz Seider,D,DET,41,41,574.0,3,75,25.7,9.1,45.7,13.7,25.6,171.0,164.6,117.1,,,,,8481542
+Alex Tuch,RW,BUF,42,42,573.5,3,74,19.0,30.9,30.9,22.5,8.4,182.7,84.3,76.8,,,,,8477949
+John Gibson,G,DET,43,43,572.9,3,63,0,,,,,,,,32.1,1455.6,159.2,4.4,8476434
+Filip Forsberg,LW,NSH,44,44,569.5,3,75,18.9,36.6,32.0,-1.8,23.8,225.0,30.2,113.4,,,,,8476887
+Scott Wedgewood,G,COL,45,45,569.3,3,53,0,,,,,,,,36.5,1186.0,101.3,4.7,8475809
+Filip Gustavsson,G,MIN,46,46,567.6,3,58,0,,,,,,,,32.5,1444.2,154.3,4.6,8479406
+Adrian Kempe,RW,LAK,47,47,567.4,3,75,19.3,33.3,34.3,13.0,11.1,209.3,36.1,117.6,,,,,8477960
+Rasmus Dahlin,D,BUF,48,48,567.3,3,73,24.2,18.0,52.1,17.1,20.9,183.9,74.9,63.5,,,,,8480839
+Nick Schmaltz,C,UTA,49,49,562.6,3,75,19.7,30.2,37.5,15.5,18.3,188.4,47.6,21.0,,,,,8477951
+Spencer Knight,G,CHI,50,50,561.2,3,62,0,,,,,,,,21.4,1609.7,174.7,3.4,8481519
+Juraj Slafkovský,LW,MTL,51,51,557.4,3,75,18.5,27.4,39.3,8.2,25.6,164.6,71.3,96.0,,,,,8483515
+Mitch Marner,RW,VGK,52,52,557.1,3,75,20.0,22.2,51.9,15.7,22.2,152.8,42.6,22.2,,,,,8478483
+Juuse Saros,G,NSH,53,53,555.3,3,64,0,,,,,,,,30.4,1647.7,196.3,0.0,8477424
+Artemi Panarin,LW,LAK,54,54,554.0,3,74,20.8,26.6,53.1,-6.6,21.8,212.5,15.2,10.4,,,,,8478550
+Mika Zibanejad,C,NYR,55,55,553.4,3,75,20.9,31.5,40.7,-18.5,32.4,199.1,46.3,97.2,,,,,8476459
+Sebastian Aho,C,CAR,56,56,553.3,3,74,19.6,25.3,49.6,10.3,25.3,182.7,21.5,59.0,,,,,8478427
+Dylan Larkin,C,DET,57,57,552.1,3,72,20.2,33.1,32.1,2.9,23.4,222.8,32.1,44.8,,,,,8477946
+Quinn Hughes,D,MIN,58,58,551.2,3,72,27.7,6.8,67.1,-3.9,33.1,181.9,84.6,6.8,,,,,8480800
+Seth Jarvis,RW,CAR,59,59,551.0,3,70,18.9,31.5,33.5,5.9,20.7,220.8,26.6,79.9,,,,,8482093
+Kirill Marchenko,RW,CBJ,60,60,550.5,3,73,18.9,25.9,38.4,6.7,22.1,209.4,38.4,58.6,,,,,8480893
+Bryan Rust,RW,PIT,61,61,546.0,4,71,19.9,28.6,35.5,0.0,23.7,180.5,70.0,34.5,,,,,8475810
+Matthew Schaefer,D,NYI,62,62,544.9,4,75,24.7,21.0,32.9,11.9,16.5,203.0,101.5,36.6,,,,,8485366
+Mikko Rantanen,RW,DAL,63,63,543.1,4,67,20.2,23.0,57.6,0.0,35.6,145.5,31.4,50.2,,,,,8478420
+Dan Vladar,G,PHI,64,64,537.8,4,59,0,,,,,,,,32.9,1318.4,137.3,0.0,8478435
+Joel Hofer,G,STL,65,65,535.8,4,53,0,,,,,,,,27.7,1310.0,131.3,6.9,8480981
+Auston Matthews,C,TOR,66,66,535.5,4,65,20.8,29.2,28.2,-4.3,13.0,245.9,87.8,45.5,,,,,8479318
+Connor Bedard,C,CHI,67,67,533.5,4,69,20.9,30.0,45.0,-18.0,21.0,226.0,27.0,31.0,,,,,8484144
+Pavel Dorofeyev,RW,VGK,68,68,532.9,4,75,17.6,33.8,24.7,-2.7,27.4,210.4,25.6,24.7,,,,,8481604
+Brock Nelson,C,COL,69,69,531.8,4,75,19.7,30.6,29.6,13.9,16.7,172.2,60.2,35.2,,,,,8475754
+Dustin Wolf,G,CGY,70,70,529.7,4,61,0,,,,,,,,24.6,1499.3,169.1,2.1,8481692
+Andrei Svechnikov,RW,CAR,71,71,528.1,4,74,17.0,29.0,36.5,0.9,27.2,190.2,15.0,138.6,,,,,8480830
+Bo Horvat,C,NYI,72,72,526.2,4,69,20.8,31.5,26.4,8.1,16.2,229.3,38.6,51.8,,,,,8477500
+Nikolaj Ehlers,LW,CAR,73,73,523.8,4,75,16.6,23.8,41.2,7.3,26.5,189.3,22.0,19.2,,,,,8477940
+William Nylander,RW,TOR,74,74,523.5,4,67,19.4,30.9,50.5,-14.4,22.7,160.8,26.8,13.4,,,,,8477939
+Miro Heiskanen,D,DAL,75,75,523.4,4,73,25.5,8.5,51.2,8.5,26.5,140.3,125.1,19.9,,,,,8480036
+Sidney Crosby,C,PIT,76,76,522.0,4,69,19.2,29.4,45.7,0.0,23.3,162.4,30.4,60.9,,,,,8471675
+Connor Hellebuyck,G,WPG,77,77,521.2,4,63,0,,,,,,,,25.4,1530.8,179.1,0.0,8476945
+Jake Sanderson,D,OTT,78,78,521.0,4,68,24.8,14.2,40.6,16.2,22.3,149.2,129.9,29.4,,,,,8482105
+Ryan O'Reilly,C,NSH,79,79,518.6,4,75,20.4,23.1,45.4,7.4,18.5,142.6,61.1,15.7,,,,,8475158
+Brady Tkachuk,LW,OTT,80,80,518.4,4,65,17.0,23.8,40.1,4.3,21.7,239.4,20.6,175.5,,,,,8480801
+Leo Carlsson,C,ANA,81,81,516.8,5,70,19.2,29.0,38.0,4.0,18.0,193.0,29.0,14.0,,,,,8484153
+Jakub Dobes,G,MTL,82,82,515.7,5,53,0,,,,,,,,35.7,1318.8,144.2,0.0,8482487
+Lucas Raymond,LW,DET,83,83,515.1,5,75,18.8,23.4,47.8,0.9,25.3,162.2,27.2,40.3,,,,,8482078
+Mathew Barzal,C,NYI,84,84,514.9,5,75,20.7,17.6,49.1,9.3,18.5,170.4,46.3,26.9,,,,,8478445
+Nico Hischier,C,NJD,85,85,513.0,5,75,20.7,25.6,34.8,-5.5,21.0,193.0,56.7,53.0,,,,,8480002
+Brock Faber,D,MIN,86,86,511.5,5,75,24.7,14.1,33.8,16.9,10.3,162.2,138.8,30.9,,,,,8482122
+Travis Konecny,RW,PHI,87,87,509.5,5,73,19.1,25.6,38.9,13.3,13.3,159.3,36.0,102.4,,,,,8478439
+Erik Karlsson,D,PIT,88,88,508.3,5,72,23.6,14.4,49.0,7.7,25.0,169.0,61.4,19.2,,,,,8474578
+Tom Wilson,RW,WSH,89,89,508.2,5,71,19.5,29.6,31.6,14.8,11.8,150.9,52.3,176.5,,,,,8476880
+Charlie McAvoy,D,BOS,90,90,506.4,5,69,24.4,11.0,50.0,13.0,23.0,111.0,129.0,79.0,,,,,8479325
+Drake Batherson,RW,OTT,91,91,503.8,5,74,17.4,30.9,35.6,-6.6,28.1,156.4,20.6,114.3,,,,,8480208
+Mikhail Sergachev,D,UTA,92,92,503.2,5,74,24.3,9.5,46.5,1.9,24.7,150.8,118.6,36.1,,,,,8479410
+Lukas Dostal,G,ANA,93,93,502.8,5,61,0,,,,,,,,32.7,1464.0,184.1,0.0,8480843
+Morgan Geekie,C,BOS,94,94,502.5,5,75,17.4,36.1,26.9,-4.6,22.2,167.6,31.5,101.9,,,,,8479987
+Steven Stamkos,C,NSH,95,95,499.4,5,75,17.8,38.4,22.0,-15.5,23.8,188.4,32.9,81.4,,,,,8474564
+Alex Ovechkin,LW,WSH,96,96,496.9,5,75,17.4,29.3,29.3,-4.6,17.4,223.2,14.6,122.6,,,,,8471214
+John Carlson,D,ANA,97,97,495.4,5,70,23.2,13.8,45.4,8.9,13.8,150.8,104.5,25.6,,,,,8474590
+Jesper Wallstedt,G,MIN,98,98,490.5,5,46,0,,,,,,,,23.7,1227.5,114.3,5.3,8482661
+Noah Dobson,D,MTL,99,99,489.4,5,75,22.5,11.2,32.8,4.7,6.6,148.1,176.2,58.1,,,,,8480865
+Joey Daccord,G,SEA,100,100,487.2,5,56,0,,,,,,,,23.8,1397.6,162.0,2.4,8478916
+Linus Ullmark,G,OTT,101,101,486.9,6,58,0,,,,,,,,33.1,1263.0,155.1,3.6,8476999
+Rasmus Andersson,D,VGK,102,102,484.5,6,75,23.2,15.7,27.8,3.7,12.0,164.8,138.9,34.3,,,,,8478397
+Evgeni Malkin,C,PIT,103,103,484.5,6,62,17.6,21.0,46.5,14.4,24.4,163.9,18.8,26.6,,,,,8471215
+Anthony Mantha,RW,PIT,104,104,483.1,6,75,15.2,30.6,28.7,9.3,12.0,140.7,37.0,48.1,,,,,8477511
+Roman Josi,D,NSH,105,105,481.6,6,69,24.9,13.2,42.6,-15.2,24.4,183.7,102.5,24.4,,,,,8474600
+Brandon Bussi,G,CAR,106,106,476.5,6,52,0,,,,,,,,41.3,1088.0,129.3,2.7,8483548
+Sam Reinhart,C,FLA,107,107,476.3,6,67,21.3,30.4,33.5,-18.8,26.2,173.8,41.9,61.8,,,,,8477933
+Ukko-Pekka Luukkonen,G,BUF,108,108,475.3,6,48,0,,,,,,,,30.2,1160.2,116.6,1.4,8480045
+Joseph Woll,G,TOR,109,109,473.9,6,51,0,,,,,,,,19.6,1434.5,162.2,2.6,8479361
+Viktor Arvidsson,LW,BOS,110,110,472.6,6,69,14.6,25.0,29.0,20.0,9.0,175.0,36.0,24.0,,,,,8478042
+Josh Morrissey,D,WPG,111,111,472.4,6,73,24.7,13.3,38.9,5.7,15.2,138.4,111.9,34.1,,,,,8477504
+Trevor Zegras,C,PHI,112,112,472.3,6,75,18.7,24.1,38.0,0.0,21.3,154.6,25.9,42.6,,,,,8481533
+Joel Eriksson Ek,C,MIN,113,113,471.6,6,70,19.1,19.0,32.0,16.0,16.0,194.0,34.0,106.0,,,,,8478493
+Brandt Clarke,D,LAK,114,114,469.4,6,75,19.8,7.3,29.3,10.1,11.9,145.4,169.2,27.4,,,,,8482730
+Jackson LaCombe,D,ANA,115,115,468.8,6,75,24.2,9.1,43.9,-1.8,15.5,143.6,117.1,67.7,,,,,8481605
+Zach Hyman,LW,EDM,116,116,467.8,6,63,20.0,33.7,22.8,14.1,16.3,172.7,19.6,60.8,,,,,8475786
+Dylan Cozens,C,OTT,117,117,467.8,6,75,17.0,25.6,28.4,-6.4,26.5,187.5,22.0,196.6,,,,,8481528
+Stuart Skinner,G,PIT,118,118,464.5,6,59,0,,,,,,,,27.1,1327.5,167.6,2.4,8479973
+Troy Terry,RW,ANA,119,119,464.3,6,65,18.3,20.2,40.5,11.7,12.8,171.6,17.0,2.1,,,,,8478873
+Timo Meier,RW,NJD,120,120,461.2,6,73,18.5,22.8,19.0,-15.2,9.5,255.0,50.2,124.2,,,,,8478414
+Jimmy Snuggerud,RW,STL,121,121,461.1,7,70,16.7,21.0,30.0,16.0,9.0,169.0,39.0,71.0,,,,,8483516
+Dylan Holloway,LW,STL,122,122,460.9,7,64,18.3,23.9,31.5,14.1,8.7,175.7,44.5,139.9,,,,,8482077
+Mattias Samuelsson,D,BUF,123,123,460.9,7,74,22.8,12.3,26.6,38.9,0.0,103.4,146.1,125.2,,,,,8480807
+Alex Lyon,G,BUF,124,124,460.6,7,47,0,,,,,,,,26.1,1159.3,120.1,3.9,8479312
+Rickard Rakell,RW,PIT,125,125,460.0,7,65,18.9,26.0,26.0,-2.2,17.3,179.8,46.6,76.9,,,,,8476483
+Darcy Kuemper,G,LAK,126,126,459.4,7,59,0,,,,,,,,22.4,1298.0,158.1,3.5,8475311
+Pavel Zacha,C,BOS,127,127,458.8,7,74,16.8,28.5,33.2,3.8,20.9,124.3,24.7,60.7,,,,,8478401
+Jesper Bratt,LW,NJD,128,128,457.6,7,75,18.8,20.1,44.8,-10.1,18.3,162.8,22.0,67.7,,,,,8479407
+Gabriel Vilardi,C,WPG,129,129,457.2,7,75,18.7,27.4,35.7,-11.0,22.0,137.2,32.0,18.3,,,,,8480014
+Owen Tippett,RW,PHI,130,130,457.2,7,75,16.8,25.9,21.3,-5.6,6.5,203.7,46.3,153.7,,,,,8480015
+John Tavares,C,TOR,131,131,456.3,7,75,18.2,28.4,36.6,-25.6,19.2,175.6,22.0,67.7,,,,,8475166
+Jordan Eberle,RW,SEA,132,132,456.0,7,75,18.5,24.4,27.2,1.9,15.0,157.5,40.3,51.6,,,,,8474586
+Adam Fantilli,C,CBJ,133,133,455.4,7,75,18.9,22.0,32.0,-11.9,11.9,195.7,46.6,127.1,,,,,8484166
+Sam Bennett,C,FLA,134,134,453.7,7,73,18.5,25.0,30.7,-9.6,13.4,193.1,30.7,110.5,,,,,8477935
+Anthony Cirelli,C,TBL,135,135,453.3,7,70,17.3,22.7,28.6,37.5,3.9,123.2,46.3,49.3,,,,,8478519
+Jake Allen,G,NJD,136,136,452.4,7,49,0,,,,,,,,22.5,1234.3,132.4,1.3,8474596
+Tomas Hertl,C,VGK,137,137,451.9,7,75,17.0,22.0,31.1,-15.5,22.9,184.8,41.2,104.3,,,,,8476881
+Patrick Kane,RW,DET,138,138,451.7,7,68,17.7,16.2,41.6,-1.0,19.3,171.5,24.4,21.3,,,,,8474141
+Robert Thomas,C,STL,139,139,447.9,7,67,19.0,26.2,40.8,23.0,14.7,106.8,0.0,0.0,,,,,8480023
+Shayne Gostisbehere,D,CAR,140,140,444.5,7,62,19.2,14.7,41.7,12.4,20.3,130.8,71.0,32.7,,,,,8476906
+Will Smith,C,SJS,141,141,444.3,8,69,18.2,24.0,35.0,1.0,17.0,166.0,12.0,16.0,,,,,8484227
+Yaroslav Askarov,G,SJS,142,142,444.1,8,57,0,,,,,,,,25.5,1437.1,190.4,0.0,8482137
+Dylan Strome,C,WSH,143,143,442.1,8,75,18.0,17.8,36.6,1.9,19.7,134.1,49.7,10.3,,,,,8478440
+Ryan Hartman,RW,MIN,144,144,441.8,8,73,16.7,22.1,19.2,-1.0,6.7,160.4,91.2,61.5,,,,,8477451
+Mackenzie Blackwood,G,COL,145,145,441.6,8,48,0,,,,,,,,28.3,1037.5,110.8,3.7,8478406
+Artturi Lehkonen,LW,COL,146,146,439.3,8,70,18.5,21.0,27.0,32.0,2.0,153.0,33.0,45.0,,,,,8477476
+Aliaksei Protas,LW,WSH,147,147,438.9,8,73,18.2,24.0,25.9,19.2,1.0,152.7,40.3,31.7,,,,,8481656
+Adam Fox,D,NYR,148,148,438.3,8,62,23.6,10.1,49.6,5.6,27.1,102.6,83.4,27.1,,,,,8479323
+Beckett Sennecke,RW,ANA,149,149,437.5,8,75,17.4,21.0,33.8,-11.0,11.9,180.2,22.0,88.7,,,,,8484762
+Sam Malinski,D,COL,150,150,435.9,8,75,17.6,7.3,29.3,39.3,0.9,150.0,86.9,42.1,,,,,8484258
+Ivan Barbashev,LW,VGK,151,151,434.4,8,75,16.2,21.0,34.8,18.3,5.5,121.6,33.8,125.3,,,,,8477964
+Jackson Blake,RW,CAR,152,152,433.9,8,75,16.5,20.4,28.7,3.7,11.1,161.1,31.5,12.0,,,,,8482809
+Sergei Bobrovsky,G,FLA,153,153,432.4,8,59,0,,,,,,,,30.6,1243.5,174.7,4.5,8475683
+Tyler Bertuzzi,LW,CHI,154,154,425.9,8,74,18.4,30.0,24.4,-15.0,19.7,153.6,22.5,51.5,,,,,8477479
+Brad Marchand,LW,FLA,155,155,425.3,8,60,17.7,31.2,31.2,-18.5,23.1,159.2,18.5,41.5,,,,,8473419
+Charlie Coyle,C,CBJ,156,156,425.3,8,75,18.1,18.3,34.8,2.7,11.9,131.7,48.5,101.5,,,,,8475745
+Ivan Demidov,RW,MTL,157,157,425.0,8,75,15.5,17.4,39.3,2.7,18.3,116.2,23.8,25.6,,,,,8484984
+Alex Laferriere,RW,LAK,158,158,424.2,8,75,18.3,19.2,21.0,2.7,4.6,191.2,44.8,233.2,,,,,8482155
+Jack Quinn,RW,BUF,159,159,424.0,8,75,15.7,18.3,28.4,3.7,10.1,174.7,22.9,47.6,,,,,8482097
+Mattias Ekholm,D,EDM,160,160,422.9,8,75,20.6,5.5,32.0,29.3,2.7,119.8,114.3,59.5,,,,,8475218
+Luke Evangelista,RW,NSH,161,161,422.6,9,75,16.6,11.1,40.7,0.9,15.7,163.0,19.4,19.4,,,,,8482146
+Alexis Lafrenière,LW,NYR,162,162,421.9,9,75,17.6,22.0,30.2,-6.4,13.7,150.0,38.4,76.8,,,,,8482109
+Josh Doan,RW,BUF,163,163,421.9,9,75,15.9,22.9,24.7,-3.7,15.5,155.5,28.4,71.3,,,,,8482659
+Ryan Nugent-Hopkins,C,EDM,164,164,421.7,9,71,19.1,19.7,35.5,-8.9,28.6,131.2,30.6,24.7,,,,,8476454
+Mats Zuccarello Aasen,RW,MIN,165,165,420.9,9,64,18.6,16.3,42.3,-5.4,22.8,132.3,28.2,17.4,,,,,8475692
+Jacob Markstrom,G,NJD,166,166,419.2,9,54,0,,,,,,,,28.2,1206.4,159.5,1.2,8474593
+Roope Hintz,C,DAL,167,167,417.1,9,61,17.3,17.3,33.4,18.4,21.9,145.0,20.7,69.1,,,,,8478449
+Arturs Silovs,G,PIT,168,168,415.5,9,51,0,,,,,,,,24.8,1184.8,150.4,2.6,8481668
+Brent Burns,D,COL,169,169,414.8,9,75,18.9,11.0,21.0,30.2,0.9,157.3,83.2,18.3,,,,,8470613
+Dougie Hamilton,D,NJD,170,170,413.9,9,73,21.5,11.4,25.6,-1.9,13.3,192.5,73.0,82.5,,,,,8476462
+Christian Dvorak,C,PHI,171,171,413.7,9,75,18.5,16.9,30.9,10.3,4.7,141.6,48.8,35.6,,,,,8477989
+Shane Pinto,C,OTT,172,172,412.9,9,71,18.7,22.7,22.7,5.9,4.9,154.8,49.3,92.7,,,,,8481596
+Justin Faulk,D,DET,173,173,411.9,9,74,22.0,15.2,22.8,-7.6,8.5,140.4,125.2,66.4,,,,,8475753
+Valeri Nichushkin,RW,COL,174,174,411.1,9,71,17.7,16.8,31.6,8.9,3.9,157.8,26.6,54.2,,,,,8477501
+Elias Pettersson,C,VAN,175,175,411.0,9,72,19.0,14.6,35.0,-29.2,21.4,128.4,105.1,65.2,,,,,8480012
+Carter Verhaeghe,C,FLA,176,176,410.9,9,73,17.6,23.7,28.4,-13.3,10.4,177.3,20.9,64.5,,,,,8477409
+Noah Cates,LW,PHI,177,177,408.8,9,75,16.2,16.5,26.5,23.8,8.2,120.7,46.6,93.3,,,,,8480220
+Brayden Point,C,TBL,178,178,407.8,9,66,18.3,18.9,33.5,12.6,11.5,135.1,24.1,8.4,,,,,8478010
+Anton Forsberg,G,LAK,179,179,407.5,9,43,0,,,,,,,,19.1,1034.4,103.9,3.6,8476341
+Jordan Kyrou,RW,STL,180,180,407.1,9,71,15.7,17.8,27.6,-4.9,13.8,170.6,27.6,13.8,,,,,8479385
+Jacob Trouba,D,ANA,181,181,404.5,10,75,22.8,9.3,23.1,-0.9,0.9,153.7,138.0,132.4,,,,,8476885
+Claude Giroux,RW,OTT,182,182,402.2,10,75,16.3,12.8,32.0,18.3,11.9,126.2,24.7,59.5,,,,,8473512
+Bobby McMann,C,SEA,183,183,401.3,10,74,15.9,27.5,16.1,-2.8,5.7,173.6,25.6,156.5,,,,,8482259
+Matvei Michkov,RW,PHI,184,184,400.6,10,75,14.8,18.5,28.7,0.0,11.1,150.9,17.6,30.6,,,,,8484387
+Shea Theodore,D,VGK,185,185,400.0,10,70,22.8,10.0,29.0,19.0,5.0,130.0,87.0,2.0,,,,,8477447
+Esa Lindell,D,DAL,186,186,400.0,10,75,23.2,5.5,23.8,27.4,1.8,75.9,163.7,27.4,,,,,8476902
+Ivan Provorov,D,CBJ,187,187,398.9,10,75,24.8,8.2,20.1,12.8,4.6,144.5,122.6,25.6,,,,,8478500
+Lawson Crouse,LW,UTA,188,188,398.8,10,75,16.6,22.2,18.5,18.5,0.9,130.6,48.1,196.3,,,,,8478474
+Thomas Harley,D,DAL,189,189,398.2,10,70,23.1,6.0,30.0,3.0,7.0,113.0,148.0,39.0,,,,,8481581
+Matty Beniers,C,SEA,190,190,397.7,10,75,19.3,18.3,27.4,-7.3,10.1,136.3,63.1,28.4,,,,,8482665
+Matthew Knies,LW,TOR,191,191,397.7,10,74,18.8,21.5,40.3,-28.1,15.0,131.1,30.0,142.4,,,,,8482720
+Ryan Leonard,RW,WSH,192,192,394.4,10,72,14.4,19.2,24.0,1.9,13.4,146.9,24.0,119.0,,,,,8484186
+Nazem Kadri,C,COL,193,193,393.9,10,73,19.0,15.2,32.2,-28.4,18.0,201.9,28.4,47.4,,,,,8475172
+Casey DeSmith,G,DAL,194,194,393.4,10,43,0,,,,,,,,21.5,987.6,101.8,1.4,8479193
+Mike Matheson,D,MTL,195,195,393.3,10,74,24.2,6.6,28.5,8.5,0.9,108.2,142.3,56.0,,,,,8476875
+Sean Walker,D,CAR,196,196,392.4,10,75,21.8,8.3,20.4,5.6,0.9,165.7,115.7,130.6,,,,,8480336
+Elias Lindholm,C,BOS,197,197,391.8,10,69,17.9,17.0,31.0,-7.0,20.0,114.0,59.0,41.0,,,,,8477496
+Blake Coleman,LW,CGY,198,198,391.1,10,69,17.3,20.0,15.0,12.0,1.0,176.0,48.0,152.0,,,,,8476399
+Vince Dunn,D,SEA,199,199,390.1,10,75,21.7,10.2,30.6,-22.2,19.4,165.7,79.6,25.0,,,,,8478407
+Anders Lee,LW,NYI,200,200,389.9,10,75,15.6,17.4,21.0,0.0,7.3,182.0,33.8,83.2,,,,,8475314
+Travis Sanheim,D,PHI,201,201,388.9,11,75,24.2,10.2,24.1,11.1,2.8,88.0,140.7,42.6,,,,,8477948
+Logan Stankoven,C,CAR,202,202,388.5,11,75,15.5,19.4,21.3,11.1,8.3,153.7,20.4,46.3,,,,,8482702
+Jake DeBrusk,LW,VAN,203,203,388.5,11,75,16.9,21.3,17.6,-28.7,22.2,202.8,31.5,61.1,,,,,8478498
+John-Jason Peterka,RW,UTA,204,204,388.1,11,75,16.0,22.9,20.1,5.5,4.6,145.4,17.4,14.6,,,,,8482175
+William Eklund,LW,SJS,205,205,387.8,11,74,18.5,14.2,36.1,-29.4,15.2,167.0,48.4,68.3,,,,,8482667
+Josh Manson,D,COL,206,206,387.5,11,74,17.8,4.7,24.4,39.3,0.0,119.9,92.7,163.0,,,,,8476312
+Tyler Toffoli,C,SJS,207,207,386.8,11,74,15.0,17.8,28.1,-11.2,14.1,161.1,29.0,45.0,,,,,8475726
+Mason Marchment,LW,CBJ,208,208,386.7,11,69,17.4,19.3,26.4,17.2,7.1,120.8,28.4,85.2,,,,,8478975
+Vladimir Tarasenko,RW,MIN,209,209,386.5,11,72,14.9,22.1,23.0,-10.6,12.5,142.1,31.7,57.6,,,,,8475765
+Vladimir Tarasenko,RW,MIN,210,210,386.5,11,72,14.9,22.1,23.0,-10.6,12.5,142.1,31.7,57.6,,,,,8475765
+Chris Kreider,LW,ANA,211,211,384.4,11,72,17.0,21.1,26.9,-3.8,16.3,133.4,19.2,66.2,,,,,8475184
+Ryan McLeod,C,BUF,212,212,382.2,11,75,17.6,13.0,37.0,23.1,6.5,83.3,31.5,14.8,,,,,8480802
+Vincent Trocheck,C,NYR,213,213,380.9,11,68,20.6,16.2,37.6,-16.2,16.2,115.7,49.7,195.9,,,,,8476389
+Filip Hronek,D,VAN,214,214,380.6,11,75,25.0,7.3,37.5,-21.0,19.2,125.3,91.5,121.6,,,,,8479425
+Anton Lundell,C,FLA,215,215,380.4,11,67,19.2,18.8,27.2,-8.4,15.7,144.5,36.6,78.5,,,,,8482113
+Daniil Tarasov,G,FLA,216,216,380.3,11,45,0,,,,,,,,17.7,1129.1,132.3,0.0,8480193
+Connor McMichael,LW,WSH,217,217,379.8,11,74,16.9,13.3,30.4,7.6,4.7,134.7,42.7,42.7,,,,,8481580
+Zach Benson,LW,BUF,218,218,378.8,11,67,15.9,13.4,30.9,27.8,5.2,119.6,22.7,41.2,,,,,8484145
+Connor Ingram,G,EDM,219,219,378.8,11,44,0,,,,,,,,22.0,943.2,105.9,2.8,8478971
+Alexander Wennberg,C,SJS,220,220,378.3,11,75,20.5,16.9,34.7,-23.4,14.1,87.2,87.2,26.2,,,,,8477505
+Alex Nedeljkovic,G,SJS,221,221,378.0,12,45,0,,,,,,,,20.2,1057.5,122.6,0.0,8477968
+Mikael Backlund,C,CGY,222,222,377.3,12,75,17.9,15.5,23.8,6.4,2.7,170.1,25.6,21.0,,,,,8474150
+Anze Kopitar,C,LAK,223,223,376.5,12,68,19.1,12.2,26.4,19.3,12.2,102.5,61.9,33.5,,,,,8471685
+Logan Cooley,C,UTA,224,224,376.3,12,61,17.3,27.1,21.5,3.4,11.3,115.2,30.5,61.0,,,,,8483431
+Philipp Grubauer,G,SEA,225,225,376.3,12,41,0,,,,,,,,16.7,1008.3,101.2,0.0,8475831
+Bowen Byram,D,BUF,226,226,376.0,12,75,22.3,10.1,28.4,13.7,6.4,99.7,85.1,45.7,,,,,8481524
+J.T. Miller,C,NYR,227,227,375.8,12,69,20.1,17.2,36.5,-30.4,19.3,146.1,34.5,124.8,,,,,8476468
+Taylor Hall,LW,CAR,228,228,374.6,12,75,14.5,16.9,28.1,5.6,6.6,128.4,28.1,49.7,,,,,8475791
+Pavel Buchnevich,LW,STL,229,229,372.7,12,75,17.9,18.5,25.9,-9.3,13.9,131.5,37.0,27.8,,,,,8477402
+Vasily Podkolzin,RW,EDM,230,230,372.7,12,75,15.4,17.4,16.5,14.6,2.7,127.1,47.6,221.3,,,,,8481617
+Kevin Fiala,LW,LAK,231,231,372.3,12,62,19.1,19.9,24.4,-12.2,18.8,162.8,26.6,43.2,,,,,8477942
+Alexander Nikishin,D,CAR,232,232,371.3,12,75,18.2,10.2,20.4,16.7,9.3,113.0,87.0,122.2,,,,,8482100
+Collin Graf,RW,SJS,233,233,371.3,12,75,16.4,19.4,23.1,5.6,0.9,109.3,44.4,81.5,,,,,8484911
+Egor Chinakhov,RW,PIT,234,234,371.0,12,71,13.5,20.7,20.7,-2.0,5.9,138.1,30.6,48.3,,,,,8482475
+Matt Coronato,RW,CGY,235,235,370.5,12,75,16.7,16.9,25.3,-27.2,14.1,184.7,21.6,21.6,,,,,8482679
+Marcus Johansson,LW,MIN,236,236,369.5,12,72,15.4,14.4,32.6,17.3,8.6,101.8,19.2,32.6,,,,,8475149
+Thomas Chabot,D,OTT,237,237,368.5,12,63,22.6,7.7,26.5,6.6,7.7,109.4,122.7,39.8,,,,,8478469
+J.J. Moser,D,TBL,238,238,367.1,12,74,21.6,6.6,20.6,38.4,0.9,104.0,85.2,57.1,,,,,8482655
+Dawson Mercer,C,NJD,239,239,366.9,12,75,18.2,18.3,20.1,-1.8,6.4,144.5,43.0,30.2,,,,,8482110
+Boone Jenner,C,CBJ,240,240,364.7,12,68,16.1,13.2,25.4,3.0,3.0,134.0,67.0,149.2,,,,,8476432
+Jared McCann,LW,SEA,241,241,362.0,12,60,16.4,23.1,23.1,-8.1,15.0,135.0,28.8,46.2,,,,,8477955
+Joonas Korpisalo,G,BOS,242,242,361.2,12,42,0,,,,,,,,19.0,1031.0,121.9,1.4,8476914
+Mikael Granlund,C,ANA,243,243,360.3,12,63,19.2,20.6,23.9,-9.8,13.0,127.1,44.5,34.8,,,,,8475798
+Darnell Nurse,D,EDM,244,244,358.0,12,75,21.0,6.4,15.5,-11.0,0.0,150.0,152.7,125.3,,,,,8477498
+Eeli Tolvanen,RW,SEA,245,245,357.7,12,74,16.0,11.4,22.8,-17.1,13.3,133.8,76.8,177.4,,,,,8480009
+David Rittich,G,NYI,246,246,357.3,12,43,0,,,,,,,,20.1,923.1,108.9,2.9,8479496
+Will Cuylle,LW,NYR,247,247,356.9,12,75,16.9,18.3,16.5,-11.0,7.3,143.6,62.2,276.2,,,,,8482157
+Connor Brown,RW,NJD,248,248,355.6,12,72,17.6,17.3,24.0,-1.0,7.7,111.4,35.5,24.0,,,,,8477015
+K'Andre Miller,D,CAR,249,249,355.0,12,71,22.4,7.9,28.6,6.9,3.0,121.3,77.9,99.6,,,,,8480817
+Brandon Montour,D,SEA,250,250,354.8,12,67,22.6,11.5,22.0,-22.0,8.4,182.2,81.7,78.5,,,,,8477986
+Morgan Rielly,D,TOR,251,251,354.3,12,74,21.1,10.4,23.7,-17.1,5.7,133.8,108.2,33.2,,,,,8476853
+Martin Fehervary,D,WSH,252,252,353.4,12,75,19.3,4.6,20.4,13.9,0.0,67.6,163.0,101.9,,,,,8480796
+Ben Kindel,C,PIT,253,253,353.4,12,73,15.1,16.1,17.1,-4.7,9.5,143.2,55.0,28.4,,,,,8485414
+Devon Toews,D,COL,254,254,353.4,12,69,22.4,3.0,21.3,37.5,1.0,116.7,84.2,26.4,,,,,8478038
+Simon Edvinsson,D,DET,255,255,353.1,12,71,22.4,8.9,15.8,11.8,1.0,86.8,145.9,92.7,,,,,8482762
+Oliver Kapanen,C,MTL,256,256,352.7,12,75,14.5,20.1,13.7,3.7,0.9,119.8,62.2,29.3,,,,,8482775
+Andrew Copp,C,DET,257,257,352.2,12,74,16.6,8.4,31.8,2.8,7.5,107.7,59.9,41.2,,,,,8477429
+Matt Duchene,C,DAL,258,258,350.9,12,63,16.5,17.7,32.1,-3.3,15.5,98.4,25.4,32.1,,,,,8475168
+Noah Hanifin,D,VGK,259,259,350.6,12,70,22.6,3.0,24.6,0.0,6.9,133.1,114.4,35.5,,,,,8478396
+Devin Cooley,G,CGY,260,260,350.3,12,39,0,,,,,,,,12.6,968.7,96.9,0.0,8482445
+Elvis Merzlikins,G,CBJ,261,261,349.6,12,44,0,,,,,,,,20.5,1051.6,139.3,1.5,8478007
+MacKenzie Weegar,D,UTA,262,262,348.2,12,74,22.5,3.7,22.5,-30.9,5.6,144.3,163.9,156.4,,,,,8477346
+Brock Boeser,RW,VAN,263,263,348.0,12,72,19.1,21.1,25.0,-46.1,18.2,159.4,25.0,51.8,,,,,8478444
+Kiefer Sherwood,LW,SJS,264,264,348.0,12,71,17.3,22.7,12.8,-19.7,11.8,169.6,29.6,334.3,,,,,8480748
+Luke Hughes,D,NJD,265,265,347.6,12,69,23.0,6.1,29.4,-4.1,13.2,152.2,52.8,19.3,,,,,8482684
+Morgan Frost,C,CGY,266,266,347.6,12,75,15.5,20.1,19.2,-14.6,14.6,128.0,35.7,54.0,,,,,8480028
+Mavrik Bourque,C,DAL,267,267,346.4,12,75,15.5,18.3,19.2,5.5,4.6,134.5,19.2,71.3,,,,,8482145
+Jake McCabe,D,TOR,268,268,346.2,12,75,22.4,4.7,18.8,2.8,0.0,72.2,178.1,97.5,,,,,8476931
+Justin Brazeau,RW,PIT,269,269,345.6,12,67,12.7,17.8,17.8,5.2,5.2,108.9,46.1,94.2,,,,,8479638
+Fraser Minten,C,BOS,270,270,345.0,12,75,15.6,15.5,16.5,19.2,2.7,106.1,46.6,129.9,,,,,8483489
+Frank Nazar,C,CHI,271,271,343.9,12,68,18.3,15.5,26.8,-21.6,12.4,142.2,44.3,38.1,,,,,8483493
+Artem Zub,D,OTT,272,272,343.9,12,75,20.8,4.6,23.1,20.4,0.0,85.2,111.1,61.1,,,,,8482245
+Ryan Pulock,D,NYI,273,273,343.7,12,73,20.8,2.9,23.1,8.6,1.0,89.3,142.2,47.1,,,,,8477506
+Ridly Greig,C,OTT,274,274,343.1,12,73,16.7,12.3,20.9,11.4,2.8,122.3,49.3,91.0,,,,,8482092
+Simon Holmstrom,RW,NYI,275,275,342.9,12,74,16.7,17.8,20.6,3.7,3.7,93.7,42.2,15.0,,,,,8481601
+Cam York,D,PHI,276,276,342.7,12,72,22.5,3.9,21.4,4.9,6.8,86.6,141.1,23.4,,,,,8481546
+Damon Severson,D,CBJ,277,277,341.5,12,70,21.1,7.9,23.7,17.7,3.9,91.7,84.8,38.5,,,,,8476923
+Ryan Shea,D,PIT,278,278,341.3,12,75,18.9,5.6,27.2,28.1,0.0,67.5,86.2,35.6,,,,,8478854
+Philip Broberg,D,STL,279,279,340.5,12,75,23.4,5.6,25.9,13.0,4.6,90.7,90.7,32.4,,,,,8481598
+Matt Savoie,C,EDM,280,280,340.4,12,75,14.8,16.5,17.4,5.5,6.4,126.2,33.8,12.8,,,,,8483512
+Frederik Andersen,G,CAR,281,281,339.7,12,49,0,,,,,,,,22.4,1038.8,149.8,0.0,8475883
+Vladislav Gavrikov,D,NYR,282,282,339.2,12,75,23.7,12.8,19.2,-7.3,5.5,108.8,95.1,45.7,,,,,8478882
+Parker Kelly,C,COL,283,283,339.2,12,75,12.7,19.2,12.8,16.5,0.0,95.1,53.0,161.9,,,,,8480448
+Ryan Poehling,C,ANA,284,284,338.3,12,72,15.1,10.6,24.0,7.7,1.0,90.2,82.6,42.2,,,,,8480068
+Mason McTavish,C,ANA,285,285,338.1,12,72,15.3,16.3,23.0,-14.4,10.6,140.2,31.7,91.2,,,,,8482745
+Adam Larsson,D,SEA,286,286,337.3,12,75,21.4,6.4,16.5,0.0,0.0,97.0,149.1,100.6,,,,,8476457
+Thomas Novak,C,PIT,287,287,337.3,12,75,14.3,14.6,23.8,0.9,6.4,118.9,31.1,11.0,,,,,8478438
+Tony DeAngelo,D,NYI,288,288,337.2,12,73,19.1,4.8,28.8,-4.8,6.7,142.2,67.2,31.7,,,,,8477950
+Anthony Stolarz,G,TOR,289,289,337.1,12,41,0,,,,,,,,15.8,996.6,119.8,0.0,8476932
+Corey Perry,RW,TBL,290,290,336.1,12,71,13.7,16.8,19.7,0.0,12.8,111.4,19.7,29.6,,,,,8470621
+Tristan Jarry,G,EDM,291,291,335.6,12,42,0,,,,,,,,22.9,934.2,124.7,2.5,8477465
+Mackie Samoskevich,RW,FLA,292,292,335.4,12,73,14.5,11.4,19.0,-4.7,9.5,152.6,31.3,128.9,,,,,8482713
+Emil Heineman,LW,NYI,293,293,332.9,12,75,16.6,20.1,8.2,-11.9,3.7,159.1,49.4,225.9,,,,,8482476
+Chandler Stephenson,C,SEA,294,294,332.6,12,75,19.4,15.0,30.9,-22.5,15.0,87.2,52.5,18.8,,,,,8476905
+Joel Farabee,LW,CGY,295,295,332.3,12,75,16.9,18.3,16.5,-8.2,2.7,129.9,47.6,44.8,,,,,8480797
+Jordan Staal,C,CAR,296,296,332.0,12,72,16.2,19.2,15.4,4.8,3.8,102.7,46.1,159.4,,,,,8473533
+Anthony Beauvillier,RW,WSH,297,297,331.8,12,75,15.8,13.7,11.9,6.4,0.9,141.8,43.9,85.1,,,,,8478463
+Denton Mateychuk,D,CBJ,298,298,331.6,12,72,19.2,12.5,17.3,11.5,2.9,84.5,88.3,25.0,,,,,8483485
+Justin Sourdif,C,WSH,299,299,331.4,12,74,14.7,14.2,19.0,16.1,2.8,102.5,37.9,93.0,,,,,8482088
+Kevin Lankinen,G,VAN,300,300,331.4,12,52,0,,,,,,,,12.2,1244.7,177.0,0.0,8480947
+Trevor Moore,LW,LAK,301,301,331.2,12,69,16.7,13.0,19.0,0.0,1.0,159.0,36.0,57.0,,,,,8479675
+Akira Schmid,G,VGK,302,302,330.8,12,41,0,,,,,,,,19.3,851.4,102.5,2.4,8481033
+Jack Roslovic,C,EDM,303,303,330.0,12,69,15.8,21.0,15.0,-9.0,6.0,141.0,27.0,46.0,,,,,8478458
+John Marino,D,UTA,304,304,329.8,12,75,20.2,3.8,30.0,39.4,0.0,51.6,63.8,26.2,,,,,8478507
+Kaapo Kakko,RW,SEA,305,305,329.4,12,67,14.3,13.4,27.8,14.4,8.2,80.4,12.4,30.9,,,,,8481554
+Eric Comrie,G,WPG,306,306,329.1,12,40,0,,,,,,,,19.2,931.2,115.2,0.0,8477480
+Josh Norris,C,BUF,307,307,329.0,12,55,15.8,16.2,26.2,13.8,11.2,86.2,33.8,30.0,,,,,8480064
+Seth Jones,D,FLA,308,308,328.7,12,60,23.7,8.1,28.8,-3.5,18.5,101.5,70.4,54.2,,,,,8477495
+Rasmus Sandin,D,WSH,309,309,328.5,12,71,19.2,4.9,23.3,3.9,1.0,87.5,123.5,85.6,,,,,8480873
+Jordan Binnington,G,STL,310,310,328.0,12,51,0,,,,,,,,16.2,1097.1,159.2,1.2,8476412
+Kris Letang,D,PIT,311,311,327.7,12,72,21.7,2.9,30.2,-3.9,9.7,101.2,91.5,92.4,,,,,8471724
+Oliver Ekman-Larsson,D,TOR,312,312,327.3,12,74,20.6,7.6,29.4,-5.7,8.5,102.5,68.3,81.6,,,,,8475171
+Owen Power,D,BUF,313,313,326.2,12,75,21.7,7.4,19.4,8.3,0.0,111.1,88.0,26.9,,,,,8482671
+Michael Amadio,RW,OTT,314,314,326.1,12,75,16.1,13.9,18.5,12.0,0.0,88.9,47.2,97.2,,,,,8478020
+Sean Monahan,C,CBJ,315,315,325.9,12,74,17.1,12.3,21.8,-0.9,9.5,124.3,32.3,43.6,,,,,8477497
+Arseny Gritsyuk,RW,NJD,316,316,325.6,12,68,15.2,13.4,18.5,-3.1,5.2,153.5,18.5,59.8,,,,,8481721
+Matt Roy,D,WSH,317,317,323.6,12,74,20.6,1.9,15.9,16.9,0.0,88.1,136.8,109.6,,,,,8478911
+Casey Mittelstadt,C,BOS,318,318,323.6,12,70,15.2,14.8,26.6,11.8,6.9,78.9,20.7,22.7,,,,,8479999
+Jamie Drysdale,D,PHI,319,319,322.6,12,74,21.6,7.6,22.8,-2.8,8.5,95.8,89.2,15.2,,,,,8482142
+Jonas Brodin,D,MIN,320,320,322.5,12,66,20.3,4.3,14.9,20.2,1.1,80.9,134.1,10.6,,,,,8476463
+Erik Haula,LW,NSH,321,321,320.4,12,75,16.7,13.0,22.2,-13.9,11.1,117.6,47.2,109.3,,,,,8475287
+Jacob Fowler,G,MTL,322,322,320.0,12,34,0,,,,,,,,18.0,814.0,82.0,2.0,8484170
+Matthew Tkachuk,LW,FLA,323,323,319.6,12,46,18.3,19.3,31.2,-8.9,19.3,130.6,10.4,43.0,,,,,8479314
+Ilya Mikheyev,RW,CHI,324,324,318.7,12,73,17.4,17.1,17.1,1.9,0.0,116.6,21.8,29.4,,,,,8481624
+Hampus Lindholm,D,BOS,325,325,318.3,12,68,21.6,5.1,21.3,3.0,4.1,101.5,104.5,12.2,,,,,8476854
+Jordan Spence,D,OTT,326,326,318.0,12,71,18.7,6.8,23.3,14.6,2.9,105.0,57.4,53.5,,,,,8481606
+Jonathan Quick,G,NYR,327,327,317.2,12,40,0,,,,,,,,9.6,956.8,116.8,3.2,8471734
+Colton Parayko,D,STL,328,328,316.7,12,73,22.2,3.8,13.3,-5.7,0.0,99.5,163.1,90.1,,,,,8476892
+Victor Olofsson,LW,CGY,329,329,316.7,12,74,13.6,12.3,17.1,4.7,6.6,139.5,19.9,17.1,,,,,8478109
+Parker Wotherspoon,D,PIT,330,330,316.0,12,75,20.2,2.8,25.3,15.9,0.0,65.6,105.0,151.9,,,,,8478450
+Dmitri Voronkov,LW,CBJ,331,331,315.0,12,66,13.9,17.8,15.7,-1.0,9.4,115.2,28.3,110.0,,,,,8481716
+Connor Dewar,C,PIT,332,332,314.7,12,74,13.9,13.3,15.2,15.2,0.0,104.4,43.6,136.6,,,,,8480980
+Mathieu Olivier,RW,CBJ,333,333,314.1,12,65,14.2,16.0,11.7,13.9,0.0,99.1,44.8,222.7,,,,,8479671
+Jared Spurgeon,D,MIN,334,334,314.1,12,74,19.6,5.6,15.0,1.9,5.6,84.3,128.3,76.8,,,,,8474716
+Justus Annunen,G,NSH,335,335,313.5,12,36,0,,,,,,,,12.9,829.3,86.1,1.3,8481020
+Mario Ferraro,D,SJS,336,336,312.4,12,75,21.0,6.4,14.6,-0.9,0.0,86.0,137.2,125.3,,,,,8479983
+Eetu Luostarinen,C,FLA,337,337,312.3,12,71,16.6,10.7,21.4,3.9,1.0,104.1,55.4,117.7,,,,,8480185
+Peyton Krebs,C,BUF,338,338,312.1,12,75,13.8,11.0,24.7,11.9,0.9,85.1,37.5,183.8,,,,,8481522
+Thatcher Demko,G,VAN,339,339,311.4,12,37,0,,,,,,,,14.8,852.9,99.9,1.9,8477967
+Alex Killorn,LW,ANA,340,340,311.3,12,75,16.7,13.7,16.5,-1.8,4.6,135.4,27.4,64.0,,,,,8473986
+Ian Cole,D,UTA,341,341,311.1,12,75,18.3,2.7,18.3,14.6,0.0,56.7,138.1,66.8,,,,,8474013
+Fabian Zetterlund,LW,OTT,342,342,311.0,12,75,12.9,15.5,14.6,-0.9,7.3,120.7,29.3,141.8,,,,,8480188
+Jamie Benn,LW,DAL,343,343,310.3,12,65,13.3,16.2,22.8,8.7,6.5,78.0,24.9,85.6,,,,,8473994
+Oliver Bjorkstrand,RW,TBL,344,344,310.3,12,75,13.6,11.2,18.8,-13.1,13.1,121.9,36.6,79.7,,,,,8477416
+Mason Lohrei,D,BOS,345,345,310.0,12,71,16.9,6.8,18.5,16.5,4.9,70.0,90.5,29.2,,,,,8482511
+Joel Edmundson,D,LAK,346,346,309.5,12,75,18.5,1.8,19.2,12.8,2.7,95.1,101.5,88.7,,,,,8476441
+Michael Carcone,LW,UTA,347,347,308.3,12,74,12.7,15.0,14.1,3.7,3.7,137.7,15.0,137.7,,,,,8479619
+Cole Perfetti,C,WPG,348,348,308.3,12,69,15.6,12.2,20.3,-9.1,6.1,138.0,33.5,54.8,,,,,8482149
+Nate Schmidt,D,UTA,349,349,307.8,12,75,19.7,4.6,15.5,28.4,0.0,78.7,86.9,71.3,,,,,8477220
+Anthony-John (AJ) Greer,LW,FLA,350,350,307.1,12,74,12.4,16.1,14.2,13.3,0.9,98.7,27.5,192.6,,,,,8478421
+Nikita Zadorov,D,BOS,351,351,306.4,12,75,20.9,1.9,18.5,16.7,0.0,99.1,94.4,181.5,,,,,8477507
+Gage Goncalves,C,TBL,352,352,306.4,12,72,13.1,10.7,21.4,25.3,1.9,74.9,28.2,82.7,,,,,8482201
+Cole Sillinger,C,CBJ,353,353,306.0,12,75,15.2,7.4,23.1,1.9,0.9,125.9,40.7,103.7,,,,,8482705
+Noel Acciari,C,PIT,354,354,306.0,12,68,13.7,13.2,12.2,14.2,0.0,94.4,62.9,66.0,,,,,8478569
+Alex Iafallo,LW,WPG,355,355,305.5,12,74,15.6,12.2,15.0,2.8,4.7,106.8,52.5,112.4,,,,,8480113
+Simon Nemec,D,NJD,356,356,305.1,12,69,19.7,11.2,15.2,-11.2,2.0,102.5,105.5,23.3,,,,,8483495
+Evander Kane,LW,VAN,357,357,304.6,12,70,16.4,12.8,17.7,-19.7,5.9,168.6,27.6,109.4,,,,,8475169
+Bobby Brink,RW,MIN,358,358,304.5,12,69,15.2,15.2,15.2,-7.1,7.1,105.5,39.6,81.2,,,,,8481553
+Conor Garland,RW,CBJ,359,359,303.9,12,70,17.2,11.8,20.7,-20.7,9.9,135.1,31.5,44.4,,,,,8478856
+Alexandre Carrier,D,MTL,360,360,303.6,12,71,19.1,6.8,14.6,1.9,0.0,54.5,150.8,34.0,,,,,8478851
+Ethen Frank,RW,WSH,361,361,303.2,12,66,12.2,12.8,12.8,8.5,4.3,96.9,47.9,56.4,,,,,8483573
+Sean Couturier,C,PHI,362,362,302.7,12,74,16.7,11.4,22.8,-4.7,0.9,112.9,39.8,94.9,,,,,8476461
+Shane Wright,C,SEA,363,363,301.8,12,72,13.8,11.7,14.6,5.8,5.8,94.4,57.4,49.6,,,,,8483524
+Pius Suter,C,STL,364,364,300.9,12,67,15.9,13.6,16.8,13.6,4.2,99.5,25.1,42.9,,,,,8480459
+Jean-Gabriel Pageau,C,NYI,365,365,300.0,12,72,15.7,16.5,17.5,0.0,1.0,78.8,49.6,111.9,,,,,8476419
+Olen Zellweger,D,ANA,366,366,299.9,12,73,17.0,6.7,14.4,3.8,2.9,114.3,81.6,31.7,,,,,8482803
+Aaron Ekblad,D,FLA,367,367,299.9,12,71,22.5,3.9,21.7,-4.9,4.9,95.7,101.6,82.8,,,,,8477932
+Evan Rodrigues,C,FLA,368,368,299.1,12,69,17.0,11.0,20.0,-16.0,5.0,160.0,26.0,63.0,,,,,8478542
+Jonas Johansson,G,TBL,369,369,298.3,12,38,0,,,,,,,,16.7,899.8,118.6,0.0,8477992
+Arvid Soderblom,G,CHI,370,370,298.1,12,39,0,,,,,,,,12.0,1021.5,139.5,1.5,8482821
+Matthew Wood,RW,NSH,371,371,298.0,12,70,12.3,16.8,12.8,-3.0,7.9,101.5,24.6,52.3,,,,,8484241
+Louis Crevier,D,CHI,372,372,297.4,12,74,17.1,6.6,17.1,-1.9,0.0,108.2,90.1,117.6,,,,,8481806
+Gustav Forsling,D,FLA,373,373,296.3,12,75,22.6,1.9,24.4,-4.7,1.9,105.0,91.9,48.8,,,,,8478055
+Brayden Schenn,C,NYI,374,374,295.4,12,75,16.8,16.9,19.7,-26.2,8.4,111.6,38.4,168.8,,,,,8475170
+Jordan Martinook,LW,CAR,375,375,295.2,12,73,14.8,11.4,16.1,5.7,0.0,103.3,47.4,106.2,,,,,8476921
+Jordan Martinook,LW,CAR,376,376,295.2,12,73,14.8,11.4,16.1,5.7,0.0,103.3,47.4,106.2,,,,,8476921
+Ross Colton,C,COL,377,377,295.0,12,71,12.5,8.8,14.6,8.8,0.0,148.8,24.3,154.6,,,,,8479525
+Jaden Schwartz,LW,SEA,378,378,294.9,12,59,16.1,13.0,17.7,5.9,3.5,96.8,49.6,37.8,,,,,8475768
+Carter Hart,G,VGK,379,379,294.4,12,35,0,,,,,,,,21.4,731.1,89.4,0.0,8479394
+Adam Pelech,D,NYI,380,380,294.2,12,75,20.9,3.7,11.0,3.7,0.0,111.6,113.4,60.4,,,,,8476917
+Jake Neighbours,LW,STL,381,381,294.2,12,69,15.2,15.0,21.0,-7.0,7.0,86.0,36.0,152.0,,,,,8482089
+Logan Stanley,D,BUF,382,382,294.0,12,73,16.7,8.6,16.3,2.9,1.0,92.2,80.7,105.7,,,,,8479378
+Marat Khusnutdinov,C,BOS,383,383,292.7,12,73,14.5,14.2,17.1,11.4,0.9,73.9,37.0,39.8,,,,,8482177
+Cody Glass,C,NJD,384,384,292.7,12,70,13.6,19.0,7.0,3.0,2.0,104.0,39.0,42.0,,,,,8479996
+Jonathan Marchessault,RW,NSH,385,385,291.0,12,66,16.7,12.8,20.2,-19.2,8.5,140.5,9.6,79.8,,,,,8476539
+Jack Drury,C,COL,386,386,290.3,12,75,14.5,9.1,15.5,13.7,0.0,90.5,51.2,42.1,,,,,8480835
+Nick Robertson,LW,TOR,387,387,290.3,12,74,12.7,15.2,15.2,-12.3,3.8,120.5,34.2,71.2,,,,,8481582
+Zachary Bolduc,RW,MTL,388,388,289.7,12,74,13.6,11.4,17.1,-5.7,5.7,95.8,40.8,161.3,,,,,8482737
+Brayden McNabb,D,VGK,389,389,288.8,12,66,20.5,5.2,7.3,2.1,0.0,84.9,148.8,115.2,,,,,8475188
+Ben Chiarot,D,DET,390,390,287.5,12,75,20.8,4.6,9.1,-8.2,0.0,94.2,146.3,155.5,,,,,8475279
+Barrett Hayton,C,UTA,391,391,285.9,12,68,15.1,10.1,15.2,3.0,6.1,120.8,29.4,34.5,,,,,8480849
+Sean Durzi,D,UTA,392,392,285.9,12,65,19.3,5.4,23.8,-13.0,4.3,91.0,95.3,43.3,,,,,8480434
+Charlie Lindgren,G,WSH,393,393,285.8,12,36,0,,,,,,,,15.4,906.9,125.1,1.7,8479292
+Easton Cowan,RW,TOR,394,394,285.1,12,68,14.7,11.3,18.5,-5.2,6.2,94.8,33.0,74.2,,,,,8484158
+Adin Hill,G,VGK,395,395,284.2,12,43,0,,,,,,,,15.9,813.8,121.0,1.6,8478499
+Gabe Perreault,RW,NYR,396,396,283.7,12,58,16.0,14.2,17.8,0.0,7.1,86.4,26.0,29.6,,,,,8484210
+Ville Husso,G,ANA,397,397,283.7,12,35,0,,,,,,,,17.5,826.0,108.5,0.0,8478024
+Mikey Anderson,D,LAK,398,398,283.6,12,75,20.6,3.8,15.0,7.5,0.0,57.2,124.7,104.1,,,,,8479998
+Braden Schneider,D,NYR,399,399,282.4,12,75,20.4,1.8,14.6,-4.6,0.0,93.3,128.0,149.1,,,,,8482073
+Drew Doughty,D,LAK,400,400,281.8,12,71,23.1,4.9,17.8,3.9,1.0,99.6,74.9,51.3,,,,,8474563
+`;
+
 const FANTASTIC_2026_STRATEGY={
   budgetAtDraft:89,openRosterSpots:8,
   preferredBuild:[40,25,10,10],avoidBuild:[65,15,5,5],
@@ -1724,6 +2217,28 @@ const LEAGUES_DEFAULT = {
     ],
     rostersRaw: ROSTERS_RAW_AEO,
     playersCsv: PLAYERS_CSV_AEO,
+  },
+  // Yahoo's default public hockey league, verified against Yahoo's own settings
+  // page: 10 teams, H2H points, 2C/2LW/2RW/4D/2G starters + 4 bench = 16 draftable,
+  // plus 2 IR that are never drafted. Opponents are strangers in a public league,
+  // so tendencies stay off and the rival model runs on value and roster need alone.
+  'yahoo-nhl-public': {
+    id:'yahoo-nhl-public', name:'Yahoo NHL Public', sport:'nhl',
+    leagueType:'redraft', draftType:'snake', superflex:false,
+    teams:10, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
+    scoringLabel:'H2H Points', draftDateLabel:'TBD', keeperDeadlineLabel:'\u2014',
+    starters:{C:2,LW:2,RW:2,D:4,G:2}, flexEligible:[],
+    scoringMode:'points',
+    // Yahoo's default point values, used to score the pool and the Add Radar.
+    scoring:{g:6,a:4,pm:2,ppp:2,sog:0.9,blk:1,w:5,ga:-3,sv:0.6,sho:5},
+    // Yahoo's default in-season constraints; the Add Radar budgets against these.
+    maxAcquisitionsPerWeek:4, minGoalieGamesPerWeek:3,
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
+    meOwner:'Me',
+    ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
+    poolDataRevision:'nhl-2026-09-17',
+    rostersRaw:'',
+    playersCsv: PLAYERS_CSV_NHL,
   },
   'fantastic-auction': {
     id:'fantastic-auction', name:'Fantastic Keeper Auction', leagueType:'keeper',
@@ -2200,7 +2715,7 @@ const auctionDecay=()=>LEAGUE.auctionDecay||AUCTION_DECAY_DEFAULT;
 const auctionShape=()=>LEAGUE.auctionShape||AUCTION_SHAPE_DEFAULT;
 const auctionPriceCap=()=>Math.max(2,Math.round((LEAGUE.auctionBudget||200)*(LEAGUE.auctionMaxPriceShare||AUCTION_MAX_PRICE_SHARE_DEFAULT)));
 function auctionWeight(p){
-  const posMult={QB:LEAGUE.superflex?1.0:0.72,RB:1.08,WR:1.0,TE:0.88,K:0.12,DST:0.16};
+  const posMult=Object.assign({},SPORT.auctionPosMult,(LEAGUE.superflex&&SPORT.auctionPosMultSuperflex)||{});
   return Math.exp(-Math.pow(Math.max(0,(p.adp||999)-1)/auctionDecay(), auctionShape()))*(posMult[p.pos]||0.5);
 }
 // Squash prices toward the ceiling and push the freed dollars back onto everyone
@@ -2602,11 +3117,12 @@ function rebuildSlotOwner(){ SLOT_OWNER={}; Object.entries(OWNER_SLOT).forEach((
 // every year, so these are hand-set rather than mined from history. Rebuilt per
 // league by applyLeagueProfile() (via rebuildTendencies()) so switching leagues
 // doesn't leave stale/mismatched owner keys.
-const TEND_POS=['QB','RB','WR','TE'];
+const TEND_POS_FOR=()=>SPORT.tendencyPositions;
 let TENDENCIES={};
-function rebuildTendencies(){ TENDENCIES={}; OWNERS.forEach(o=>{TENDENCIES[o]={enabled:false,bias:{QB:0,RB:0,WR:0,TE:0}};}); }
+function blankBias(){const b={}; TEND_POS_FOR().forEach(p=>b[p]=0); return b;}
+function rebuildTendencies(){ TENDENCIES={}; OWNERS.forEach(o=>{TENDENCIES[o]={enabled:false,bias:blankBias()};}); }
 
-function blankCounts(){return {QB:0,RB:0,WR:0,TE:0,K:0,DST:0};}
+function blankCounts(){const c={}; SPORT.positions.forEach(p=>c[p]=0); return c;}
 function countsOf(roster){const c=blankCounts(); roster.forEach(p=>{if(c[p.pos]!=null)c[p.pos]++;}); return c;}
 // How badly does a team need another <pos>? 1 = filling a starter, negative = hoarding.
 function needScore(counts,pos){
@@ -2617,17 +3133,24 @@ function needScore(counts,pos){
     const flexUsed=LEAGUE.flexEligible.reduce((n,q)=>n+Math.max(0,(counts[q]||0)-(S[q]||0)),0);
     if(flexUsed<(S.FLEX||0))return 0.6;
   }
-  const depthCap=(pos==='RB'||pos==='WR')?base+3:base+1;
+  const depthCap=SPORT.depthCap(pos,base);
   if(have>=depthCap)return -1; // don't stockpile a 3rd QB in round 8
   return 0.15;
+}
+// A hockey player can be C and LW at once, so need is the BEST of the slots they
+// can actually fill — otherwise a C/LW would look unwanted whenever centre is full.
+function eligiblePositions(p){ return (p&&p.posEligible&&p.posEligible.length)?p.posEligible:[p&&p.pos]; }
+function playerFillsPos(p,pos){ return eligiblePositions(p).includes(pos); }
+function needScoreFor(counts,p){
+  return Math.max(...eligiblePositions(p).map(pos=>needScore(counts,pos)));
 }
 const RIVAL_W={need:26,tendency:8,lateKDST:90};
 // ADP is the backbone; need, tendency, and a K/DST lateness rule bend it. Shared by
 // the live Draft Room and the Strategy Lab so their results don't diverge.
 function rivalScore(p,counts,owner,round,noise){
   let s=-p.adp;
-  s+=RIVAL_W.need*needScore(counts,p.pos);
-  if((p.pos==='K'||p.pos==='DST')&&round<LEAGUE.rounds-2)s-=RIVAL_W.lateKDST;
+  s+=RIVAL_W.need*needScoreFor(counts,p);
+  if(SPORT.lateRoundPositions.includes(p.pos)&&round<LEAGUE.rounds-2)s-=RIVAL_W.lateKDST;
   const t=TENDENCIES[owner];
   if(t&&t.enabled)s+=RIVAL_W.tendency*(t.bias[p.pos]||0);
   s+=(Math.random()*2-1)*noise*4;
@@ -2638,7 +3161,7 @@ function rivalScore(p,counts,owner,round,noise){
 // even a strong tendency bias can't make a team stockpile a 4th QB.
 function bestRivalChoice(pool,counts,owner,round,noise){
   const cands=pool.slice(0,40);
-  const ok=cands.filter(p=>needScore(counts,p.pos)>-1);
+  const ok=cands.filter(p=>needScoreFor(counts,p)>-1);
   const set=ok.length?ok:cands;
   let best=set[0],bestS=-Infinity;
   set.forEach(p=>{const s=rivalScore(p,counts,owner,round,noise); if(s>bestS){bestS=s;best=p;}});
@@ -3134,11 +3657,12 @@ function slotRosterPlayers(roster,starters){
   const remaining=roster.slice().sort((a,b)=>(a.ecr||9999)-(b.ecr||9999));
   const take=(pred)=>{ const i=remaining.findIndex(pred); return i===-1?null:remaining.splice(i,1)[0]; };
   const slots=[];
-  ['QB','RB','WR','TE','K','DST'].forEach(pos=>{
-    for(let i=0;i<(starters[pos]||0);i++) slots.push({label:pos, player:take(x=>x.pos===pos)});
+  SPORT.positions.forEach(pos=>{
+    for(let i=0;i<(starters[pos]||0);i++) slots.push({label:pos, player:take(x=>playerFillsPos(x,pos))});
   });
-  for(let i=0;i<(starters.FLEX||0);i++) slots.push({label:'FLEX', player:take(x=>LEAGUE.flexEligible.includes(x.pos))});
-  for(let i=0;i<(starters.SUPERFLEX||0);i++) slots.push({label:'SFLEX', player:take(x=>x.pos==='QB'||LEAGUE.flexEligible.includes(x.pos))});
+  const flexOk=(x)=>eligiblePositions(x).some(q=>LEAGUE.flexEligible.includes(q));
+  for(let i=0;i<(starters.FLEX||0);i++) slots.push({label:'FLEX', player:take(flexOk)});
+  for(let i=0;i<(starters.SUPERFLEX||0);i++) slots.push({label:'SFLEX', player:take(x=>playerFillsPos(x,'QB')||flexOk(x))});
   return {starterSlots:slots, bench:remaining};
 }
 function fillRosterOwnerSelect(){
@@ -3319,13 +3843,15 @@ function clearRivalKeepers(){
 }
 function renderTendencies(){
   const tb=el('tendTable'); if(!tb)return;
+  const head=el('tendHead');
+  if(head) head.innerHTML='<th>Use</th><th>Owner</th>'+TEND_POS_FOR().map(p=>`<th>${p}</th>`).join('');
   const body=tb.querySelector('tbody'); body.innerHTML='';
   OWNERS.filter(o=>o!==ME_OWNER).forEach(owner=>{
     const t=TENDENCIES[owner]; if(!t)return;
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><input type="checkbox" data-tend-on="${owner}" ${t.enabled?'checked':''}></td>
       <td>${owner}</td>`+
-      TEND_POS.map(pos=>`<td><input type="number" data-tend-bias="${owner}" data-pos="${pos}"
+      TEND_POS_FOR().map(pos=>`<td><input type="number" data-tend-bias="${owner}" data-pos="${pos}"
         value="${t.bias[pos]}" min="-3" max="3" step="1" style="width:56px"></td>`).join('');
     body.appendChild(tr);
   });
@@ -3376,7 +3902,7 @@ function renderStratCards(){
 }
 function fitPosition(pool, want){
   // returns first available player matching want (position or FLEX)
-  if(want==='FLEX'){return pool.find(p=>LEAGUE.flexEligible.includes(p.pos));}
+  if(want==='FLEX'){return pool.find(p=>eligiblePositions(p).some(q=>LEAGUE.flexEligible.includes(q)));}
   return pool.find(p=>p.pos===want);
 }
 function runLab(){
@@ -3446,7 +3972,15 @@ function parsePlayers(txt){
   for(let i=start;i<lines.length;i++){
     const c=lines[i].split(',').map(x=>x.trim()); if(c.length<2)continue;
     const rawPos=(at(c,'pos',1)||'').toUpperCase(), adp=num(at(c,'adp',3))||i;
-    arr.push({id:i, name:at(c,'name',0), pos:rawPos==='DEF'?'DST':rawPos, team:at(c,'team',2)||'',
+    // A cell may hold several positions ("C/LW"). Slash- or plus-separated, never
+    // comma — the CSV already owns the comma. First one is primary, used for the
+    // colour chip and counts; the rest make the player eligible for those slots.
+    const alias=SPORT.posAlias||{};
+    const elig=rawPos.split(/[\/|+]/).map(x=>x.trim()).filter(Boolean).map(x=>alias[x]||x);
+    const pos=elig[0]||'';
+    const gp=num(at(c,'gp'));
+    const projNum=num(at(c,'proj',5))||0;
+    arr.push({id:i, name:at(c,'name',0), pos, posEligible:elig.length?elig:[pos], team:at(c,'team',2)||'',
       adp, ecr:num(at(c,'ecr',4))||adp, proj:num(at(c,'proj',5))||0, tier:num(at(c,'tier',6))||0,
       yahooDefault:num(at(c,'yahoo_default')), yahooAvgSalary:num(at(c,'yahoo_avg_salary')),
       fpValue:num(at(c,'fp_value')), dsMarket:num(at(c,'ds_market')), dsValue:num(at(c,'ds_value')),
@@ -3454,6 +3988,14 @@ function parsePlayers(txt){
       age:num(at(c,'age')),                 // drives ageTrajectory() when present
       trajectory:num(at(c,'trajectory')),   // 1.0 neutral, >1 ascending, <1 aging
       sleeperId:at(c,'sleeper_id')||'', rookie:!!at(c,'rookie'),
+      // Hockey: projected season totals per category, so a league with different
+      // point values can be rescored without refetching anything. fppg is what the
+      // Add Radar multiplies by a team's games in the window.
+      gp, toi:num(at(c,'toi')),
+      st:{g:num(at(c,'g')),a:num(at(c,'a')),pm:num(at(c,'pm')),ppp:num(at(c,'ppp')),
+          sog:num(at(c,'sog')),blk:num(at(c,'blk')),hit:num(at(c,'hit')),
+          w:num(at(c,'w')),sv:num(at(c,'sv')),ga:num(at(c,'ga')),sho:num(at(c,'sho'))},
+      fppg:(gp&&projNum)?projNum/gp:0, nhlId:at(c,'nhl_id')||'',
       drafted:false, keeper:null});
   }
   return arr;
@@ -3541,6 +4083,7 @@ function loadLeagueIntoForm(id){
   el('lgName').value=p.name||'';
   el('lgTeams').value=p.teams||12;
   el('lgRounds').value=p.rounds||16;
+  if(el('lgSport')) el('lgSport').value=p.sport||'nfl';
   el('lgDraftType').value=p.draftType||'snake';
   el('lgLeagueType').value=p.leagueType||'keeper';
   updateLgKeeperFieldsVisibility();
@@ -3696,7 +4239,12 @@ function collectLeagueForm(){
     scoringLabel: el('lgScoring').value.trim()||'TBD',
     draftDateLabel: el('lgDraftDate').value.trim()||'TBD',
     keeperDeadlineLabel: el('lgKeeperDeadline').value.trim()||'TBD',
-    starters, flexEligible: ['RB','WR','TE'],
+    sport: el('lgSport') ? el('lgSport').value : (existing.sport||'nfl'),
+    starters,
+    // Was hardcoded to football's flex, which silently reverted any league with a
+    // narrower flex (ESPN's RB/WR-only) on every save. The form has no editor for
+    // it, so keep what the profile already had and fall back to the sport default.
+    flexEligible: (existing.flexEligible!==undefined ? existing.flexEligible : SPORTS[(el('lgSport')?el('lgSport').value:'nfl')].flexDefault),
     maxKeepers: el('lgMaxKeepers').value!==''? +el('lgMaxKeepers').value : null,
     keeperCostType: el('lgKeeperCostType').value,
     auctionBudget:+el('lgAuctionBudget').value||200,rosterSize:+el('lgRosterSize').value||(existing.rosterSize||existing.rounds||16),irSlots:+el('lgIrSlots').value||0,minBid:+el('lgMinBid').value||1,
@@ -3731,6 +4279,7 @@ async function saveLeagueForm(){
 function newLeagueForm(){
   editingLeagueId=null;
   el('lgName').value='New League'; el('lgTeams').value=12; el('lgRounds').value=16; el('lgDraftType').value='snake';
+  if(el('lgSport')) el('lgSport').value=ACTIVE_SPORT;
   el('lgLeagueType').value='keeper'; updateLgKeeperFieldsVisibility();
   el('lgSuperflex').checked=false; el('lgScoring').value='TBD'; el('lgDraftDate').value='TBD';
   el('lgKeeperDeadline').value='TBD'; el('lgMaxKeepers').value=''; el('lgKeeperCostType').value='round';
@@ -4009,6 +4558,7 @@ async function loadInSeasonState(){
 }
 
 // ---------- EVENTS ----------
+wireRadar();
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
@@ -4039,7 +4589,7 @@ el('auctionResetBtn').onclick=()=>{if(confirm('Reset auction purchases but keep 
 el('clearKeepers').onclick=clearRivalKeepers;
 el('tendAllOn').onclick=()=>{OWNERS.forEach(o=>{TENDENCIES[o].enabled=true;});renderTendencies();saveSetup();};
 el('tendAllOff').onclick=()=>{OWNERS.forEach(o=>{TENDENCIES[o].enabled=false;});renderTendencies();saveSetup();};
-el('tendReset').onclick=()=>{OWNERS.forEach(o=>{TEND_POS.forEach(p=>{TENDENCIES[o].bias[p]=0;});});renderTendencies();saveSetup();};
+el('tendReset').onclick=()=>{OWNERS.forEach(o=>{TEND_POS_FOR().forEach(p=>{TENDENCIES[o].bias[p]=0;});});renderTendencies();saveSetup();};
 el('addPickTrade').onclick=addPickTrade; el('addPlayerTrade').onclick=addPlayerTrade;
 if(el('ptFrom'))el('ptFrom').onchange=fillPickOptions;
 el('toggleDelta').onchange=e=>document.body.classList.toggle('hide-delta',!e.target.checked);
@@ -4135,6 +4685,116 @@ async function saveMock(){
 }
 async function loadMock(id){ try{const rec=await api('/'+id); applyMock(rec.data); document.querySelector('nav button[data-view=room]').click(); setStatus('Loaded “'+(rec.name||id)+'”.'); }catch(e){ setStatus('Load failed.'); } }
 async function delMock(id){ if(!confirm('Delete this mock?'))return; try{ await api('/'+id,{method:'DELETE'}); renderMocks(); }catch(e){ setStatus('Delete failed.'); } }
+
+
+// ---------- ADD RADAR ----------
+// The daily pickup shortlist, and deliberately our own logic rather than someone
+// else's waiver rankings: a pickup is worth making when the player scores AND gets
+// to play. Opportunity = projected points per game x games in the window, bonused
+// for games landing on light nights, because those are the ones a bench slot is
+// actually free to start. Yahoo's 4-adds-a-week cap is what makes the ranking
+// matter — you only get a few of these, so they should be the right few.
+let RADAR_SCHED=null;
+const RADAR_LIGHT_BONUS=0.35;
+function radarVisible(){ return !!(SPORT.dailyLineups) && !roomOnly(); }
+function applyRadarVisibility(){
+  const btn=document.querySelector('nav button[data-view="radar"]');
+  if(btn) btn.style.display=radarVisible()?'':'none';
+  const sec=el('view-radar');
+  if(sec && !radarVisible() && sec.classList.contains('active')){
+    const room=document.querySelector('nav button[data-view="room"]');
+    if(room) room.click();   // don't strand the user on a tab that no longer applies
+  }
+  const rs=el('radarRostered');
+  if(rs && radarVisible() && !rs.dataset.touched) rs.value=LEAGUE.teams*(LEAGUE.rosterSize||LEAGUE.rounds||16);
+  const start=el('radarStart');
+  if(start && !start.value) start.value=new Date().toISOString().slice(0,10);
+}
+async function radarLoad(){
+  const st=el('radarStatus'); if(!st) return;
+  const start=(el('radarStart').value)||new Date().toISOString().slice(0,10);
+  const days=+el('radarDays').value||7;
+  st.textContent='Loading schedule…';
+  try{
+    let r=await fetch(`/api/nhl/schedule?start=${start}&days=${days}`);
+    let d=await r.json();
+    if(d.error) throw new Error(d.error);
+    const total=Object.values(d.dayCounts||{}).reduce((a,b)=>a+b,0);
+    // Before opening night there is nothing to rank, so jump to the opener rather
+    // than showing an empty table and leaving the user to guess why.
+    if(!total && d.seasonStart && d.seasonStart>start){
+      el('radarStart').value=d.seasonStart;
+      r=await fetch(`/api/nhl/schedule?start=${d.seasonStart}&days=${days}`);
+      d=await r.json();
+      if(d.error) throw new Error(d.error);
+      st.textContent=`No games until the season opens ${d.seasonStart} — showing that week.`;
+    } else {
+      st.textContent=`${total} games over ${(d.days||[]).length} days.`;
+    }
+    RADAR_SCHED=d;
+  }catch(e){
+    RADAR_SCHED=null;
+    st.textContent='Could not load the NHL schedule: '+e.message;
+  }
+  renderRadar();
+}
+function renderRadar(){
+  const tb=el('radarTable'); if(!tb) return;
+  const body=tb.querySelector('tbody');
+  const rules=el('radarRules');
+  if(rules){
+    const bits=[];
+    if(LEAGUE.maxAcquisitionsPerWeek) bits.push(`<span class="tag">${LEAGUE.maxAcquisitionsPerWeek} adds per week</span>`);
+    if(LEAGUE.minGoalieGamesPerWeek) bits.push(`<span class="tag">${LEAGUE.minGoalieGamesPerWeek} goalie starts minimum</span>`);
+    rules.innerHTML=bits.join(' ');
+  }
+  const note=el('radarNote');
+  if(!RADAR_SCHED){
+    body.innerHTML='<tr><td colspan="9" class="muted small">Pick a date and hit <b>Refresh schedule</b>.</td></tr>';
+    if(note) note.textContent='';
+    return;
+  }
+  const lightMax=+el('radarLight').value||8;
+  const skip=Math.max(0,+el('radarRostered').value||0);
+  const counts=RADAR_SCHED.dayCounts||{}, teams=RADAR_SCHED.teams||{};
+  const rows=PLAYERS.map(p=>{
+    if(p.drafted) return null;                       // taken in this league's draft
+    if(skip && p.adp && p.adp<=skip) return null;    // assumed already rostered
+    const dates=teams[p.team]||[];
+    if(!dates.length) return null;
+    const lit=dates.filter(d=>(counts[d]||0)<=lightMax).length;
+    const windowFp=(p.fppg||0)*dates.length;
+    return {p, games:dates.length, lit, windowFp,
+            score: windowFp*(1+RADAR_LIGHT_BONUS*(lit/dates.length))};
+  }).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,40);
+  if(!rows.length){
+    body.innerHTML='<tr><td colspan="9" class="muted small">Nobody plays in this window — try a later date or a wider window.</td></tr>';
+    if(note) note.textContent='';
+    return;
+  }
+  body.innerHTML=rows.map((r,i)=>`<tr>
+    <td class="muted">${i+1}</td>
+    <td><span class="pos ${r.p.pos}">${r.p.pos}</span></td>
+    <td>${headshotImg(r.p)}${r.p.name}</td>
+    <td class="muted">${r.p.team||''}</td>
+    <td><b>${r.games}</b></td>
+    <td class="${r.lit?'val-good':'muted'}">${r.lit}</td>
+    <td>${(r.p.fppg||0).toFixed(1)}</td>
+    <td>${r.windowFp.toFixed(0)}</td>
+    <td class="val-good"><b>${r.score.toFixed(0)}</b></td>
+  </tr>`).join('');
+  if(note) note.innerHTML=`Ranked by opportunity across ${(RADAR_SCHED.days||[]).length} days from ${RADAR_SCHED.start}. `
+    +`“Light” counts that player's games falling on a night with ${lightMax} or fewer games league-wide; each one adds up to ${Math.round(RADAR_LIGHT_BONUS*100)}% to the score. `
+    +`Players ranked in the top ${skip} of the pool are assumed rostered and hidden — lower that number to see them.`;
+}
+function wireRadar(){
+  if(!el('radarRefresh')) return;   // removed in guest mode
+  el('radarRefresh').onclick=radarLoad;
+  el('radarDays').onchange=radarLoad;
+  el('radarLight').onchange=renderRadar;
+  el('radarRostered').onchange=()=>{el('radarRostered').dataset.touched='1'; renderRadar();};
+  el('radarStart').onchange=radarLoad;
+}
 
 // ---------- TRADES ----------
 // Every pick this slot owns right now — original picks it still has, plus any
@@ -4278,7 +4938,7 @@ let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
 function saveSetup(){if(!canSave())return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
-function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},v.bias||{})};}); }
+function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign(blankBias(),v.bias||{})};}); }
 async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||(Array.isArray(s.picks)&&s.picks.length)||(Array.isArray(s.auctionPicks)&&s.auctionPicks.length))){
   if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
   if(Array.isArray(s.cutPlayers))cutPlayers=new Set(s.cutPlayers);
@@ -4304,7 +4964,7 @@ async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||
 
 // ---------- HEADER / LEAGUE SELECTOR ----------
 function renderHeader(){
-  const t=el('leagueTitle'); if(t) t.textContent='🏈 '+LEAGUE.name+' · Draft Lab';
+  const t=el('leagueTitle'); if(t) t.textContent=SPORT.icon+' '+LEAGUE.name+' · Draft Lab';
   const dt=LEAGUE.draftType==='auction'?'Auction':(LEAGUE.draftType==='linear'?'Linear':'Snake');
   const slot=(LEAGUE.mySlot!=null&&LEAGUE.draftType!=='auction')?(' · Slot '+LEAGUE.mySlot):'';
   const tag1=el('leagueTag1'); if(tag1) tag1.textContent=`${LEAGUE.teams}-team · ${LEAGUE.scoringLabel} · ${dt}${LEAGUE.superflex?' · Superflex':''}${slot}`;
@@ -4312,19 +4972,52 @@ function renderHeader(){
   document.title=LEAGUE.name+' — Draft Lab';
   const sel=el('leagueSelect'); if(sel && sel.value!==CURRENT_LEAGUE_ID) sel.value=CURRENT_LEAGUE_ID;
 }
+let ACTIVE_SPORT='nfl';
+function leaguesForSport(sp){ return Object.values(LEAGUES).filter(p=>((p&&p.sport)||'nfl')===sp); }
 function fillLeagueSelect(){
   const sel=el('leagueSelect'); if(!sel) return;
-  sel.innerHTML=Object.values(LEAGUES).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  // Scoped to the active sport — a flat list of every league across four sports
+  // is unusable, and the sport bar is what switches between them.
+  const list=leaguesForSport(ACTIVE_SPORT);
+  sel.innerHTML=(list.length?list:Object.values(LEAGUES)).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
   sel.onchange=()=>switchLeague(sel.value);
+}
+function renderSportBar(){
+  const bar=el('sportBar'); if(!bar) return;
+  const present=SPORT_ORDER.filter(sp=>leaguesForSport(sp).length);
+  bar.style.display=present.length>1?'':'none';
+  bar.innerHTML=present.map(sp=>`<button data-sport="${sp}" class="${sp===ACTIVE_SPORT?'active':''}">${SPORTS[sp].icon} ${SPORTS[sp].label}</button>`).join('');
+  bar.querySelectorAll('[data-sport]').forEach(b=>b.onclick=()=>switchSport(b.dataset.sport));
+}
+function switchSport(sp){
+  if(sp===ACTIVE_SPORT) return;
+  const list=leaguesForSport(sp); if(!list.length) return;
+  // Come back to whichever league you were last using in that sport, not the first.
+  let saved=null; try{saved=localStorage.getItem('league:'+sp);}catch(e){}
+  const ok=saved&&LEAGUES[saved]&&(((LEAGUES[saved].sport)||'nfl')===sp);
+  switchLeague(ok?saved:list[0].id);
+}
+// The position filters and any other per-sport control lists.
+function fillPosFilters(){
+  ['posFilter','auctionPosFilter'].forEach(id=>{
+    const sel=el(id); if(!sel) return;
+    const cur=sel.value;
+    sel.innerHTML='<option value="ALL">All positions</option>'+SPORT.positions.map(p=>`<option>${p}</option>`).join('');
+    sel.value=SPORT.positions.includes(cur)?cur:'ALL';
+  });
 }
 
 // ---------- INIT / LEAGUE SWITCHING ----------
 function applyLeagueProfile(id){
   const profile=LEAGUES[id]||LEAGUES['aeo-keepers'];
   CURRENT_LEAGUE_ID=profile.id;
+  SPORT=sportOf(profile); ACTIVE_SPORT=SPORT.id;
   LEAGUE={
     name:profile.name, teams:profile.teams||12, rounds:profile.rounds||16, mySlot:profile.mySlot,
-    starters:profile.starters||{}, flexEligible:profile.flexEligible||['RB','WR','TE'], myKeepers:profile.myKeepers||[],
+    starters:profile.starters||{},
+    // An empty flex list is a real answer (hockey has no Util slot), so only an
+    // absent field falls back to the sport default.
+    flexEligible:(profile.flexEligible!==undefined?profile.flexEligible:SPORT.flexDefault), myKeepers:profile.myKeepers||[],
     draftType:profile.draftType||'snake', leagueType:profile.leagueType||'keeper', superflex:!!profile.superflex,
     maxKeepers:(profile.maxKeepers!=null?profile.maxKeepers:null), keeperCostType:profile.keeperCostType||'round',
     leagueKeepers:profile.leagueKeepers||[],   // keepers the league itself locked in
@@ -4337,6 +5030,8 @@ function applyLeagueProfile(id){
     keeperRules:profile.keeperRules||{},
     auctionBudget:profile.auctionBudget||200,rosterSize:profile.rosterSize||profile.rounds||16,irSlots:profile.irSlots||0,minBid:profile.minBid||1,
     scoringLabel:profile.scoringLabel||'TBD', draftDateLabel:profile.draftDateLabel||'TBD', keeperDeadlineLabel:profile.keeperDeadlineLabel||'TBD',
+    sport:SPORT.id, scoringMode:profile.scoringMode||'points', scoring:profile.scoring||null,
+    maxAcquisitionsPerWeek:profile.maxAcquisitionsPerWeek||null, minGoalieGamesPerWeek:profile.minGoalieGamesPerWeek||null,
   };
   mySlot=LEAGUE.mySlot;
   totalPicks=LEAGUE.teams*LEAGUE.rounds;
@@ -4368,10 +5063,12 @@ function applyLeagueProfile(id){
   }
   computePosRanks();
   computeMyRanks();
+  fillPosFilters();
   MY_LOCKED.forEach(n=>assigned.add(ME_OWNER+'|'+n));
 
   initKeepers(); applyKeepers(); resetDraft();
-  renderHeader(); updateKeeperCopy();
+  renderHeader(); renderSportBar(); fillLeagueSelect(); updateKeeperCopy();
+  applyRadarVisibility(); RADAR_SCHED=null; renderRadar();
   if(!roomOnly()){
     // Views the current viewer isn't allowed had their DOM sections removed
     // outright by applyAccessUI() — skip populating them too, both to avoid
@@ -4390,7 +5087,7 @@ function applyLeagueProfile(id){
 }
 function switchLeague(id){
   if(!LEAGUES[id])return;
-  try{localStorage.setItem('league',id);}catch(e){}
+  try{localStorage.setItem('league',id);localStorage.setItem('league:'+((LEAGUES[id].sport)||'nfl'),id);}catch(e){}
   applyLeagueProfile(id);
 }
 // Cloud-backed league list. Falls back to (and, on a truly first run, seeds the
@@ -4419,7 +5116,7 @@ async function fetchCloudLeagues(){
       // already in KV, so production kept running the generic defaults and priced
       // a backup quarterback at $9. Backfill each such field independently, and
       // only where the cloud copy has no value at all.
-      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules'];
+      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','scoring','scoringMode','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'];
       const isEmpty=v=>v==null||v===''||(Array.isArray(v)&&!v.length)||(typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length);
       const toPatch=[];
       Object.values(LEAGUES_DEFAULT).forEach(def=>{
@@ -4433,6 +5130,9 @@ async function fetchCloudLeagues(){
         if(def.keeperDataRevision && cur.keeperDataRevision!==def.keeperDataRevision){
           ['keeperDataRevision','teams','rounds','rosterSize','mySlot','owners','meOwner','ownerSlot','teamNames','leagueKeepers','auctionStrategy','myLocked','myKeepers']
             .forEach(f=>{ if(def[f]!==undefined)add[f]=def[f]; });
+        }
+        if(def.poolDataRevision && cur.poolDataRevision!==def.poolDataRevision){
+          ['poolDataRevision','playersCsv'].forEach(f=>{ if(def[f]!==undefined)add[f]=def[f]; });
         }
         if(def.auctionDataRevision && cur.auctionDataRevision!==def.auctionDataRevision){
           ['auctionDataRevision','playersCsv','draftDateLabel'].forEach(f=>{ if(def[f]!==undefined)add[f]=def[f]; });
