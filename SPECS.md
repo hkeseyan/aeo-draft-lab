@@ -10,9 +10,36 @@ features not yet reflected here — the user will bring those notes over from
 another device and they need to be merged in. Until then, treat this doc as
 incomplete, not final.
 
+## Sports
+
+The app serves more than one sport from one deployment. A league profile names its
+sport (`sport:'nfl'|'nhl'`, defaulting to `'nfl'` so every pre-existing football
+profile keeps working untouched), and a **sport pack** in `SPORTS` supplies
+everything that used to be hardcoded football: the position list and colours, the
+tendency positions, the flex default, position aliases, the roster depth-cap rule,
+the late-round quirk (football's "nobody drafts a kicker in round 3"), auction
+position multipliers, and whether the sport has daily lineups.
+
+A segmented control in the header switches sport and **scopes the league dropdown to
+that sport** — a flat list of every league across several sports is unusable. The
+last-used league is remembered per sport, so switching back returns you where you
+were, not to the first league alphabetically.
+
+Nothing in `/api/*` changed to support this: every route was already `?league=`-scoped
+and every KV entity already per-league, so a new sport is just more league profiles.
+
+**Multi-position eligibility.** A player's `pos` cell may name several positions
+(`C/LW` — slash or plus separated, never comma, since the CSV owns the comma). The
+first is primary and drives the colour chip and roster counts; the rest make the
+player eligible to fill those starting slots. Roster slotting, the rival model's
+roster-need score, and flex filling all ask "can this player fill this slot" rather
+than "is this player this position", so a C/LW doesn't look unwanted the moment
+centre is full. Football profiles are unaffected — a single position parses to a
+one-entry eligibility list.
+
 ## App shape
 
-Single-page app (`public/index.html`), eight tabs:
+Single-page app (`public/index.html`), nine tabs:
 
 ### Draft Room
 Live mock draft UI. Snake/linear leagues use the best-available pool, roster
@@ -85,6 +112,31 @@ devices. Save the current draft, list saved mocks newest-first, load or
 delete one. Snake/linear mocks persist pick state; auction mocks persist
 winning team + price for every completed sale. Falls back to local-only
 ("Save config" in the Data tab) when the cloud API isn't reachable.
+
+### Add Radar
+Only shown for sports with daily lineups (hockey today; basketball and baseball
+later) and hidden entirely in guest mode. A daily pickup shortlist built from **our
+own logic rather than a republished waiver list**: every player is scored on how many
+games their team plays in a chosen window and how many of those fall on a **light
+night** (few teams playing league-wide, so a bench slot is actually free to start
+them), multiplied by what they project to score per game under this league's own
+point values.
+
+```
+opportunity = fppg × games_in_window × (1 + 0.35 × light_nights / games_in_window)
+```
+
+Controls: start date, window length (today / 3 / 7 / 14 days), the light-night
+threshold, and how many top-ranked players to assume are already rostered (defaults
+to `teams × rosterSize`, since without league sync the app can't know who's taken).
+The league's own in-season constraints are shown alongside — Yahoo's default 4 adds
+per week and 3-goalie-games minimum — because the add cap is what makes the ranking
+matter: you only get a few, so they should be the right few.
+
+Schedule data comes from `GET /api/nhl/schedule?start=&days=` (see `worker.js`),
+which proxies the NHL's public API, keeps only regular-season games, and caches for
+six hours. Before opening night there is nothing to rank, so the view detects an
+empty window and jumps to the season opener rather than showing a blank table.
 
 ### Strategy Lab
 Compares draft paths/strategies side by side (`renderStratCards`). Rival picks

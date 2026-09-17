@@ -137,15 +137,26 @@ The embedded 2026 auction inputs use authenticated Yahoo **League Value** plus Y
 Check `FEEDBACK.md` for unaddressed 🆕 items first — that's the live backlog, more
 current than this list.
 
-**Current priority (2026-09-17): multi-sport — NHL, then NBA, then MLB.** The user
-is reusing this app for fantasy hockey (drafts imminent), basketball (Oct–Nov), and
-baseball (Feb–Mar). Plan, reasoning, de-hardcoding inventory and sequencing live in
-`docs/MULTISPORT_PLAN.md` — read it before starting sport work. Short version: sport
-becomes a field on the league profile (`sport:'nfl'|'nhl'|'nba'|'mlb'`) with a header
-filter over the existing league dropdown, one deployment; football's hardcoded
-positions move into per-sport "sport packs"; and because NHL/NBA/MLB are all
-multi-category, multi-position, daily-lineup sports, this and roadmap item 5 below
-are effectively the same project.
+**Current priority (2026-09-17): multi-sport — NHL shipped, NBA next, then MLB.**
+Plan and reasoning live in `docs/MULTISPORT_PLAN.md`; built behaviour is in
+`SPECS.md` → "Sports" and "Add Radar". **NHL v1 is built and deployed**: a `sport`
+field on league profiles, per-sport "sport packs" replacing the hardcoded football
+positions, a header sport switcher scoping the league dropdown, multi-position
+eligibility, a Yahoo-default NHL league profile, a 400-player pool projected from
+the NHL's public stats API and scored through Yahoo's point values, and the **Add
+Radar** daily pickup shortlist backed by `GET /api/nhl/schedule`.
+
+Known gaps, deliberate: `adp`/`ecr` in the NHL pool are *our projection rank*, not
+market ADP (no free NHL ADP feed exists), so mock rivals draft to our board rather
+than to a real market — layer in Yahoo or Hashtag ADP by hand when it matters. The
+pool is prior-season rates with no aging curve, role change, or line/PP context.
+Category (roto/H2H-cat) scoring is not built — Yahoo's default public league is
+points, so it wasn't needed for the first leagues; it lands in the NBA month, where
+9-cat makes it unavoidable.
+
+Testing: `node tests/boot-smoke.mjs` boots the whole page in jsdom and asserts both
+sports still work (needs `npm install --no-save jsdom`). Run it plus
+`node tests/validate-fantastic-data.mjs` before any push.
 
 1. ~~Get `wrangler deploy` working and verify KV~~ — done.
 2. ~~Multi-league support~~ — done (see above); auction keeper profiles and the
