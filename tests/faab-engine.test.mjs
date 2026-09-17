@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { analyzeFaab, parseCsvObjects } from '../worker.js';
+import { analyzeFaab, fantasyProsLeagueKey, normalizeFantasyProsMatchup, parseCsvObjects } from '../worker.js';
 
 const profile = {
   id: 'off-with-their-heads',
@@ -40,6 +40,27 @@ Tucker Kraft,TE,GB,9.0,5,40,65,3,15`
 };
 
 assert.equal(parseCsvObjects('name,pos\n"Nacua, Puka",WR')[0].name, 'Nacua, Puka');
+assert.equal(
+  fantasyProsLeagueKey('https://www.fantasypros.com/nfl/myplaybook/matchup.php?key=nfl~6c8af73a-4b6b-4c98-a9ec-86d3f1c5bc49'),
+  'nfl~6c8af73a-4b6b-4c98-a9ec-86d3f1c5bc49'
+);
+assert.equal(fantasyProsLeagueKey('not-a-league'), '');
+
+const fantasyProsSnapshot = normalizeFantasyProsMatchup({
+  key: 'nfl~6c8af73a-4b6b-4c98-a9ec-86d3f1c5bc49',
+  teamName: 'Ilyn Payne',
+  matchup: {
+    team1: {
+      name: 'Ilyn Payne',
+      starters: [{ full: 'Josh Allen', real_position: 'QB', real_team: 'BUF', original_proj: 23.16, ecr: 'QB1', sos: 4, opponent: 'vs. DET' }],
+      bench: [{ full: 'Courtland Sutton', real_position: 'WR', real_team: 'DEN', original_proj: 8.72, ecr: 'WR36', sos: 1, opponent: 'vs. JAC' }]
+    }
+  }
+}, profile);
+assert.equal(fantasyProsSnapshot.roster.length, 2);
+assert.equal(fantasyProsSnapshot.roster[0].week_proj, 23.16);
+assert.equal(fantasyProsSnapshot.roster[1].ros_rank, 36);
+assert.deepEqual(fantasyProsSnapshot.lineup.starters, ['Josh Allen']);
 
 const report = analyzeFaab(input, profile);
 const byName = Object.fromEntries(report.recommendations.map((p) => [p.name, p]));

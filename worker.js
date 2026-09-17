@@ -29,6 +29,8 @@ var commishHistoryKey = /* @__PURE__ */ __name((lg) => `commishHistory:${lg}`, "
 var inSeasonStateKey = /* @__PURE__ */ __name((lg) => `inseason:${lg}`, "inSeasonStateKey");
 var inSeasonReportsKey = /* @__PURE__ */ __name((lg) => `inseasonReports:${lg}`, "inSeasonReportsKey");
 var inSeasonReportKey = /* @__PURE__ */ __name((lg, id) => `inseasonReport:${lg}:${id}`, "inSeasonReportKey");
+var leagueSourceConfigKey = /* @__PURE__ */ __name((lg) => `leagueSource:${lg}`, "leagueSourceConfigKey");
+var leagueSnapshotKey = /* @__PURE__ */ __name((lg) => `leagueSnapshot:${lg}`, "leagueSnapshotKey");
 var FAAB_CALIBRATION_VERSION = "off-with-their-heads-2025-plus-2026-09-16";
 function slugify(s) {
   return String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-+|-+$)/g, "").slice(0, 40) || "league";
@@ -433,6 +435,77 @@ function yahooPlayerRows(raw) {
   }));
 }
 __name(yahooPlayerRows, "yahooPlayerRows");
+function fantasyProsLeagueKey(value) {
+  const raw = String(value || "").trim();
+  let candidate = raw;
+  try {
+    if (/^https?:\/\//i.test(raw)) candidate = new URL(raw).searchParams.get("key") || raw;
+  } catch {
+  }
+  return /^nfl~[0-9a-f-]{36}$/i.test(candidate) ? candidate : "";
+}
+__name(fantasyProsLeagueKey, "fantasyProsLeagueKey");
+function fantasyProsPlayerRow(player, slot) {
+  const ecrMatch = String(player && player.ecr || "").match(/(\d+)/);
+  return {
+    name: String(player && (player.full || player.player_name) || "").trim(),
+    pos: String(player && (player.real_position || player.player_pos) || "").toUpperCase(),
+    team: String(player && (player.real_team || player.player_team) || "").toUpperCase(),
+    week_proj: n(player && (player.original_proj ?? player.week_proj), 0),
+    ros_rank: ecrMatch ? Number(ecrMatch[1]) : "",
+    status: String(player && (player.injuryStatus || player.injury_status) || "").toUpperCase(),
+    schedule: n(player && player.sos, 3),
+    opponent: String(player && player.opponent || ""),
+    roster_slot: slot || String(player && player.position || ""),
+    source: "fantasypros"
+  };
+}
+__name(fantasyProsPlayerRow, "fantasyProsPlayerRow");
+function normalizeFantasyProsMatchup(raw, profile = {}) {
+  const matchup = raw && raw.matchup || {};
+  const candidates = [matchup.team1, matchup.team2].filter(Boolean);
+  const wanted = String(raw && raw.teamName || profile.meOwner || "").trim().toLowerCase();
+  const team = candidates.find((t) => String(t.name || "").trim().toLowerCase() === wanted) || candidates[0];
+  if (!team) throw new Error("FantasyPros returned no matchup roster for this league.");
+  const starters = (team.starters || []).map((p) => fantasyProsPlayerRow(p, p.position || "START"));
+  const bench = (team.bench || []).map((p) => fantasyProsPlayerRow(p, "BN"));
+  const roster = [...starters, ...bench].filter((p) => p.name);
+  if (!roster.length) throw new Error("FantasyPros returned an empty roster for this league.");
+  return {
+    fantasyProsLeagueKey: fantasyProsLeagueKey(raw && raw.key),
+    syncedAt: Date.now(),
+    teamName: team.name || raw.teamName || profile.meOwner || "",
+    roster,
+    available: [],
+    lineup: { starters: starters.map((p) => p.name), bench: bench.map((p) => p.name) }
+  };
+}
+__name(normalizeFantasyProsMatchup, "normalizeFantasyProsMatchup");
+async function fantasyProsSnapshot(key, profile) {
+  const validKey = fantasyProsLeagueKey(key);
+  if (!validKey) throw new Error("FantasyPros MyPlaybook needs a valid NFL league URL or key.");
+  const r = await fetch(`https://mpbnfl.fantasypros.com/json/matchup?key=${encodeURIComponent(validKey)}`, {
+    headers: { "User-Agent": "aeo-draft-lab/1.0", Accept: "application/json" }
+  });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`FantasyPros MyPlaybook returned ${r.status}: ${text.slice(0, 180)}`);
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new Error("FantasyPros MyPlaybook returned invalid JSON.");
+  }
+  return normalizeFantasyProsMatchup(raw, profile);
+}
+__name(fantasyProsSnapshot, "fantasyProsSnapshot");
+function mergePlayerRows(primary, enrichment) {
+  const extras = new Map((enrichment || []).map((p) => [String(p.name || "").trim().toLowerCase(), p]));
+  return (primary || []).map((p) => {
+    const extra = extras.get(String(p.name || "").trim().toLowerCase());
+    return extra ? { ...extra, ...p, week_proj: p.week_proj || extra.week_proj, ros_rank: p.ros_rank || extra.ros_rank, schedule: p.schedule || extra.schedule, opponent: p.opponent || extra.opponent, status: p.status || extra.status } : p;
+  });
+}
+__name(mergePlayerRows, "mergePlayerRows");
 async function yahooFaabSnapshot(env, kv, originUrl, profile) {
   const token = await getYahooAccessToken(env, kv, originUrl);
   if (!token) throw new Error("Yahoo account is not connected.");
@@ -451,6 +524,51 @@ async function yahooFaabSnapshot(env, kv, originUrl, profile) {
   return { yahooLeagueKey: key, syncedAt: Date.now(), roster, available };
 }
 __name(yahooFaabSnapshot, "yahooFaabSnapshot");
+async function syncLeagueSnapshot(env, kv, originUrl, profile) {
+  const config = await kv.get(leagueSourceConfigKey(profile.id), { type: "json" }) || {};
+  const previous = await kv.get(leagueSnapshotKey(profile.id), { type: "json" }) || {};
+  const sourceStatus = {};
+  let yahoo = null;
+  let fantasyPros = null;
+  if (config.yahooEnabled !== false) {
+    try {
+      yahoo = await yahooFaabSnapshot(env, kv, originUrl, profile);
+      sourceStatus.yahoo = { ok: true, syncedAt: yahoo.syncedAt };
+    } catch (e) {
+      sourceStatus.yahoo = { ok: false, error: e.message };
+    }
+  }
+  if (config.fantasyProsEnabled !== false && config.fantasyProsLeagueKey) {
+    try {
+      fantasyPros = await fantasyProsSnapshot(config.fantasyProsLeagueKey, profile);
+      sourceStatus.fantasypros = { ok: true, syncedAt: fantasyPros.syncedAt };
+    } catch (e) {
+      sourceStatus.fantasypros = { ok: false, error: e.message };
+    }
+  }
+  let roster = yahoo && yahoo.roster && yahoo.roster.length ? yahoo.roster : fantasyPros && fantasyPros.roster && fantasyPros.roster.length ? fantasyPros.roster : previous.roster || [];
+  if (fantasyPros && fantasyPros.roster && roster.length) roster = mergePlayerRows(roster, fantasyPros.roster);
+  const available = yahoo && yahoo.available && yahoo.available.length ? yahoo.available : previous.available || [];
+  const rosterSource = yahoo && yahoo.roster && yahoo.roster.length ? "yahoo" : fantasyPros && fantasyPros.roster && fantasyPros.roster.length ? "fantasypros" : previous.coverage && previous.coverage.roster || "saved";
+  const availabilitySource = yahoo && yahoo.available && yahoo.available.length ? "yahoo" : previous.coverage && previous.coverage.available || (available.length ? "saved" : "none");
+  if (!roster.length && !available.length) {
+    const failures = Object.entries(sourceStatus).filter(([, s]) => !s.ok).map(([name, s]) => `${name}: ${s.error}`).join("; ");
+    throw new Error(failures || "No configured data source returned league data.");
+  }
+  const snapshot = {
+    leagueId: profile.id,
+    leagueName: profile.name || "League",
+    syncedAt: Date.now(),
+    roster,
+    available,
+    lineup: fantasyPros && fantasyPros.lineup || previous.lineup || null,
+    coverage: { roster: rosterSource, available: availabilitySource, projections: fantasyPros ? "fantasypros" : previous.coverage && previous.coverage.projections || "embedded" },
+    sourceStatus
+  };
+  await kv.put(leagueSnapshotKey(profile.id), JSON.stringify(snapshot));
+  return snapshot;
+}
+__name(syncLeagueSnapshot, "syncLeagueSnapshot");
 async function saveInSeasonReport(kv, lg, report, me = null) {
   const reportKey = me ? scoped(inSeasonReportKey(lg, report.id), me) : inSeasonReportKey(lg, report.id);
   const reportsKey = me ? scoped(inSeasonReportsKey(lg), me) : inSeasonReportsKey(lg);
@@ -499,10 +617,10 @@ async function runScheduledFaab(env) {
     if (state.lastScheduledDate === dateKey) continue;
     let input = { ...state };
     try {
-      const snapshot = await yahooFaabSnapshot(env, kv, originUrl, profile);
-      input = { ...input, roster: snapshot.roster, available: snapshot.available, yahooLeagueKey: snapshot.yahooLeagueKey, yahooSyncedAt: snapshot.syncedAt };
+      const snapshot = await syncLeagueSnapshot(env, kv, originUrl, profile);
+      input = { ...input, roster: snapshot.roster && snapshot.roster.length ? snapshot.roster : input.roster, available: snapshot.available && snapshot.available.length ? snapshot.available : input.available, dataSyncedAt: snapshot.syncedAt, dataCoverage: snapshot.coverage, dataSourceStatus: snapshot.sourceStatus };
     } catch (e) {
-      input.yahooSyncError = e.message;
+      input.dataSyncError = e.message;
     }
     if ((input.available && input.available.length) || String(input.availableCsv || "").trim()) {
       const report = await saveInSeasonReport(kv, profile.id, analyzeFaab(input, profile));
@@ -516,10 +634,27 @@ async function runScheduledFaab(env) {
         }
       }
     }
-    await kv.put(inSeasonStateKey(profile.id), JSON.stringify({ ...state, yahooLeagueKey: input.yahooLeagueKey || state.yahooLeagueKey, yahooSyncedAt: input.yahooSyncedAt || state.yahooSyncedAt, yahooSyncError: input.yahooSyncError || "", lastScheduledDate: dateKey }));
+    await kv.put(inSeasonStateKey(profile.id), JSON.stringify({ ...state, dataSyncedAt: input.dataSyncedAt || state.dataSyncedAt, dataCoverage: input.dataCoverage || state.dataCoverage, dataSourceStatus: input.dataSourceStatus || state.dataSourceStatus, dataSyncError: input.dataSyncError || "", lastScheduledDate: dateKey }));
   }
 }
 __name(runScheduledFaab, "runScheduledFaab");
+async function runScheduledLeagueRefresh(env) {
+  if (!env.MOCKS) return;
+  const kv = env.MOCKS;
+  const list = await kv.list({ prefix: "league:" });
+  const profiles = (await Promise.all(list.keys.map((k) => kv.get(k.name, { type: "json" })))).filter(Boolean);
+  const originUrl = new URL(env.PUBLIC_ORIGIN || "https://aeo-draft-lab.hkeseyan.workers.dev");
+  for (const profile of profiles) {
+    const config = await kv.get(leagueSourceConfigKey(profile.id), { type: "json" }) || {};
+    if (config.enabled === false) continue;
+    if (!config.fantasyProsLeagueKey && !profile.yahooLeagueId && !profile.yahooLeagueKey && profile.leagueType !== "guillotine") continue;
+    try {
+      await syncLeagueSnapshot(env, kv, originUrl, profile);
+    } catch {
+    }
+  }
+}
+__name(runScheduledLeagueRefresh, "runScheduledLeagueRefresh");
 var worker_default = {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -1030,6 +1165,65 @@ var worker_default = {
           return J({ error: "MFL import failed: " + e.message }, 502);
         }
       }
+      if (path === "/api/data-sources/sync") {
+        const denied = requireAdmin();
+        if (denied) return denied;
+        if (request.method !== "POST") return J({ error: "method" }, 405);
+        const profile = await kv.get(leagueProfileKey(lg), { type: "json" });
+        if (!profile) return J({ error: "league profile not found" }, 404);
+        try {
+          return J(await syncLeagueSnapshot(env, kv, url, profile), 201);
+        } catch (e) {
+          return J({ error: e.message }, 502);
+        }
+      }
+      if (path === "/api/data-sources") {
+        const denied = requireAdmin();
+        if (denied) return denied;
+        const configKey = leagueSourceConfigKey(lg);
+        if (request.method === "GET") {
+          const config = await kv.get(configKey, { type: "json" }) || {};
+          const snapshot = await kv.get(leagueSnapshotKey(lg), { type: "json" });
+          return J({
+            enabled: config.enabled !== false,
+            yahooEnabled: config.yahooEnabled !== false,
+            fantasyProsEnabled: config.fantasyProsEnabled !== false,
+            fantasyProsConfigured: !!config.fantasyProsLeagueKey,
+            syncedAt: snapshot && snapshot.syncedAt || null,
+            coverage: snapshot && snapshot.coverage || null,
+            sourceStatus: snapshot && snapshot.sourceStatus || null
+          });
+        }
+        if (request.method === "PUT") {
+          let b;
+          try {
+            b = await request.json();
+          } catch {
+            return J({ error: "bad json" }, 400);
+          }
+          const existing = await kv.get(configKey, { type: "json" }) || {};
+          const supplied = b.fantasyProsUrlOrKey || b.fantasyProsLeagueKey || "";
+          const parsed = supplied ? fantasyProsLeagueKey(supplied) : "";
+          if (supplied && !parsed) return J({ error: "Paste a valid FantasyPros NFL MyPlaybook league URL or nfl~ league key." }, 400);
+          const config = {
+            ...existing,
+            enabled: b.enabled == null ? existing.enabled !== false : !!b.enabled,
+            yahooEnabled: b.yahooEnabled == null ? existing.yahooEnabled !== false : !!b.yahooEnabled,
+            fantasyProsEnabled: b.fantasyProsEnabled == null ? existing.fantasyProsEnabled !== false : !!b.fantasyProsEnabled,
+            updatedAt: Date.now()
+          };
+          if (parsed) config.fantasyProsLeagueKey = parsed;
+          if (b.clearFantasyProsKey) delete config.fantasyProsLeagueKey;
+          await kv.put(configKey, JSON.stringify(config));
+          return J({ ok: true, fantasyProsConfigured: !!config.fantasyProsLeagueKey });
+        }
+        return J({ error: "method" }, 405);
+      }
+      if (path === "/api/league-data") {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const snapshot = await kv.get(leagueSnapshotKey(lg), { type: "json" });
+        return snapshot ? J(snapshot) : J({ error: "no league snapshot yet" }, 404);
+      }
       if (path === "/api/inseason/state") {
         const key = scoped(inSeasonStateKey(lg), me);
         if (request.method === "GET") {
@@ -1073,19 +1267,20 @@ var worker_default = {
           const stateKey = scoped(inSeasonStateKey(lg), me);
           const saved = await kv.get(stateKey, { type: "json" }) || {};
           let input = { ...saved, ...b };
-          if (b.syncYahoo) {
+          if (b.syncSources || b.syncYahoo) {
             const denied = requireAdmin();
             if (denied) return denied;
             try {
-              const snapshot = await yahooFaabSnapshot(env, kv, url, profile);
-              input = { ...input, roster: snapshot.roster, available: snapshot.available, yahooLeagueKey: snapshot.yahooLeagueKey, yahooSyncedAt: snapshot.syncedAt, yahooSyncError: "" };
+              const snapshot = await syncLeagueSnapshot(env, kv, url, profile);
+              input = { ...input, roster: snapshot.roster && snapshot.roster.length ? snapshot.roster : input.roster, available: snapshot.available && snapshot.available.length ? snapshot.available : input.available, dataSyncedAt: snapshot.syncedAt, dataCoverage: snapshot.coverage, dataSourceStatus: snapshot.sourceStatus, dataSyncError: "" };
             } catch (e) {
-              return J({ error: e.message, fallback: "Paste the current roster and waiver pool CSV, then run without Yahoo sync." }, 502);
+              return J({ error: e.message, fallback: "Use the most recent saved snapshot or paste the roster and waiver pool CSV, then run without source sync." }, 502);
             }
           }
           const report = await saveInSeasonReport(kv, lg, analyzeFaab(input, profile), me);
-          const nextState = { ...saved, ...b, yahooLeagueKey: input.yahooLeagueKey || saved.yahooLeagueKey, yahooSyncedAt: input.yahooSyncedAt || saved.yahooSyncedAt, yahooSyncError: input.yahooSyncError || "", updatedAt: Date.now() };
+          const nextState = { ...saved, ...b, dataSyncedAt: input.dataSyncedAt || saved.dataSyncedAt, dataCoverage: input.dataCoverage || saved.dataCoverage, dataSourceStatus: input.dataSourceStatus || saved.dataSourceStatus, dataSyncError: input.dataSyncError || "", updatedAt: Date.now() };
           delete nextState.syncYahoo;
+          delete nextState.syncSources;
           if (input.roster) nextState.roster = input.roster;
           if (input.available) nextState.available = input.available;
           await kv.put(stateKey, JSON.stringify(nextState));
@@ -1191,11 +1386,16 @@ var worker_default = {
     return new Response("Not found", { status: 404 });
   },
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runScheduledFaab(env));
+    ctx.waitUntil((async () => {
+      await runScheduledLeagueRefresh(env);
+      await runScheduledFaab(env);
+    })());
   }
 };
 export {
   analyzeFaab,
+  fantasyProsLeagueKey,
+  normalizeFantasyProsMatchup,
   parseCsvObjects,
   worker_default as default
 };

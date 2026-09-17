@@ -158,12 +158,15 @@ current than this list.
    with their own save data (today it's one shared setup per league; guest
    mode is read-only and doesn't address this). Explicitly low priority;
    user wants it after commissioner mode, alongside the two items above.
-8. **In-season tools** — FAAB v1 is now built: Yahoo/manual roster + waiver-pool
-   input, league-specific calibrated bid levels, saved Tuesday reports, cron,
-   calendar reminders, and optional email. Next: competitor remaining-budget
-   modeling, then start/sit and trade analysis; ESPN/FanTracks import remains
-   deferred. Native iPhone push is a later evolution after the web workflow is
-   proven.
+8. **In-season tools** — FAAB v1 is now built on a normalized league snapshot:
+   Yahoo is the authoritative ownership/waiver source, FantasyPros MyPlaybook
+   is the roster/projection/injury/schedule fallback, and the last good/manual
+   pool is retained when a partial source is empty. Configured sources refresh
+   every four hours; Tuesday reports, calendar reminders, and optional email
+   remain in place. `/api/league-data` is the shared read model for the next
+   start/sit, waiver, trade, and roster-management modules. Next: complete
+   FantasyPros availability ingestion and competitor remaining-budget modeling,
+   then start/sit and trade analysis. Native iPhone push is a later evolution.
 
 ## Conventions
 - Keep `public/index.html` self-contained (data embedded) — no external JS/CSS
