@@ -136,6 +136,17 @@ The embedded 2026 auction inputs use authenticated Yahoo **League Value** plus Y
 ## Roadmap
 Check `FEEDBACK.md` for unaddressed 🆕 items first — that's the live backlog, more
 current than this list.
+
+**Current priority (2026-09-17): multi-sport — NHL, then NBA, then MLB.** The user
+is reusing this app for fantasy hockey (drafts imminent), basketball (Oct–Nov), and
+baseball (Feb–Mar). Plan, reasoning, de-hardcoding inventory and sequencing live in
+`docs/MULTISPORT_PLAN.md` — read it before starting sport work. Short version: sport
+becomes a field on the league profile (`sport:'nfl'|'nhl'|'nba'|'mlb'`) with a header
+filter over the existing league dropdown, one deployment; football's hardcoded
+positions move into per-sport "sport packs"; and because NHL/NBA/MLB are all
+multi-category, multi-position, daily-lineup sports, this and roadmap item 5 below
+are effectively the same project.
+
 1. ~~Get `wrangler deploy` working and verify KV~~ — done.
 2. ~~Multi-league support~~ — done (see above); auction keeper profiles and the
    salary-cap mock Draft Room MVP are now built. Advanced auction valuation/nomination
