@@ -2,40 +2,58 @@
 
 Written 2026-09-17, in response to: *"prepare for NHL drafts; leverage what we did
 for NFL; maybe a sport toggle at the top; NHL next 2 weeks, NBA the month+ after,
-MLB a few months later."*
+MLB a few months later."* Revised the same day after the user chose **Yahoo default
+public leagues** and raised in-season management as a gating concern.
 
 Nothing here is built yet. This is the plan and the reasoning behind it.
 
 ---
 
-## 0. Confirmed by the user (2026-09-17)
+## 0. Confirmed inputs and decisions
 
-- **Scoring format:** not settled yet, may vary by league. So we build
-  **categories first** — it's the harder case and the Yahoo default, and points-league
-  support falls out of it for free (a points league is a categories league with one
-  category). No decision is blocked on this.
-- **Retention:** **redraft only, for now.** No existing keeper or dynasty hockey
-  leagues. The user would consider joining one *only if we can build great in-season
-  management automation* — see §7, because that reframes a non-goal.
-- **If a keeper/dynasty league does happen, it would be a startup** — a first-year
-  draft with no existing keepers. That matters more than it sounds: a startup draft
-  is mechanically an ordinary redraft draft. Nothing in the keeper machinery
-  (`assigned`, cost rounds, `cutPlayers`, keeper budget legality) is needed on draft
-  night. What differs is *valuation* — age curves and multi-year value — which is the
-  rankings engine's job, not the draft room's. **Dynasty is cheap on the draft side
-  and expensive on the in-season side**, which is exactly the opposite of how it
-  looks from the football profiles.
-- **First NHL draft: 1–2 weeks out.** The §6 sequencing stands as written.
+From the user, 2026-09-17:
 
-**Net effect on week 1:** don't touch keeper/dynasty code paths for hockey at all.
-Redraft plus the category core is the whole job.
+- **Platform: Yahoo default public leagues.** Will join **at least 2**, then possibly
+  other public prize leagues (roto etc.), then custom commissioner-run prize leagues.
+- **Retention: redraft only, for now.** No existing keeper or dynasty hockey leagues.
+  Would join one *only if we can build great in-season management automation*.
+- **If a keeper/dynasty league happens, it would be a startup** — a first-year draft
+  with no existing keepers. That matters more than it sounds: a startup draft is
+  mechanically an ordinary redraft draft. None of the keeper machinery (`assigned`,
+  cost rounds, `cutPlayers`, budget legality) is needed on draft night. What differs
+  is *valuation* — age curves and multi-year value — which is the rankings engine's
+  job, not the draft room's. **Dynasty is cheap on the draft side and expensive on
+  the in-season side**, the opposite of how it looks from the football profiles.
+- **First NHL draft: 1–2 weeks out.**
+- **Scoring: "whichever is easiest for us to manage."** Answered below — Yahoo's
+  default *is* the easy one.
+
+### Decision reversed by research: points first, not categories first
+
+The first draft of this plan said build categories first because it's the harder case
+and assumed-default. **Yahoo's default public hockey league is Head-to-Head _Points_**
+(§5, verified against Yahoo's own settings page). That means:
+
+- The user's first two leagues need **one number per player** — exactly the shape the
+  existing engine already has. The z-score category engine is **not critical path** for
+  the two-week window.
+- Categories still ship, just later: the roto prize leagues the user may join next need
+  it, and NBA's 9-cat and MLB's 5x5 are category-native. It moves from week 1 to the
+  NBA month, where it belongs anyway.
+
+This is the single biggest de-risking finding in the plan. The two-week window went
+from "build a new valuation engine under time pressure" to "de-hardcode positions and
+load a hockey player pool."
+
+### Net effect on week 1
+Redraft, points scoring, Yahoo defaults. No keeper code, no category engine.
 
 ---
 
 ## 1. The toggle question, answered
 
-**Yes to a sport switcher — but sport should be a field on the league profile, not
-a separate mode, app, or deployment.**
+**Yes to a sport switcher — but sport should be a field on the league profile, not a
+separate mode, app, or deployment.**
 
 Add `sport: 'nfl' | 'nhl' | 'nba' | 'mlb'` (defaulting to `'nfl'`) to the league
 profile, and put a small segmented control in the header that *filters the existing
@@ -49,14 +67,11 @@ Why this shape and not a bigger one:
   sport is just more league profiles.
 - **One codebase, one URL, one sign-in, one KV namespace.** Forking the deployment
   per sport would fork `public/index.html` four ways — and this repo has already
-  paid once for a production/repo divergence (FEEDBACK.md, 2026-09-03). Don't
-  re-create that on purpose.
+  paid once for a production/repo divergence (FEEDBACK.md, 2026-09-03).
 - **The dropdown is already the real problem.** With ~10-12 football leagues and
-  three more sports coming, a flat list of every league is unusable. A sport filter
-  fixes that on its own merits.
+  three more sports coming, a flat list of every league is unusable.
 - Persist last-used sport, and last-used league *within* each sport, in
-  `localStorage` — switching to NHL and back should land you where you were, not
-  reset to AEO-Keepers.
+  `localStorage`.
 
 One naming note: the worker, repo, and URL are all `aeo-draft-lab` — named after a
 football league. Renaming the worker changes the live URL, which isn't worth it.
@@ -67,35 +82,36 @@ Change the in-app title to plain **"Draft Lab"** (and the hardcoded 🏈 at
 
 ## 2. The core insight: NFL is the outlier, not the template
 
-It's tempting to treat NHL as "football with different position letters." It isn't.
 Everything in the current draft engine rests on four football-only assumptions:
 
-1. A player is worth **one number** (`proj` / `adp` / `ecr`), so ranking is sorting.
+1. A player is worth **one number**, so ranking is sorting.
 2. A player has **exactly one position**, from a fixed list of six.
 3. Lineups are set **weekly**; games played is not a resource you manage.
 4. Roster need means "is a starter slot open," nothing more.
 
-NHL, NBA, and MLB all break the same four assumptions in the same ways:
+NHL, NBA, and MLB break assumptions 2, 3 and 4 the same way, and break 1 whenever the
+league is category-scored:
 
 | | NFL | NHL / NBA / MLB |
 |---|---|---|
-| Scoring | one projected point total | **multi-category** (roto or H2H-cats) — value is a vector |
+| Scoring | one projected point total | often **multi-category** — value is a vector |
 | Position | one per player | **multi-eligible** (C/LW, PG/SG, SS/2B) |
-| Lineups | weekly | **daily**, with games-played caps and schedule/off-night value |
+| Lineups | weekly | **daily**, with acquisition caps and schedule/off-night value |
 | Specialists | K/DST as an afterthought | **goalies / pitchers are their own economy** |
 
-That is the whole leverage argument: **build the category-league core once, for
-NHL, and NBA's 9-cat and MLB's 5x5 become mostly configuration plus a data
-adapter.** Build NHL as a special case instead and we pay the same cost three
-times.
+Yahoo's default hockey league happens to be points-scored (§5), so assumption 1
+survives for the user's first leagues. **Assumptions 2, 3 and 4 break regardless** —
+multi-position eligibility and daily-lineup/games-played value are true of every
+hockey league, points or not. Those are week-1 work; the category engine is not.
 
-**Corollary worth stating plainly:** this forces roadmap item 5 (the league-aware
-custom rankings/projections engine, `CLAUDE.md` → Roadmap). Hockey is not usable
-without a version of it — there is no FantasyPros-of-hockey to lean on the way
-football does. So the multi-sport expansion and roadmap item 5 are one project,
-not two, and item 5 arrives earlier than planned because hockey drags it forward.
-Football gets the benefit back: the same engine is what `guillotine` and `bestball`
-have been waiting on.
+The leverage argument still holds for what comes after: **build the category core
+once, and NBA's 9-cat and MLB's 5x5 become mostly configuration.** It just lands in
+the NBA month rather than the NHL fortnight.
+
+**Corollary:** this still pulls roadmap item 5 (league-aware rankings/projections)
+forward. Hockey has no FantasyPros projections to lean on the way football does
+(§6), so our own valuation arrives earlier than planned. Football gets it back —
+that engine is what `guillotine`/`bestball` have been waiting on.
 
 ---
 
@@ -109,10 +125,9 @@ SPORTS.nhl = {
   label:'NHL', icon:'🏒', seasonLabel:'2026-27',
   positions:['C','LW','RW','D','G'],
   posColors:{C:'…', LW:'…', RW:'…', D:'…', G:'…'},
-  flexDefaults:['C','LW','RW','D'],        // Yahoo's "Util"
+  flexDefaults:[],                         // Yahoo's default has no Util slot
   tendencyPositions:['C','LW','RW','D','G'],
-  scoringModes:['categories','points'],
-  defaultCategories:['G','A','PPP','SOG','HIT','BLK','W','GAA','SV%'],
+  scoringModes:['points','categories'],    // points first — see §0
   depthCap:(pos,starters)=>…,              // replaces the RB/WR+3 rule
   lateRoundPositions:[],                   // NHL has no K/DST analogue
   auctionPosMult:{…},
@@ -120,9 +135,8 @@ SPORTS.nhl = {
 }
 ```
 
-Then replace the football constants with lookups into it. This is the full
-de-hardcoding inventory — it's bounded, because the app was already generalized
-once for multi-league:
+Then replace the football constants with lookups into it. The full de-hardcoding
+inventory — bounded, because the app was already generalized once for multi-league:
 
 | Where | Today | Becomes |
 |---|---|---|
@@ -145,174 +159,261 @@ SCG IRS league's RB/WR-only flex every time that profile is saved through the UI
 
 ## 4. What NHL needs that NFL never did
 
-Five things, in rough order of how much they matter.
+### 4.1 Multi-position eligibility — week 1
+`p.pos` → `p.posEligible = ['C','LW']`, keeping `p.pos` as primary for display and
+color. Then `needScore()` (`:2547`), `countsOf()` (`:2545`), `slotRosterPlayers()`
+(`:3066`) and the roster panel need "can this player fill this slot" instead of "is
+this player this position." Biggest mechanical change in the plan, true of every
+hockey league regardless of scoring, and shared verbatim with NBA and MLB.
 
-### 4.1 Multi-position eligibility
-`p.pos` → `p.posEligible = ['C','LW']`, keeping `p.pos` as the primary for display
-and color. Then `needScore()` (`:2547`), `countsOf()` (`:2545`), `slotRosterPlayers()`
-(`:3066`) and the roster panel all need "can this player fill this slot" instead of
-"is this player this position." This is the single biggest mechanical change, and
-it's shared verbatim with NBA and MLB — which is exactly why it's worth doing
-properly rather than special-casing.
+### 4.2 Games played and schedule — week 1, in reduced form
+Daily lineups plus Yahoo's **4 acquisitions per week** cap (§5) make games played a
+budgeted resource, not a detail. Week-1 version: per-team games-count and
+off-night share as player-pool columns, shown as a column and folded modestly into
+value. The full version is the in-season tooling in §6.
 
-### 4.2 Category valuation (the z-score engine)
-For a categories league: compute per-category z-scores across the draft-relevant
-pool, keep only the categories the league actually scores, sum → one composite
-value, rank on that. The composite then feeds the existing engine wherever `adp`
-does today, so the board, rival model, and Strategy Lab keep working unchanged.
+### 4.3 Goalies — week 1, minimal
+A scarcity cliff, the most volatile position in fantasy hockey, and under Yahoo's
+default worth 2 starting slots plus a **3-goalie-games-per-week minimum**. Week-1
+version: `G` as its own position with its own depth cap and scarcity tiering in Best
+Available. Resist building a goalie model before watching one draft with it.
 
-Two things that separate a correct implementation from a naive one:
-
-- **Rate categories must be volume-weighted.** SV%/GAA in hockey, FG%/FT% in
-  basketball, AVG/ERA/WHIP in baseball. A 60% FG on 3 attempts is not worth a 60%
-  FG on 20 — the value is the *impact on your team's aggregate rate*, which scales
-  with volume. Getting this wrong is the standard way category rankings go bad.
-- **Punt-aware re-ranking.** Zero out the categories you're conceding and re-rank
-  the board. It's an NBA staple that works fine in NHL, and it maps naturally onto
-  the existing Strategy Lab shell (compare "punt hits/blocks" against "balanced"
-  the same way the lab compares RB-RB vs WR-WR today).
-
-Points-league NHL is the easy case — one `proj` number, the existing engine is
-already most of the way there. That matters for sequencing (see §6).
-
-### 4.3 Games played and schedule
-Daily lineups mean a player on a team with more games — and more *off-night* games,
-when fewer other teams play — is genuinely worth more, because you can actually
-start them. Minimum viable version: per-team games-count and off-night-share as
-player-CSV columns, surfaced as a visible column and a modest modifier on value.
-A full schedule optimizer is in-season territory and explicitly out of scope, the
-same line football already draws on in-season tools.
-
-### 4.4 Goalies
-A scarcity cliff and the most volatile position in fantasy hockey. Minimum viable:
-`G` as its own position with its own depth cap and its own scarcity tiering in Best
-Available, and let the z-scores carry the valuation. Resist building a goalie model
-before we've watched one draft with it.
+### 4.4 Category valuation (the z-score engine) — deferred to the NBA month
+Not needed for Yahoo default points leagues (§0). Needed for the roto prize leagues
+the user may join later, and for NBA/MLB. When it comes: per-category z-scores across
+the draft-relevant pool, restricted to the categories the league scores, summed into a
+composite that feeds the engine wherever `adp` does today. Two things separate a
+correct implementation from a naive one — **rate categories must be volume-weighted**
+(a 60% FG on 3 attempts isn't a 60% FG on 20; same for SV%/GAA and AVG/ERA/WHIP), and
+**punt-aware re-ranking** (zero out conceded categories and re-rank) which maps onto
+the existing Strategy Lab shell.
 
 ### 4.5 Tendencies
-`TENDENCIES` is hand-set per owner and per position (`:2540`) because it's the same
-people every year. That premise holds for whichever leagues these are — it just
-needs hockey positions instead of football ones, which the sport pack already
-handles. No new mechanism.
+`TENDENCIES` is hand-set per owner (`:2540`) because it's the same people every year.
+**That premise does not hold for public leagues** — the user won't know their
+opponents. For Yahoo public leagues, leave tendencies disabled and let the rival model
+run on ADP + roster need alone, which is what it already does for unchecked owners.
+No new mechanism, but don't bother surfacing the UI for these leagues.
 
 ---
 
-## 5. Data pipeline for NHL
+## 5. The Yahoo default public league — the concrete week-1 target
 
-Football's flow is "manual FantasyPros pull → `players-2026.csv` → embed or PUT to
-the league profile." There is no equally deep free hockey equivalent, so the NHL
-flow is more of our own making — which is the same work as roadmap item 5:
+Verified against Yahoo's own default-settings page (see Sources at the end):
 
-- **NHL public API** (`api-web.nhle.com`, `api.nhle.com/stats/rest`) — free, no key.
-  Prior-season per-player stats, team rosters, and the full schedule (which is where
-  §4.3's games/off-night counts come from).
+| Setting | Default |
+|---|---|
+| Teams | **10** |
+| Scoring type | **Head-to-Head Points** |
+| Starting roster | **2 C, 2 LW, 2 RW, 4 D, 2 G** |
+| Bench / IR | 4 any-position / 2 (must be real-life IR) |
+| Max roster size | 18 including IR |
+| Roster changes | **Daily** |
+| Max acquisitions | **4 per week** |
+| Min goalie games | **3 per team per week** |
+| Waivers | Continual rolling list, 1-day waiver time |
+| Trades | No maximum, 2-day rejection time |
+| Playoffs | Weeks 23, 24, 25 — 6 teams, reseeded |
+
+Skater scoring: **G 6, A 4, +/− 2, PPP 2, SOG 0.9, BLK 1**.
+Goalie scoring: **W 5, GA −3, SV 0.6, SHO 5**.
+
+Three things fall out of this that shape the build:
+
+1. **No Util/flex slot** in the default, so `flexEligible` is empty and the flex code
+   path is simply unused — one less thing to get right in week 1.
+2. **14 starters out of 18 roster spots** is a tight bench (4 spots) against a
+   4-acquisition weekly cap. Roster churn is constrained, which makes draft-day hit
+   rate matter more than in football and makes streaming a real optimization problem
+   rather than a free-for-all.
+3. **SOG at 0.9 and BLK at 1** materially reward volume shooters and shot-blocking
+   defensemen relative to pure point producers — the default scoring is not
+   points-only, and a naive "rank by projected goals+assists" board would be wrong.
+   Our projection has to be scoring-aware from the start, which is §7.
+
+This table is the league profile to create. Nothing about it is guesswork.
+
+---
+
+## 6. In-season team management — the gap, and what it means
+
+The user asked directly whether we can lean on **FantasyPros My Playbook** for hockey
+the way they do for football, and said the answer determines how many leagues to join.
+
+**Verified answer: no. My Playbook does not exist for NHL.**
+
+| Sport | My Playbook |
+|---|---|
+| NFL | yes |
+| MLB | yes |
+| NBA | yes — optimal lineups, waiver suggestions, trade suggestions, league analysis |
+| **NHL** | **no — `/nhl/myplaybook/` returns HTTP 404** |
+
+FantasyPros' hockey section exists but is **draft-only**: consensus rankings for
+2026-27 filterable by C/LW/RW/D/G, and a Draft Mode. No league sync, no start/sit, no
+waiver or trade assistant. The crutch the user relies on for football isn't there.
+
+Two consequences:
+
+1. **For NHL, in-season management is ours to build or it doesn't exist.** This is no
+   longer "deferred past the drafts" as the first draft of this plan had it — it's the
+   thing that decides how many leagues the user joins, and whether dynasty ever
+   happens.
+2. **NBA has My Playbook**, so the Oct–Nov basketball phase has a fallback hockey
+   doesn't. That's an argument for spending the NHL fortnight on drafting and the
+   in-season basics, and the NBA month on the deeper engine work.
+
+### The good news: hockey's management problem is unusually automatable
+
+Yahoo's defaults define it precisely — daily lineups, 4 acquisitions/week, 3 goalie
+games/week minimum, 4 bench spots. That is a *budgeted optimization*, not a judgment
+call, and the inputs are free and machine-readable:
+
+- **NHL public API** (`api-web.nhle.com`, `api.nhle.com/stats/rest`) — no key. Full
+  schedule, per-team games per week, rosters, stats.
+- **Off-night / light-night value** — nights with few NHL games are when a bench
+  player can actually be slotted in. Daily Faceoff publishes strength-of-schedule on
+  exactly these three axes (games played, opponent difficulty, light nights ≤8 games);
+  Left Wing Lock publishes weekly games-per-team. Both are derivable ourselves from
+  the NHL schedule API, which is the durable option.
+- **Starting goalies and line combinations** — the daily signal that matters most.
+  Daily Faceoff and Left Wing Lock both publish confirmed starters and lines.
+
+A minimum viable management tool is therefore: *given my roster, the week's schedule,
+my 4 remaining acquisitions and my 3-goalie-game floor, which adds and which daily
+lineups maximize expected points?* That is well-defined, buildable from free data, and
+would beat what My Playbook gives for football — because hockey's constraints are
+arithmetic in a way football's start/sit calls aren't.
+
+**Recommendation on league count:** start with the 2 Yahoo default points leagues. Add
+more only after the management tool ships and survives a few weeks of real use. The
+constraint isn't drafting — it's whether 10 daily lineups are sustainable, and that's
+an empirical question the tool answers.
+
+---
+
+## 7. Data pipeline for NHL
+
+There is no FantasyPros-of-hockey to pull projections from (§6), so the projection is
+ours — which is roadmap item 5 arriving early:
+
+- **NHL public API** — prior-season per-player stats, rosters, and the full schedule
+  (which is where §4.2's games/off-night counts come from). Free, no key.
 - **MoneyPuck / Natural Stat Trick** — free CSV exports with rate and on-ice data;
-  good projection inputs (TOI, power-play time, shot rates).
-- **Yahoo's own ranks / ADP for the specific league** — the market anchor, and the
-  single cheapest win in this whole plan: `worker.js:697` hardcodes
-  `game_keys=nfl` on `/api/yahoo/leagues`. Yahoo's Fantasy API is the same shape
-  across sports, so that's a one-word change to start listing NHL leagues.
-- **Our projection** = prior-season rates × projected TOI/games, blended with
-  Yahoo's ranks as the market anchor. Same blend philosophy as football's
-  `0.67*FP + 0.33*Yahoo`, just with us supplying the first term.
+  good projection inputs (TOI, power-play time, shot rates). Shot rates matter more
+  than usual here because SOG is a scored category at 0.9/shot (§5).
+- **Yahoo's own ranks/ADP for the specific league** — the market anchor, and the
+  cheapest win in the plan: `worker.js:697` hardcodes `game_keys=nfl` on
+  `/api/yahoo/leagues`. Yahoo's Fantasy API is the same shape across sports, so
+  that's a one-word change to start listing NHL leagues.
+- **Cross-platform ADP differs meaningfully** between Yahoo, ESPN, Fantrax and CBS —
+  Daily Faceoff publishes a comparison. Since we're drafting on Yahoo, anchor on
+  Yahoo's ADP specifically rather than a blended consensus.
+- **Our projection** = prior-season rates × projected TOI/games, **scored through the
+  league's own point values** (§5), blended with Yahoo's ranks as the market anchor. Same
+  philosophy as football's `0.67*FP + 0.33*Yahoo`, with us supplying the first term.
 
-Player CSV stays the same mechanism — `parsePlayers()` (`:3373`) already reads
-whatever columns are present and ignores the rest, so each sport declares its own
-column set in the sport pack without touching the parser's contract.
+`parsePlayers()` (`:3373`) already reads whatever columns are present and ignores the
+rest, so each sport declares its own column set without touching the parser's contract.
 
 ### Yahoo league import
-Yahoo integration today is diagnostic-only (list leagues, admin-gated). The
-Sleeper and MFL importers already prove the right shape: pull owners, rosters and
-settings into the Leagues form, review, never auto-save. Yahoo returns `settings`,
-`teams`, `draftresults` and `players` for any league key with the same URL shape
-across sports, so this is worth building properly now — it serves NHL, then NBA and
-MLB, and retroactively fixes the football leagues where owners had to be typed in
-by hand (FEEDBACK.md, 2026-09-03: *"still blocking real draft-room use: no owner/
-team names for any of the three leagues"*).
+Yahoo integration today is diagnostic-only (list leagues, admin-gated). The Sleeper
+and MFL importers prove the shape: pull owners, rosters and settings into the Leagues
+form, review, never auto-save. Yahoo returns `settings`, `teams`, `draftresults` and
+`players` for any league key with the same URL shape across sports. Worth building
+properly — it serves NHL now, NBA and MLB later, and retroactively fixes the football
+leagues where owners had to be typed in by hand (FEEDBACK.md, 2026-09-03).
 
 **Caveat:** Yahoo Fantasy API access was pending a manual review as of 2026-08-23.
-Until that's confirmed, everything Yahoo-dependent needs a manual-entry fallback —
-so it can't be on the critical path for a draft two weeks out.
+Until confirmed, everything Yahoo-dependent needs a manual-entry fallback — so it
+can't be critical path for a draft two weeks out. Public-league settings are known
+(§5) and can be entered by hand, so this is a convenience, not a blocker.
 
 ---
 
-## 6. Sequencing
+## 8. Sequencing
 
-Today is 2026-09-17. NHL drafts cluster late September into early October, so the
-shape has to be **usable first, general second** — get a real NHL draft room
-working, then sharpen it.
+Today is 2026-09-17; first NHL draft is 1–2 weeks out.
 
 ### Week 1 (Sep 17–24) — usable
 - Sport field, sport packs, de-hardcode the position constants (§3). Header sport
   filter. Fix the `collectLeagueForm()` flex bug while in there.
-- Create the real NHL league profile(s) from actual settings — `leagueType:'redraft'`,
-  so none of the keeper/dynasty machinery is in play (§0).
+- Create the Yahoo-default NHL league profile from §5 — `leagueType:'redraft'`,
+  points scoring, 10 teams, 2C/2LW/2RW/4D/2G + 4 bench + 2 IR. No keeper code.
 - Multi-position eligibility through `needScore` / roster panel / board (§4.1).
-- NHL player pool: NHL API + MoneyPuck → composite value (z-scores if it's a cats
-  league, `proj` if points) → saved onto the league profile as CSV.
+- NHL player pool: NHL API + MoneyPuck → projection scored through Yahoo's own point
+  values → saved onto the league profile as CSV.
 - `game_keys=nhl`, and confirm the real state of Yahoo API access.
-- **Target: a working NHL Draft Room with a real pool, real owners, mocks running.**
+- **Target: a working NHL Draft Room with a real pool and mocks running.**
 
-### Week 2 (Sep 24–Oct 1) — sharp
-- Category z-score engine done properly, including volume-weighted rate cats (§4.2).
-- Punt-aware re-ranking in the Strategy Lab.
+### Week 2 (Sep 24–Oct 1) — sharp, and ready for the season
+- Games-played / off-night column and goalie scarcity tiering (§4.2, §4.3).
 - Yahoo NHL league import if access allows; manual entry if not.
-- Goalie scarcity tiering; games-played / off-night column.
-- Live mock reps against the real league, and tune — same "use it live, log
-  feedback, fix it the next day" loop that worked through football's draft season.
+- Live mock reps against the real league settings, and tune.
+- **Start the in-season management MVP** (§6) — schedule + games-per-week view, and
+  the acquisition-budget/goalie-minimum framing. It doesn't have to be finished for
+  draft day; it has to exist before the season's first full week.
 
 ### Oct–Nov — NBA (the full month+)
-The category core already exists by then, so NBA is: sport pack (PG/SG/SF/PF/C plus
-G/F/Util), 9-cat config, punting promoted to a first-class UI concept, a data
-adapter, and per-week games/schedule — which matters more in basketball than
-anywhere else. The month-plus budget is the right place to finish roadmap item 5
-properly and backfill it to football (which is what `guillotine`/`bestball` need).
-Note Sleeper does cover NBA, so the existing Sleeper importer extends there; it does
-not cover NHL.
+Sport pack (PG/SG/SF/PF/C plus G/F/Util), the **category z-score engine** including
+volume-weighted rate cats, punting as a first-class UI concept, a data adapter, and
+per-week games/schedule. The right place to finish roadmap item 5 properly and
+backfill it to football (`guillotine`/`bestball`). Sleeper covers NBA, so the existing
+Sleeper importer extends there; it does not cover NHL. NBA also has My Playbook as a
+fallback, so the pressure is lower than hockey's.
 
 ### Feb–Mar — MLB
-Biggest player pool, 5x5 roto as the default, SP/RP split, two-way players,
-position eligibility earned by games-played thresholds, and keeper/dynasty prospect
-layers. By then it should be mostly a data problem rather than an engine problem —
-which is the entire payoff of building the category core for hockey first.
+Biggest pool, 5x5 roto standard, SP/RP split, two-way players, position eligibility
+earned by games-played thresholds. By then mostly a data problem rather than an engine
+problem — the payoff of building the category core during the NBA month.
 
 ---
 
-## 7. Risks
+## 9. Risks
 
-- **Two weeks is the tight one.** NHL drafts may land before the category engine is
-  polished. Mitigation: points-league support plus "market ranks as the backbone"
-  (Yahoo ADP driving the board, the way football's `adp` does) is a legitimate
-  week-1 fallback that makes the room usable even with our own valuation unfinished.
-- **Yahoo API access is unconfirmed.** Every Yahoo-dependent step needs a
-  manual-entry path behind it.
-- **Don't fork the deployment.** One codebase, one URL, sport as data. See §1.
-- **Scope discipline.** Per this repo's own conventions: no features beyond what's
-  asked. In-season hockey tools — streaming optimizer, waiver/FAAB, daily lineup
-  setting — are out **of the two-week NHL window**.
-- **…but that non-goal has a condition on it now.** The user's stated reason for not
-  being in a keeper or dynasty hockey league is that they'd only join one if we can
-  build great in-season management automation (§0). So in-season tooling isn't the
-  perpetual "someday" it is on the football side — it's the specific thing that would
-  unlock a whole league type for them. Deferred past the drafts, not written off; it
-  belongs in the NBA month's scope conversation, and daily-lineup sports are where it
-  pays off most anyway.
+- **The two-week window got safer, not safe.** Points scoring removed the need for a
+  new valuation engine, but multi-position eligibility (§4.1) is still a real refactor
+  of the need/roster logic, and the player pool still has to be built from scratch.
+- **In-season management is now a requirement, not a nice-to-have**, and it's entirely
+  ours to build for hockey (§6). The risk is scope: the MVP is the schedule/
+  acquisition-budget/goalie-minimum view, *not* a full daily optimizer. Ship the
+  arithmetic first.
+- **Yahoo API access is unconfirmed.** Every Yahoo-dependent step needs manual entry
+  behind it. §5 means we can build the league by hand if needed.
+- **Don't fork the deployment.** One codebase, one URL, sport as data (§1).
+- **Public leagues break the tendency model.** Unknown opponents — leave tendencies
+  off rather than inventing biases (§4.5).
 
 ---
 
-## 8. Open questions — still needed before week 1 starts
+## 10. Open questions
 
-Retention (redraft), draft timing (1–2 weeks) and the categories-first call are
-settled in §0. What's left:
+Settled: platform (Yahoo public default), retention (redraft), scoring (points —
+Yahoo's default), timing (1–2 weeks), league count starting point (2, revisit after
+the management tool ships).
 
-1. **Per NHL league:** platform, team count, roster slots (how many C/LW/RW/D/G/Util/
-   bench/IR), draft date, and draft type (snake or auction). This is the one that
-   actually blocks creating a real profile.
-2. **Categories or points, once each league is joined** — not blocking, since we build
-   categories first either way, but it decides which board is the default view.
-3. **How many NHL leagues**, and which one drafts first.
-4. **Did the Yahoo developer app's Fantasy Sports API access clear its manual
-   review?** (Blocked as of 2026-08-23.) Everything Yahoo-dependent needs a
-   manual-entry fallback until this is confirmed.
-5. **Anything already known about the NBA or MLB leagues** that should shape the
-   shared core — e.g. a points-only NBA league would re-weight the effort.
+Remaining:
+
+1. **Did the Yahoo developer app's Fantasy Sports API access clear its manual
+   review?** (Blocked as of 2026-08-23.) Decides import vs. manual entry.
+2. **Which specific public leagues, and when do they draft?** Yahoo public leagues
+   are auto-scheduled; the draft date per league is the one thing §5 can't supply.
+3. **Dynasty platform, if that ever happens.** Fantrax is the dynasty/keeper standard
+   for hockey — automated salaries/contracts, tradeable future picks, deep settings
+   customization. Yahoo and ESPN are weaker there. Sleeper does not do NHL at all.
+   Worth knowing before joining a dynasty league, not before the redraft ones.
+4. **Anything known about the NBA or MLB leagues** that should shape the shared core.
+
+---
+
+## Sources
+
+- [Yahoo — Default league settings in Fantasy Hockey](https://help.yahoo.com/kb/SLN6815.html)
+- [Yahoo — Roster and lineup management](https://help.yahoo.com/kb/SLN22673.html)
+- [FantasyPros — NHL consensus rankings](https://www.fantasypros.com/nhl/rankings/) (draft-only; `/nhl/myplaybook/` returns 404)
+- [FantasyPros — NBA My Playbook](https://www.fantasypros.com/nba/myplaybook/)
+- [FantasyPros — My Playbook league sync FAQs](https://support.fantasypros.com/hc/en-us/articles/115000414167-My-Playbook-League-Sync-FAQs)
+- [Daily Faceoff — 2026-27 fantasy hockey ADP: Yahoo vs. ESPN vs. Fantrax vs. CBS](https://www.dailyfaceoff.com/news/2026-27-fantasy-hockey-adp-yahoo-vs-espn-vs-fantrax-vs-cbs)
+- [Daily Faceoff — weekly strength of schedule and streaming targets](https://www.dailyfaceoff.com/news/fantasy-hockey-2025-26-weekly-strength-of-schedule-and-streaming-targets-week-22)
+- [Left Wing Lock — NHL weekly schedule](https://leftwinglock.com/schedules/)
+- [Fantrax](https://www.fantrax.com/)
