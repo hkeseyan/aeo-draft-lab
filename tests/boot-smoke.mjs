@@ -116,6 +116,61 @@ ok &= check('league dropdown scoped to the sport', () => [...w.document.getEleme
 ok &= check('position filter is hockey', () => [...w.document.getElementById('posFilter').options].map(o => o.value).join(','), 'ALL,C,LW,RW,D,G');
 ok &= check('tendency columns are hockey', () => [...w.document.getElementById('tendHead').children].map(x => x.textContent).join(','), 'Use,Owner,C,LW,RW,D,G');
 
+// --- My Rank: points-league value plus roster construction ---
+ok &= check('My Rank leaves the elite tier on merit alone', () => {
+  const byMy = ev('PLAYERS.slice().sort((a,b)=>a.myRank-b.myRank).slice(0,5).map(p=>p.name).join("|")');
+  const byAdp = ev('PLAYERS.slice().sort((a,b)=>a.adp-b.adp).slice(0,5).map(p=>p.name).join("|")');
+  return byMy === byAdp ? true : byMy + ' vs ' + byAdp;
+}, true);
+ok &= check('a dual-eligible forward never leapfrogs the best player', () => {
+  // Draisaitl is C/LW and Yahoo's fifth pick; his flexibility bonus must not put
+  // him above McDavid, or the bonus is overwhelming the board's compressed top.
+  return ev('(PLAYERS.find(p=>p.name==="Leon Draisaitl")||{}).myRank > (PLAYERS.find(p=>p.name==="Connor McDavid")||{}).myRank');
+}, true);
+ok &= check('centre-only forwards are marked down against the market', () => {
+  const avg = ev(`(function(){
+    const seg=PLAYERS.filter(p=>p.adp<=150&&p.posEligible.length===1&&p.posEligible[0]==='C');
+    return seg.length? seg.reduce((s,p)=>s+(p.adp-p.myRank),0)/seg.length : 0;
+  })()`);
+  return avg < -4 ? true : 'avg move ' + avg;
+}, true);
+ok &= check('centre+wing forwards are marked up against the market', () => {
+  const avg = ev(`(function(){
+    const seg=PLAYERS.filter(p=>p.adp<=150&&p.posEligible.includes('C')&&p.posEligible.length>1);
+    return seg.length? seg.reduce((s,p)=>s+(p.adp-p.myRank),0)/seg.length : 0;
+  })()`);
+  return avg > 4 ? true : 'avg move ' + avg;
+}, true);
+ok &= check('a thin-sample projection is discounted toward the market', () => {
+  // Someone with a part-season behind them should carry a visible confidence note
+  // rather than being ranked as though the projection were solid.
+  return ev('PLAYERS.filter(p=>p.myRankTrust<0.6 && /sample confidence/.test(p.myRankWhy||"")).length');
+}, v => v > 0);
+ok &= check('surplus goalies are pushed below startable ones', () => {
+  const g = ev(`(function(){
+    const gs=PLAYERS.filter(p=>p.pos==='G').sort((a,b)=>a.myRank-b.myRank);
+    return JSON.stringify([gs.slice(0,20).every(p=>!/beyond the/.test(p.myRankWhy||'')),
+                           gs.slice(20).some(p=>/beyond the/.test(p.myRankWhy||''))]);
+  })()`);
+  return g;
+}, '[true,true]');
+ok &= check('every ranked player carries an explanation', 'PLAYERS.filter(p=>p.myRankWhy!=null).length', 400);
+ok &= check('football My Rank model is untouched', () => ev('SPORTS.nfl.myRankModel') + '/' + ev('SPORTS.nhl.myRankModel'), 'nfl/nhl');
+
+// --- eligibility on the board ---
+ok &= check('the board shows every eligible position', () => {
+  const cell = ev('posCell(PLAYERS.find(p=>p.name==="Leon Draisaitl"))');
+  return /C\/LW/.test(cell) && /fchip/.test(cell) ? true : cell;
+}, true);
+ok &= check('single-position players get no F chip', () => {
+  const cell = ev('posCell(PLAYERS.find(p=>p.posEligible.length===1&&p.pos==="D"))');
+  return /fchip/.test(cell) ? 'D wrongly chipped' : true;
+}, true);
+ok &= check('filtering to LW surfaces C/LW players too', () => ev(`(function(){
+  const d=PLAYERS.find(p=>p.name==='Leon Draisaitl');
+  return playerFillsPos(d,'LW') && playerFillsPos(d,'C') && !playerFillsPos(d,'RW');
+})()`), true);
+
 ok &= check('rivals complete a full NHL draft', 'resetDraft(); for(let i=1;i<=160;i++) rivalPick(i,0); picks.length', v => v >= 150);
 ok &= check('rivals build balanced rosters, not one position', () => {
   const c = JSON.parse(ev('JSON.stringify(countsOf(rosterOf(3)))'));

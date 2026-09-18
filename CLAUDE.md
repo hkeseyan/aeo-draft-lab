@@ -159,9 +159,21 @@ A **Fantrax import** (`GET /api/import/fantrax/:leagueId`) is the recommended
 integration path over Yahoo: league-ID keyed, no OAuth, no approval queue. Note
 Fantrax returns HTTP 200 with an `error` body on a bad id.
 
+**My Rank (hockey)** is the roster-construction layer — see `SPECS.md` → "My Rank
+(hockey)". It blends market ADP with our projection *weighted by sample confidence*
+(`gp`), then applies proportional positional adjustments: centre-only marked down
+(streamable, only two start), dual/triple forward eligibility marked up, the elite
+tier exempt from both, a premium bump for volume-starter goalies and a markdown past
+the league's startable goalie count, a small bump for elite D. Weights are named
+constants in `NHL_MY_RANK`. `ecr` is deliberately NOT an input: FantasyPros' NHL
+consensus is two experts scoring ROTO, a different game from a points league.
+
 Known gaps, deliberate: `proj` is prior-season rates with no aging curve, role
-change, or line/PP context, so it overrates declining veterans — a large `adp` vs
-`proj` gap on an older player is a flag on our projection, not a bargain. Category
+change, or line/PP context, so it overrates declining veterans and underrates
+prospects and role-changers — a large `adp` vs `proj` gap on an older player is a
+flag on our projection, not a bargain. It also has **no mean reversion**: a star
+coming off a bad year (Hellebuyck 2025-26: .895, 0 shutouts) projects on that year
+alone, while the market correctly bets on a bounce-back. Category
 (roto/H2H-cat) scoring is not built — Yahoo's default public league is points, so it
 wasn't needed for the first leagues; it lands in the NBA month, where 9-cat makes it
 unavoidable.

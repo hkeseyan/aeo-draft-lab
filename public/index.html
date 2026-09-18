@@ -64,6 +64,8 @@
   .kchip{font-size:10px;color:var(--warn);border:1px solid var(--warn);border-radius:10px;padding:0 5px;margin-left:4px}
   .headshot{width:20px;height:20px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:4px;background:#1a1f2b}
   .rkchip{font-size:10px;color:var(--accent2);border:1px solid var(--accent2);border-radius:10px;padding:0 5px;margin-left:4px}
+  /* Multi-forward eligibility: the single most useful tiebreak in a daily league. */
+  .fchip{font-size:10px;color:var(--accent2);border:1px solid var(--accent2);border-radius:10px;padding:0 4px;margin-left:3px;font-weight:700}
   /* grid-template-columns is set inline per-league (team count varies); every
      header/cell is a direct grid child in row-major order so a taller cell
      (e.g. a wrapped long name) grows that whole row for every column instead
@@ -1743,6 +1745,7 @@ const SPORTS = {
     // know about; no other sport here has an equivalent, hence the empty list below.
     lateRoundPositions:['K','DST'],
     dailyLineups:false,   // weekly lineups: nothing to decide day to day
+    myRankModel:'nfl',
     auctionPosMult:{QB:0.72,RB:1.08,WR:1.0,TE:0.88,K:0.12,DST:0.16},
     auctionPosMultSuperflex:{QB:1.0},
   },
@@ -1758,6 +1761,7 @@ const SPORTS = {
     depthCap:(pos,base)=>pos==='G'?base+1:base+2,
     lateRoundPositions:[],
     dailyLineups:true,    // daily lineups + a weekly add cap: the Add Radar applies
+    myRankModel:'nhl',
     auctionPosMult:{C:1.0,LW:0.95,RW:0.95,D:0.9,G:1.05},
   },
 };
@@ -2688,6 +2692,7 @@ const MY_RANK_WEIGHTS={
   // from. Add a weight here once that data exists instead of hand-picking names.
 };
 function computeMyRanks(){
+  if(SPORT.myRankModel==='nhl'){ computeMyRanksNhl(); return; }
   const byPos={};
   PLAYERS.forEach(p=>{(byPos[p.pos]=byPos[p.pos]||[]).push(p);});
   Object.values(byPos).forEach(a=>{
@@ -2701,6 +2706,99 @@ function computeMyRanks(){
     return v;
   };
   PLAYERS.slice().sort((a,b)=>adjScore(a)-adjScore(b)).forEach((p,i)=>{p.myRank=i+1;});
+}
+// Yahoo's default points league pays for offence — goals, assists and a premium on
+// power-play production — which is why centres dominate the raw projection board.
+// That same fact makes centre the easiest position to stream, so a centre-ONLY
+// forward is worth less than his projection says: you can start only two a night,
+// and whoever you would drop for him is cheap and replaceable. Dual eligibility is
+// the mirror image — it buys a lineup slot on a crowded night, which is where a
+// daily league is actually won. My Rank exists to price that in, on top of the
+// market (adp) and this league's own scoring (proj).
+const NHL_MY_RANK={
+  adpWeight: 0.65,           // the market is the spine: it prices role, health and
+                             // line deployment that our projection cannot see
+  projWeight: 0.35,          // what this league's own point values actually say
+  projTrustGames: 65,        // ...believed in proportion to the sample behind it
+  // Adjustments are PROPORTIONAL, not a flat number of spots. The board is far
+  // denser at the top than the bottom — a flat eight-spot bonus is the entire
+  // elite tier but a rounding error at pick 200 — so each adjustment is a
+  // percentage of where the player already sits.
+  dualForwardBonus: 0.10,    // a second forward position
+  tripleForwardBonus: 0.16,
+  centerOnlyPenalty: 0.15,
+  eliteGraceTop: 5,          // the top of the board is ordered on merit alone: a
+                             // McDavid transcends roster construction, and you
+                             // build the rest of the roster around him later
+  eliteGraceFull: 30,        // the centre-only penalty then phases in, because the
+                             // streaming argument is really an argument about
+                             // REPLACEABILITY, and an elite centre isn't replaceable
+  goaliePremiumCount: 8,     // one true volume starter is worth paying up for
+  goaliePremiumBonus: 0.12,
+  goalieSurplusPenalty: 0.20,// past the league's startable goalies, a third G is a luxury
+  dEliteCount: 8,            // a premium defenceman early, without reaching
+  dEliteBonus: 0.06,
+};
+function computeMyRanksNhl(){
+  const w=NHL_MY_RANK;
+  const rankMap=(key,dir)=>{
+    const m=new Map();
+    PLAYERS.slice().sort((a,b)=>dir*((a[key]||0)-(b[key]||0))).forEach((p,i)=>m.set(p.id,i+1));
+    return m;
+  };
+  const adpR=rankMap('adp',1), projR=rankMap('proj',-1);
+  const base=new Map();
+  PLAYERS.forEach(p=>{
+    // Trust our projection in proportion to the sample behind it. A prospect with
+    // a twelve-game cameo, or a star who missed half a season, has a projection
+    // built mostly on noise — leaning on it would bury players the market rates
+    // for reasons we can't see. Confidence we withhold goes back to the market.
+    const conf=Math.min(1,(p.gp||0)/w.projTrustGames);
+    const projW=w.projWeight*conf;
+    p.myRankTrust=conf;
+    base.set(p.id, (1-projW)*adpR.get(p.id) + projW*projR.get(p.id));
+  });
+  // A provisional order first, so "is he a top-5 pick" and "is he a top-8 goalie"
+  // are answerable before the positional adjustments are applied.
+  const prelim=PLAYERS.slice().sort((a,b)=>base.get(a.id)-base.get(b.id));
+  const overall=new Map(prelim.map((p,i)=>[p.id,i+1]));
+  const posIdx={};
+  prelim.forEach(p=>{ const m=posIdx[p.pos]=posIdx[p.pos]||new Map(); m.set(p.id,m.size+1); });
+  const gSlots=(LEAGUE.teams||10)*((LEAGUE.starters&&LEAGUE.starters.G)||2);
+  const score=(p)=>{
+    const v=base.get(p.id), why=[], i=overall.get(p.id);
+    if(p.myRankTrust!=null && p.myRankTrust<0.85)
+      why.push(`projection discounted \u2014 only ${Math.round(p.myRankTrust*100)}% sample confidence`);
+    // Inside the elite tier nothing positional applies — not the penalty, and not
+    // the flexibility bonus either, or a dual-eligible forward would leapfrog the
+    // best player in the draft, which is the same mistake from the other side.
+    if(i<=w.eliteGraceTop){
+      p.myRankWhy='elite tier \u2014 ranked on merit, roster construction comes later';
+      return v;
+    }
+    let adj=0;
+    const fwd=eligiblePositions(p).filter(x=>x==='C'||x==='LW'||x==='RW');
+    if(fwd.length>=3){ adj-=w.tripleForwardBonus; why.push('+ eligible at three forward spots'); }
+    else if(fwd.length===2){ adj-=w.dualForwardBonus; why.push('+ dual forward eligibility'); }
+    else if(fwd.length===1 && fwd[0]==='C'){
+      const ramp=Math.max(0,Math.min(1,(i-w.eliteGraceTop)/Math.max(1,w.eliteGraceFull-w.eliteGraceTop)));
+      adj+=w.centerOnlyPenalty*ramp;
+      why.push(ramp<1?'\u2212 centre-only, discounted lightly this early (still hard to replace)'
+                     :'\u2212 centre-only: only two start, and centre is the easiest spot to stream');
+    }
+    if(p.pos==='G'){
+      const gi=(posIdx.G||new Map()).get(p.id)||999;
+      if(gi<=w.goaliePremiumCount){ adj-=w.goaliePremiumBonus; why.push('+ premium volume starter'); }
+      if(gi>gSlots){ adj+=w.goalieSurplusPenalty; why.push('\u2212 beyond the league\u2019s startable goalies'); }
+    }
+    if(p.pos==='D'){
+      const di=(posIdx.D||new Map()).get(p.id)||999;
+      if(di<=w.dEliteCount){ adj-=w.dEliteBonus; why.push('+ premium defenceman'); }
+    }
+    p.myRankWhy=why.join('; ');
+    return v*(1+adj);
+  };
+  PLAYERS.map(p=>[p,score(p)]).sort((a,b)=>a[1]-b[1]).forEach(([p],i)=>{p.myRank=i+1;});
 }
 function adpRoundOf(name){const p=findPlayer(name); return p?Math.ceil(p.adp/LEAGUE.teams):null;}
 // Auction pricing deliberately has TWO layers: (1) opponent market behavior,
@@ -3491,7 +3589,8 @@ function renderPool(){
       return av-bv;
     });
   }
-  if(pos!=='ALL')rows=rows.filter(p=>p.pos===pos);
+  // Eligibility, not primary position: filtering to LW must surface every C/LW too.
+  if(pos!=='ALL')rows=rows.filter(p=>playerFillsPos(p,pos));
   if(q)rows=rows.filter(p=>p.name.toLowerCase().includes(q));
   el('poolCount').textContent=`(${available().length} left)`;
   const tb=el('poolTable').querySelector('tbody'); tb.innerHTML='';
@@ -3515,7 +3614,7 @@ function renderPool(){
     const d=Math.round((p.adp-p.ecr)*10)/10; // + = falls later than ranked = value
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><input type="checkbox" class="qcheck" data-q="${p.name.replace(/"/g,'&quot;')}" ${queued.has(p.name)?'checked':''}></td>
-      <td>${p.adp}</td><td>${p.ecr}</td><td>${p.myRank!=null?p.myRank:'—'}</td><td><span class="pos ${p.pos}">${p.pos}</span></td>
+      <td>${p.adp}</td><td>${p.ecr}</td><td${p.myRankWhy?` title="${String(p.myRankWhy).replace(/"/g,'&quot;')}"`:''}>${p.myRank!=null?p.myRank:'—'}</td><td>${posCell(p)}</td>
       <td>${headshotImg(p)}${p.name}${p.keeper?`<span class="kchip">K</span>`:''}${rookieBadge(p)}</td><td class="muted small">${p.pos}${p.posRank||''}</td><td class="small">${p.proj?p.proj.toFixed(1):''}</td>
       <td class="dcol ${valClass(d)}">${d>0?'+':''}${d}</td>
       <td><button class="pick-btn" data-pk="${p.id}">draft →</button></td>`;
@@ -4025,6 +4124,16 @@ function headshotImg(p){
   return p.sleeperId
     ? `<img class="headshot" src="https://sleepercdn.com/content/nfl/players/${p.sleeperId}.jpg" onerror="this.style.display='none'" alt="">`
     : '';
+}
+// Show every slot a player is eligible for, not just his primary. In a daily
+// league the gap between a C and a C/LW is whether you have somewhere to put him
+// on a night when eight of your forwards play. The F chip marks anyone who can
+// fill more than one forward spot, which is the tiebreak worth seeing at a glance.
+function posCell(p){
+  const elig=eligiblePositions(p);
+  const fwd=elig.filter(x=>x==='C'||x==='LW'||x==='RW');
+  const flex=fwd.length>=2?'<span class="fchip" title="Eligible at '+fwd.join('/')+'">F</span>':'';
+  return `<span class="pos ${p.pos}">${elig.join('/')}</span>${flex}`;
 }
 function rookieBadge(p){ return p.rookie ? '<span class="rkchip" title="Rookie">RK</span>' : ''; }
 function loadPlayersData(txt){const arr=parsePlayers(txt); if(arr.length){PLAYERS=arr; const w=el('seedWarn'); if(w)w.style.display='none';} return arr.length;}
