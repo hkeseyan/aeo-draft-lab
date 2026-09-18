@@ -49,6 +49,49 @@ as a flag on our projection, not a bargain. Players FantasyPros doesn't rank sor
 behind those it does, ordered by our projection, so the deep pool the Add Radar needs
 doesn't interleave with real draft picks.
 
+**My Rank (hockey).** A points-league board that builds on the market rather than
+replacing it, and prices in roster construction that no ranking source models. Each
+sport names its model on the sport pack (`myRankModel`); football's original
+elite-QB/TE-and-rookie heuristic is untouched.
+
+The baseline is a blend of market ADP and our projection rank, where **our
+projection is trusted in proportion to the sample behind it** — a prospect with a
+twelve-game cameo, or a star who missed half a season, has a projection built mostly
+on noise, so confidence we withhold from it goes back to the market. This is what
+stops a rookie the market likes from cratering to rank 200 on a projection that
+never had the data to say so.
+
+On top of that sit **proportional** positional adjustments — percentages of where a
+player already sits, not a flat number of spots, because the board is far denser at
+the top than the bottom and a flat eight-spot bonus would be the entire elite tier
+at pick 5 and a rounding error at pick 200:
+
+- **Centre-only forwards are marked down.** Yahoo's default scoring pays for offence,
+  which is why centres dominate the raw projection board — and that same fact makes
+  centre the easiest position to stream. Only two start a night, and whoever you'd
+  drop for one is cheap. The penalty phases in from the elite tier down to about
+  pick 30, because the streaming argument is really an argument about
+  *replaceability*, and an elite centre isn't replaceable.
+- **Dual and triple forward eligibility are marked up.** A C/LW buys a lineup slot
+  on a crowded night, which is where a daily league is won.
+- **The elite tier is exempt from all of it.** Nothing positional applies to the top
+  few picks — not the penalty and not the flexibility bonus either, or a
+  dual-eligible forward would leapfrog the best player in the draft, which is the
+  same mistake from the other side. You build the roster around a McDavid later.
+- **Goalies**: a premium bump for the handful of true volume starters, and a markdown
+  once past the league's startable goalie count (`teams × G slots`), since a third
+  goalie is a luxury.
+- **Defence**: a small bump for the premium few, and nothing else — the aim is to get
+  one or two early without reaching.
+
+Every player carries a plain-language `myRankWhy`, shown as a tooltip on the My Rank
+cell, so the number is always explainable.
+
+Weights live in `NHL_MY_RANK` as named constants. **`ecr` is deliberately not an
+input**: FantasyPros' NHL consensus is two experts scoring ROTO, which is a different
+game from a points league — it's kept as a visible column for reference, not fed into
+the ranking.
+
 **Multi-position eligibility.** A player's `pos` cell may name several positions
 (`C/LW` — slash or plus separated, never comma, since the CSV owns the comma). The
 first is primary and drives the colour chip and roster counts; the rest make the
@@ -133,6 +176,12 @@ devices. Save the current draft, list saved mocks newest-first, load or
 delete one. Snake/linear mocks persist pick state; auction mocks persist
 winning team + price for every completed sale. Falls back to local-only
 ("Save config" in the Data tab) when the cloud API isn't reachable.
+
+**Eligibility on the board.** Best Available shows *every* position a player is
+eligible for (`C/LW`), coloured by his primary, plus an **F** chip for anyone
+eligible at more than one forward spot — the tiebreak that matters most in a daily
+league. The position filter matches eligibility rather than the primary position, so
+filtering to LW surfaces every C/LW too.
 
 ### Add Radar
 Only shown for sports with daily lineups (hockey today; basketball and baseball
