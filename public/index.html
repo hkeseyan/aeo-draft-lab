@@ -2594,7 +2594,11 @@ const LEAGUES_DEFAULT = {
 LEAGUES_DEFAULT['public-points-league-1']={
   ...LEAGUES_DEFAULT['yahoo-nhl-public'],
   id:'public-points-league-1',name:'Public Points League 1',teams:12,mySlot:4,
-  draftDateLabel:'Sep 26 · live',poolDataRevision:'nhl-2026-09-17-market',
+  draftDateLabel:'Sep 26 · live',poolDataRevision:'public-points-1-p77',
+  liveDraftRevision:'2026-09-26-p77',
+  // Barkov was absent from the Sep 17 pool; a minimal row lets the reported
+  // pick occupy its real board cell without inventing a projection.
+  playersCsv:PLAYERS_CSV_NHL+'\nAleksander Barkov,C,FLA,63,63,0,5',
   owners:['MF LD2 12/50',"Rick's Rad Team",'Fiddy Fighters','Me',"Brian's First-Rate Team",
     'Mtnside Indians','IceeeMO','Blades of Steel',"Etienne's Excellent Team",
     "Mark's Impressive Team",'Captain Mel',"scott's Agreeable Team"],
@@ -2611,7 +2615,11 @@ LEAGUES_DEFAULT['public-points-league-1']={
     'Jesper Wallstedt','Leo Carlsson','Ilya Sorokin','Igor Shesterkin','Adam Fox','Scott Wedgewood',
     'Jake Guentzel','Kyle Connor','Moritz Seider','Karel Vejmelka','Dylan Guenther','Alex DeBrincat',
     'Jake Sanderson','Jeremy Swayman','William Nylander','Connor Hellebuyck','Clayton Keller','Juraj Slafkovský',
-    'Tim Stützle','Mika Zibanejad','Adrian Kempe','Sam Reinhart'
+    'Tim Stützle','Mika Zibanejad','Adrian Kempe','Sam Reinhart',
+    'Miro Heiskanen','Brayden Point','Josh Morrissey','Roope Hintz','Aleksander Barkov','Noah Dobson',
+    'Artemi Panarin','Will Smith','Jackson LaCombe','Brock Faber','Filip Forsberg','John Carlson',
+    'Roman Josi','Connor Bedard','Dylan Holloway','Lukas Dostal','Charlie McAvoy','Erik Karlsson',
+    'Mikhail Sergachev'
   ]
 };
 let LEAGUES = {...LEAGUES_DEFAULT};
@@ -5392,7 +5400,7 @@ async function loadCommish(){
 let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
-function saveSetup(){if(!canSave())return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick,seededLiveSnapshot:!!LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
+function saveSetup(){if(!canSave())return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick,seededLiveSnapshot:!!LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames,appliedLiveSnapshotCount:LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames?.length||0});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
 function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign(blankBias(),v.bias||{})};}); }
 async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||s.seededLiveSnapshot||(Array.isArray(s.picks)&&s.picks.length)||(Array.isArray(s.auctionPicks)&&s.auctionPicks.length))){
   if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
@@ -5411,6 +5419,18 @@ async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||
     if(LEAGUE.leagueType==='dynasty')OWNERS.forEach(owner=>{
       dynastyKeptRoster(owner).forEach(r=>{const p=findPlayer(r.player); if(p)p.drafted=true;});
     });
+    // Extend the previous live snapshot, but never replace a pick the user
+    // entered after it. The first version saved 58 picks without a count.
+    const names=LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames;
+    const applied=s.appliedLiveSnapshotCount||58;
+    if(s.seededLiveSnapshot&&Array.isArray(names)&&names.length>applied){
+      let added=0;
+      names.slice(applied).forEach((name,j)=>{
+        const ov=applied+j+1,pl=findPlayer(name);
+        if(pl&&!pl.drafted&&!pickTakenAt(ov)){makePick(pl.id,ov);added++;}
+      });
+      if(added){curPick=nextOpenPick(curPick);saveSetup();}
+    }
     render();
   } else { resetDraft(); }
   if(el('teamsWrap')){renderTeams();renderTendencies();} renderTrades();
@@ -5595,6 +5615,9 @@ async function fetchCloudLeagues(){
         }
         if(def.poolDataRevision && cur.poolDataRevision!==def.poolDataRevision){
           ['poolDataRevision','playersCsv'].forEach(f=>{ if(def[f]!==undefined)add[f]=def[f]; });
+        }
+        if(def.liveDraftRevision && cur.liveDraftRevision!==def.liveDraftRevision){
+          ['liveDraftRevision','initialPickNames'].forEach(f=>{if(def[f]!==undefined)add[f]=def[f];});
         }
         if(def.auctionDataRevision && cur.auctionDataRevision!==def.auctionDataRevision){
           ['auctionDataRevision','playersCsv','draftDateLabel'].forEach(f=>{ if(def[f]!==undefined)add[f]=def[f]; });

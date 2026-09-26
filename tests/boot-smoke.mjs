@@ -23,6 +23,7 @@ html = html.replace(/<script src="\/auction-values\.js"><\/script>/,
   '<script>' + fs.readFileSync('public/auction-values.js', 'utf8') + '</script>');
 const errors = [];
 const store = {};
+let liveSetupOverride = null;
 
 const dom = new JSDOM(html, {
   runScripts: 'dangerously',
@@ -38,7 +39,7 @@ const dom = new JSDOM(html, {
       if (u === '/api/leagues') return j([]);                 // empty cloud -> seed from defaults
       if (u.startsWith('/api/leagues/')) return j({ ok: true });
       if (u.startsWith('/api/setup/history')) return j([]);
-      if (u.startsWith('/api/setup')) return j({});
+      if (u.startsWith('/api/setup')) return j(liveSetupOverride || {});
       if (u.startsWith('/api/commish')) return j({});
       if (u.startsWith('/api/mocks')) return j([]);
       if (u.startsWith('/api/nhl/schedule')) return j(SCHED);
@@ -295,11 +296,16 @@ ok &= check('more games beats fewer at equal rate', () => JSON.parse(ev(`(functi
 ev('switchLeague("public-points-league-1")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('live league has 12 teams and slot 4', 'LEAGUE.teams===12 && mySlot===4', true);
-ok &= check('all 58 reported picks resolved', 'picks.length', 58);
-ok &= check('next unfilled overall pick', 'curPick', 59);
-ok &= check('user five selections at the reported picks',
+ok &= check('all 77 reported picks resolved', 'picks.length', 77);
+ok &= check('next unfilled overall pick', 'curPick', 78);
+ok &= check('user seven selections at the reported picks',
   'JSON.stringify(picks.filter(p=>ownerOf(p.overall)===mySlot).map(p=>[p.overall,PLAYERS.find(x=>x.id===p.playerId).name]))',
-  '[[4,"Nikita Kucherov"],[21,"Auston Matthews"],[28,"Cutter Gauthier"],[45,"Moritz Seider"],[52,"Connor Hellebuyck"]]');
+  '[[4,"Nikita Kucherov"],[21,"Auston Matthews"],[28,"Cutter Gauthier"],[45,"Moritz Seider"],[52,"Connor Hellebuyck"],[69,"Filip Forsberg"],[76,"Erik Karlsson"]]');
+liveSetupOverride = {picks:JSON.parse(ev('JSON.stringify(picks.slice(0,58))')),curPick:59,seededLiveSnapshot:true};
+await ev('loadSetup()');
+ok &= check('saved 58-pick board extends without replacing existing picks',
+  'picks.length===77 && picks[0].overall===1 && picks.some(p=>p.overall===76&&PLAYERS.find(x=>x.id===p.playerId).name==="Erik Karlsson")', true);
+liveSetupOverride = null;
 ev('switchLeague("aeo-keepers")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('football unaffected after switching back', () => ev('SPORT.id') + ' ' + slots(), 'nfl QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');
