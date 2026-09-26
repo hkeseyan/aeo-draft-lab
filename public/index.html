@@ -63,9 +63,16 @@
   .pick-btn{background:var(--accent2);color:#04210f;border:none;border-radius:6px;padding:4px 8px;font-weight:700;cursor:pointer;font-size:12px}
   .kchip{font-size:10px;color:var(--warn);border:1px solid var(--warn);border-radius:10px;padding:0 5px;margin-left:4px}
   .headshot{width:20px;height:20px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:4px;background:#1a1f2b}
+  .team-logo{width:18px;height:18px;object-fit:contain;vertical-align:middle;margin-left:5px}
   .rkchip{font-size:10px;color:var(--accent2);border:1px solid var(--accent2);border-radius:10px;padding:0 5px;margin-left:4px}
   /* Multi-forward eligibility: the single most useful tiebreak in a daily league. */
   .fchip{font-size:10px;color:var(--accent2);border:1px solid var(--accent2);border-radius:10px;padding:0 4px;margin-left:3px;font-weight:700}
+  .live-pick{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+  .live-pick:first-child{border-top:0}
+  .live-pick-main{flex:1;min-width:0}
+  .live-pick-reason{color:var(--muted);font-size:12px;white-space:normal}
+  .live-label{font-size:10px;font-weight:700;color:var(--accent2);white-space:nowrap}
+  .live-label.wait{color:var(--warn)}
   /* grid-template-columns is set inline per-league (team count varies); every
      header/cell is a direct grid child in row-major order so a taller cell
      (e.g. a wrapped long name) grows that whole row for every column instead
@@ -170,6 +177,12 @@
       <h2>Draft board <span class="muted small">(dashed = keeper · click a filled cell to rewind there · scrolls for later rounds)</span></h2>
       <div class="board" id="boardGrid"></div>
     </div>
+    <div class="card" id="nhlLiveCard" style="display:none">
+      <h2>Who to pick now <span class="muted small">· separate from My Rank</span></h2>
+      <div id="nhlLiveContext" class="small muted" style="margin-bottom:8px"></div>
+      <div id="nhlLivePicks"></div>
+      <p class="small muted" style="margin:8px 0 0">Directional draft advice from the current board and roster. Projections are based on prior-season rates; verify news and roles before a pick.</p>
+    </div>
     <div class="grid2" id="snakeDraftGrid">
       <div>
         <div class="card">
@@ -186,7 +199,7 @@
           </div>
           <div class="scroll">
             <table id="poolTable">
-              <thead><tr><th title="Queue">Q</th><th class="sortcol active" data-sort="adp" title="Click to sort by ADP">ADP</th><th class="sortcol" data-sort="ecr" title="Click to sort by ECR">ECR</th><th class="sortcol" data-sort="myRank" title="Click to sort by your own philosophy-adjusted rank, lower=better">My</th><th>Pos</th><th>Player</th><th>P.Rk</th><th>Proj</th><th class="dcol">Δ</th><th></th></tr></thead>
+              <thead><tr><th title="Queue">Q</th><th class="sortcol active" data-sort="adp" title="Click to sort by ADP">ADP</th><th class="sortcol" data-sort="ecr" title="Click to sort by ECR">ECR</th><th class="sortcol" data-sort="myRank" title="Click to sort by your own philosophy-adjusted rank, lower=better">My</th><th>Proj</th><th>Pos</th><th>Player</th><th>P.Rk</th><th class="dcol">Δ</th><th></th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -562,7 +575,12 @@
       <p class="small muted">If listing fails with <code>additional_authorization_required</code>, Yahoo is saying the <i>grant this token was issued under</i> has no fantasy access. A refresh token can never gain a permission it wasn't granted, so refreshing or reconnecting on top of the old grant won't help — and Yahoo skips the consent screen for an app you've already approved, quietly reissuing on the same grant. Two things to check, in order: (1) <b>Check status</b> below shows which client id this Worker actually holds — confirm it matches the app you edited in the Yahoo Developer console; (2) if it matches, revoke the app at <a href="https://login.yahoo.com/account/security" target="_blank" rel="noopener">Yahoo account security → apps</a>, click <b>Disconnect</b> here, then Connect again so Yahoo has to ask you fresh.</p>
       <div class="row">
         <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account</button>
+        <label class="small">List sport <select id="yahooGameSelect"><option value="nhl">NHL</option><option value="nfl">NFL</option></select></label>
         <button class="btn ghost" id="yahooListBtn">List my leagues</button>
+        <select id="yahooLeagueSelect" aria-label="Yahoo league to inspect" style="min-width:170px"><option value="">List leagues first</option></select>
+        <button class="btn ghost" id="yahooSettingsBtn">Compare settings</button>
+        <label class="small">My draft slot <input type="number" id="yahooImportSlot" min="1" max="10" style="width:58px"></label>
+        <button class="btn ghost" id="yahooImportBtn" disabled>Create matched NHL profile</button>
         <button class="btn ghost" id="yahooStatusBtn">Check status</button>
         <button class="btn ghost" id="yahooDisconnectBtn">Disconnect</button>
       </div>
@@ -2739,6 +2757,26 @@ const NHL_MY_RANK={
   dEliteCount: 8,            // a premium defenceman early, without reaching
   dEliteBonus: 0.06,
 };
+// Reviewed upside hypotheses from the four mock debriefs. These are scenario
+// tags, not claims of a confirmed line or power-play assignment; the user must
+// verify camp deployment. Keep them out of intrinsic My Rank. Imported player
+// rows can instead supply upside_tags and upside_confidence (0..1).
+const NHL_DRAFT_CATALYSTS={
+  'Porter Martone':{tags:['YOUNG_BREAKOUT','TOP6_PATH'],confidence:0.65},
+  'Adam Fantilli':{tags:['YOUNG_BREAKOUT'],confidence:0.75},
+  'Jimmy Snuggerud':{tags:['YOUNG_BREAKOUT','TOP6_PATH'],confidence:0.65},
+  'Logan Stankoven':{tags:['YOUNG_BREAKOUT'],confidence:0.65},
+  'Josh Doan':{tags:['ROLE_GROWTH'],confidence:0.55},
+  'Quinton Byfield':{tags:['YOUNG_BREAKOUT'],confidence:0.6},
+  'Gavin McKenna':{tags:['YOUNG_BREAKOUT','TOP6_PATH'],confidence:0.55},
+  'Zayne Parekh':{tags:['YOUNG_BREAKOUT','PPQB_PATH'],confidence:0.55},
+  'Filip Hronek':{tags:['PPQB_PATH'],confidence:0.5},
+  'Rasmus Andersson':{tags:['PPQB_PATH'],confidence:0.5},
+};
+function nhlDraftCatalyst(p){
+  if(p.upsideTags&&p.upsideTags.length)return {tags:p.upsideTags,confidence:p.upsideConfidence||0.5};
+  return NHL_DRAFT_CATALYSTS[p.name]||null;
+}
 function computeMyRanksNhl(){
   const w=NHL_MY_RANK;
   const rankMap=(key,dir)=>{
@@ -3336,7 +3374,7 @@ function setDraftRoomMode(auction){
 function render(){
   const isAuction=LEAGUE.draftType==='auction'; setDraftRoomMode(isAuction);
   if(isAuction){renderAuctionRoom();return;}
-  renderPool();renderBoard();renderMyPicks();renderRoster();renderOnClock();renderCues();renderKeeperList();renderQueue();
+  renderPool();renderBoard();renderMyPicks();renderRoster();renderOnClock();renderCues();renderKeeperList();renderQueue();renderNhlLivePicks();
 }
 function renderAuctionPlaceholder(){
   renderAuctionRoom();
@@ -3534,6 +3572,130 @@ function myUpcomingPicks(){
   const out=[]; for(let ov=nextOpenPick(curPick);ov<=totalPicks;ov++){ if(!pickTakenAt(ov)&&ownerOf(ov)===mySlot)out.push(ov); }
   return out;
 }
+// My Rank is an intrinsic, roster-independent order. This live layer answers a
+// different question: what does this particular roster need before its next turn?
+// All modifiers are in approximate draft-pick units, not fantasy points. Never
+// turn a low-sample prior-season projection into a purported current role fact.
+function nhlLiveRecommendations(limit=6){
+  if(SPORT.id!=='nhl' || LEAGUE.draftType==='auction')return [];
+  const upcoming=myUpcomingPicks();
+  if(!upcoming.length)return [];
+  const now=upcoming[0], paired=upcoming[1]===now+1;
+  // At the end of a snake round we own two consecutive picks. The scarcity
+  // horizon is the pick AFTER that pair, not the second pick one second away.
+  const next=(paired?upcoming[2]:upcoming[1])||Math.min(totalPicks+1,now+LEAGUE.teams*2);
+  const round=Math.ceil(now/LEAGUE.teams), roster=myRoster();
+  const counts={F:roster.filter(p=>p.pos!=='D'&&p.pos!=='G').length,
+    D:roster.filter(p=>p.pos==='D').length,G:roster.filter(p=>p.pos==='G').length,
+    C:roster.filter(p=>eligiblePositions(p).length===1&&p.pos==='C').length};
+  const slots=LEAGUE.starters||{};
+  const startersFilled=(list)=>slotRosterPlayers(list,slots).starterSlots.filter(s=>s.player).length;
+  const filled=startersFilled(roster);
+  const pool=available();
+  // A room that has drafted a position ahead of market ADP receives a modest
+  // urgency adjustment. Use only picks already made, not future mock results.
+  const recent=picks.filter(x=>!x.keeper&&x.overall<now&&x.overall>=now-20)
+    .map(x=>({pick:x.overall,player:PLAYERS.find(p=>p.id===x.playerId)})).filter(x=>x.player);
+  const run={D:recent.filter(x=>x.player.pos==='D').length,G:recent.filter(x=>x.player.pos==='G').length};
+  const roomShift={};
+  for(const type of ['F','D','G']){
+    const sample=recent.filter(x=>x.player.pos==='D'?'D'===type:x.player.pos==='G'?'G'===type:'F'===type);
+    // Positive means this room takes that group before market ADP; negative
+    // means it is letting the group fall. Keep a small, bounded sample weight.
+    roomShift[type]=sample.length>=3?Math.max(-8,Math.min(8,
+      sample.reduce((s,x)=>s+(x.player.adp-x.pick),0)/sample.length*0.35)):0;
+  }
+  const survival=(p)=>{
+    const market=(Number(p.adp)||Number(p.myRank)||next)-roomShift[p.pos==='D'?'D':p.pos==='G'?'G':'F'];
+    return Math.max(0.03,Math.min(0.97,1/(1+Math.exp(Math.max(-30,Math.min(30,(next-market)*0.13))))));
+  };
+  const group=(p)=>p.pos==='D'?'D':p.pos==='G'?'G':'F';
+  const ranked=pool.slice().sort((a,b)=>(a.myRank||999)-(b.myRank||999));
+  const candidates=ranked.slice(0,85);
+  return candidates.map(p=>{
+    const type=group(p), survive=survival(p), reasons=[];
+    const alternatives=ranked.filter(q=>q.id!==p.id&&group(q)===type);
+    const nextEquivalent=alternatives.find(q=>survival(q)>=0.42);
+    const gap=nextEquivalent?Math.max(0,Math.min(24,(nextEquivalent.myRank||999)-(p.myRank||999))):24;
+    let score=now-(p.myRank||p.adp||999);
+    // The soft D1 checkpoint must never turn a fair Makar pick into a reason to
+    // pass on a genuinely superior top-five player at 1.01.
+    if(round===1&&p.myRank<=5)score+=(6-p.myRank)*3;
+    const newStarter=startersFilled(roster.concat(p))>filled;
+    if(newStarter){score+=Math.min(9,3+round/2); reasons.push('fills a starting slot');}
+    let need=0;
+    if(type==='D'){
+      if(counts.D===0)need=round<=3?13:9;
+      else if(counts.D===1)need=round<=6?10:7;
+      else if(counts.D===2)need=round>=8?4:0;
+      else if(counts.D===3)need=round>=12?0:-5;
+      else need=-18;
+      if(counts.D>=3)reasons.push(counts.D>=4?'D5 costs a flexible spot':'D4 must beat forward value');
+      else if(counts.D===2)reasons.push('D3 is tier/value driven');
+      if(counts.D<3&&run.D>=5&&survive<0.5){need+=3;reasons.push('defense run in this room');}
+    } else if(type==='G'){
+      if(counts.G===0)need=round>=4?10:1;
+      else if(counts.G===1)need=-10;
+      else need=-30;
+      if(counts.G>=1)reasons.push(counts.G>=2?'G3 needs exceptional marginal value':'G2 value must clear saturation');
+      if(counts.G===0&&run.G>=4&&survive<0.5){need+=3;reasons.push('goalie tier under pressure');}
+    } else {
+      if(counts.F<2&&round<=5)need+=5;
+      if(round>=10&&counts.F<7)need+=4;
+      if(roomShift.F<=-5&&survive>=0.4)reasons.push('forwards lasting longer in this room');
+      const onlyC=eligiblePositions(p).length===1&&p.pos==='C';
+      if(onlyC){
+        if(counts.C===0)need-=round<=2?Math.min(4,p.myRank/8):round<=5?4:0;
+        else if(counts.C===1)need-=round<=9?15:7;
+        else need-=18;
+        if(counts.C)reasons.push(`C-only after ${counts.C} C-only pick${counts.C>1?'s':''}`);
+      }
+      // Late upside comes only from fields actually present in the pool. A
+      // young age/rookie flag is a small option-value prior, not a claimed role.
+      if(round>=9){
+        const ageBonus=p.age&&p.age<=23?Math.min(4,(round-8)*0.5):p.rookie?Math.min(3,(round-8)*0.4):0;
+        need+=ageBonus;
+        if(ageBonus)reasons.push('late development upside');
+      }
+    }
+    if(round>=9){
+      const catalyst=nhlDraftCatalyst(p);
+      if(catalyst){
+        need+=Math.min(12,(round-8)*1.35)*catalyst.confidence;
+        reasons.unshift(`${catalyst.tags[0]} opportunity to verify`);
+      }
+    }
+    score+=need;
+    const vona=Math.min(11,gap*0.38)*(1-survive);
+    score+=vona;
+    if(gap>=10&&survive<0.4)reasons.push(`${type} alternatives drop off by next turn`);
+    else if(survive>=0.6)reasons.push('reasonable chance to wait');
+    if(!reasons.length)reasons.push('strong intrinsic value');
+    return {player:p,score,survive,gap,reason:reasons.slice(0,2).join(' · '),
+      label:survive>=0.62&&gap<10?'WAIT':gap>=10&&survive<0.4?'TIER CLIFF':'VALUE'};
+  }).sort((a,b)=>b.score-a.score).slice(0,limit).map((x,i)=>({...x,label:i===0&&x.label!=='WAIT'?'TAKE NOW':x.label,
+    now,next,paired,round,counts}));
+}
+function renderNhlLivePicks(){
+  const card=el('nhlLiveCard');if(!card)return;
+  card.style.display=SPORT.id==='nhl'&&LEAGUE.draftType!=='auction'?'':'none';
+  if(card.style.display==='none')return;
+  const list=nhlLiveRecommendations(), box=el('nhlLivePicks');
+  if(!list.length){box.textContent='Draft complete or no players available.';return;}
+  const {now,next,paired,round,counts}=list[0];
+  el('nhlLiveContext').textContent=`Pick ${now} (R${round})${paired?` + ${now+1} at turn`:''} · next turn ${next} · roster ${counts.F} F / ${counts.D} D / ${counts.G} G · ${counts.C} C-only`;
+  box.innerHTML=list.map(({player:p,label,reason,survive})=>`<div class="live-pick">
+    <span class="live-label ${label==='WAIT'?'wait':''}">${label}</span>
+    <div class="live-pick-main"><b>${headshotImg(p)}${p.name}</b> ${posCell(p)}
+      <span class="small muted">My ${p.myRank} · ADP ${p.adp} · proj ${Math.round(p.proj||0)}</span>
+      <div class="live-pick-reason">${reason}${label==='WAIT'?' · market ADP suggests it may last':''}</div></div>
+    <button class="pick-btn" data-live-pick="${p.id}">draft →</button>
+  </div>`).join('');
+  box.querySelectorAll('[data-live-pick]').forEach(b=>b.onclick=()=>{
+    const ov=nextOpenPick(curPick);if(ov>totalPicks)return;
+    makePick(+b.dataset.livePick,ov);curPick=nextOpenPick(ov+1);render();saveSetup();
+  });
+}
 function renderCues(){
   const box=el('clockCues'); if(!box)return;
   const parts=[];
@@ -3614,8 +3776,8 @@ function renderPool(){
     const d=Math.round((p.adp-p.ecr)*10)/10; // + = falls later than ranked = value
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><input type="checkbox" class="qcheck" data-q="${p.name.replace(/"/g,'&quot;')}" ${queued.has(p.name)?'checked':''}></td>
-      <td>${p.adp}</td><td>${p.ecr}</td><td${p.myRankWhy?` title="${String(p.myRankWhy).replace(/"/g,'&quot;')}"`:''}>${p.myRank!=null?p.myRank:'—'}</td><td>${posCell(p)}</td>
-      <td>${headshotImg(p)}${p.name}${p.keeper?`<span class="kchip">K</span>`:''}${rookieBadge(p)}</td><td class="muted small">${p.pos}${p.posRank||''}</td><td class="small">${p.proj?p.proj.toFixed(1):''}</td>
+      <td>${p.adp}</td><td>${p.ecr}</td><td${p.myRankWhy?` title="${String(p.myRankWhy).replace(/"/g,'&quot;')}"`:''}>${p.myRank!=null?p.myRank:'—'}</td><td class="small">${p.proj?p.proj.toFixed(1):''}</td><td>${posCell(p)}</td>
+      <td>${headshotImg(p)}${p.name}${teamLogoImg(p)}${p.keeper?`<span class="kchip">K</span>`:''}${rookieBadge(p)}</td><td class="muted small">${p.pos}${p.posRank||''}</td>
       <td class="dcol ${valClass(d)}">${d>0?'+':''}${d}</td>
       <td><button class="pick-btn" data-pk="${p.id}">draft →</button></td>`;
     tb.appendChild(tr);
@@ -4104,6 +4266,8 @@ function parsePlayers(txt){
       age:num(at(c,'age')),                 // drives ageTrajectory() when present
       trajectory:num(at(c,'trajectory')),   // 1.0 neutral, >1 ascending, <1 aging
       sleeperId:at(c,'sleeper_id')||'', rookie:!!at(c,'rookie'),
+      upsideTags:(at(c,'upside_tags')||'').split('|').filter(Boolean),
+      upsideConfidence:num(at(c,'upside_confidence')),
       // Hockey: projected season totals per category, so a league with different
       // point values can be rescored without refetching anything. fppg is what the
       // Add Radar multiplies by a team's games in the window.
@@ -4121,9 +4285,17 @@ function parsePlayers(txt){
 // column. onerror hides a broken/missing image rather than showing a
 // broken-image icon, since coverage isn't guaranteed for every player.
 function headshotImg(p){
+  if(SPORT.id==='nhl'&&/^\d+$/.test(p.nhlId||'')){
+    const team=/^[A-Z]{2,3}$/.test(p.team||'')?p.team:'NHL';
+    return `<img class="headshot" src="https://assets.nhle.com/mugs/nhl/20262027/${team}/${p.nhlId}.png" onerror="this.style.display='none'" alt="">`;
+  }
   return p.sleeperId
     ? `<img class="headshot" src="https://sleepercdn.com/content/nfl/players/${p.sleeperId}.jpg" onerror="this.style.display='none'" alt="">`
     : '';
+}
+function teamLogoImg(p){
+  if(SPORT.id!=='nhl'||!/^([A-Z]{2,3})$/.test(p.team||''))return '';
+  return `<img class="team-logo" src="https://assets.nhle.com/logos/nhl/svg/${p.team}_dark.svg" onerror="this.style.display='none'" alt="${p.team}" title="${p.team}">`;
 }
 // Show every slot a player is eligible for, not just his primary. In a daily
 // league the gap between a C and a C/LW is whether you have somewhere to put him
@@ -4545,9 +4717,11 @@ async function yahooDisconnect(){
   }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
 }
 async function listYahooLeagues(){
+  el('yahooImportBtn').disabled=true; yahooCompared=null;
   el('yahooStatus').textContent='Checking…'; el('yahooRaw').textContent='';
   try{
-    const r=await fetch('/api/yahoo/leagues');
+    const game=el('yahooGameSelect').value;
+    const r=await fetch('/api/yahoo/leagues?game='+encodeURIComponent(game));
     const data=await r.json();
     if(!r.ok){
       el('yahooStatus').textContent='⚠ '+(data.error||('HTTP '+r.status))+(data.hint?' — '+data.hint:'');
@@ -4555,12 +4729,83 @@ async function listYahooLeagues(){
       return;
     }
     if(Array.isArray(data.leagues)){
-      el('yahooStatus').textContent='✓ '+data.leagues.length+' league(s): '+data.leagues.map(l=>l.name+' ('+l.key+')').join(', ');
+      el('yahooStatus').textContent='✓ '+data.leagues.length+' '+game.toUpperCase()+' league(s): '+data.leagues.map(l=>l.name+' ('+l.key+')').join(', ');
+      const sel=el('yahooLeagueSelect');
+      sel.innerHTML='';
+      data.leagues.forEach(l=>{const o=document.createElement('option');o.value=l.key;o.textContent=l.name+' ('+l.key+')';sel.appendChild(o);});
     } else {
       el('yahooStatus').textContent='Connected, but the response shape didn\'t match what we expected — raw JSON below for review.';
     }
     el('yahooRaw').textContent=JSON.stringify(data.raw,null,1);
   }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
+}
+let yahooCompared=null;
+async function compareYahooSettings(){
+  const key=el('yahooLeagueSelect').value;
+  if(!key){el('yahooStatus').textContent='List NHL leagues, then select one.';return;}
+  el('yahooImportBtn').disabled=true; yahooCompared=null;
+  el('yahooStatus').textContent='Reading league settings…';
+  try{
+    const r=await fetch('/api/yahoo/league-settings?key='+encodeURIComponent(key));
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
+    const baseline=LEAGUES_DEFAULT['yahoo-nhl-public'];
+    const arr=Array.isArray(data.rosterPositions)?data.rosterPositions:Object.values(data.rosterPositions||{});
+    const positions={};arr.forEach(x=>{const v=x&&x.roster_position||x;if(v&&v.position)positions[v.position]=Number(v.count)||0;});
+    const expected=baseline.starters;
+    const active=Object.keys(positions).filter(p=>!['BN','IR','IR+','NA'].includes(p));
+    const positionMatch=Object.keys(expected).every(p=>positions[p]===expected[p])&&active.every(p=>expected[p]!=null);
+    const positionStatus=Object.keys(positions).length
+      ? `${positionMatch?'✓':'⚠'} roster ${JSON.stringify(positions)} vs reference ${JSON.stringify(expected)}`
+      : '⚠ Yahoo roster positions could not be parsed; inspect raw settings below';
+    const statRows=(node)=>{
+      if(!node||typeof node!=='object')return [];
+      if(node.stat&&typeof node.stat==='object')return [node.stat];
+      return Object.values(node).flatMap(statRows);
+    };
+    const categories=statRows(data.statCategories), modifiers=statRows(data.statModifiers);
+    const normalizeStat=s=>String(s||'').toLowerCase().replace(/[^a-z]/g,'');
+    const names=new Map(categories.map(s=>[String(s.stat_id),normalizeStat(s.name||s.display_name)]));
+    const aliases={g:['goals'],a:['assists'],pm:['plusminus'],ppp:['powerplaypoints'],
+      sog:['shotsongoal'],blk:['blockedshots'],w:['wins','goaliewins'],ga:['goalsagainst'],sv:['saves'],sho:['shutouts']};
+    const observed={};
+    modifiers.forEach(s=>{const name=names.get(String(s.stat_id))||'';
+      Object.entries(aliases).forEach(([code,patterns])=>{if(patterns.some(a=>name===a))observed[code]=Number(s.value);});
+    });
+    const known=Object.keys(observed), mismatch=known.filter(code=>Math.abs(observed[code]-baseline.scoring[code])>0.001);
+    const scoringStatus=known.length===Object.keys(baseline.scoring).length&&!mismatch.length
+      ? '✓ all reference scoring modifiers match'
+      : known.length?`⚠ scoring checked ${known.length}/${Object.keys(baseline.scoring).length}; differing ${mismatch.join(', ')||'none found'}; review raw values`
+      : '⚠ scoring modifiers could not be mapped; review raw values';
+    el('yahooStatus').textContent=`${data.name||key} · ${data.teams||'?'} teams (reference 10) · ${data.scoringType||'?'} scoring · ${data.draftType||'?'} draft · ${positionStatus} · ${scoringStatus}.`;
+    if(data.teams===10&&positionMatch&&known.length===10&&!mismatch.length&&
+      String(data.scoringType||'').includes('point')&&!/auction/i.test(data.draftType||'')){
+      yahooCompared={key,name:data.name||'Yahoo NHL Public'};
+      el('yahooImportBtn').disabled=false;
+      el('yahooStatus').textContent+=' Settings match; enter your slot and create the profile.';
+    }
+    el('yahooRaw').textContent=JSON.stringify({statCategories:data.statCategories,statModifiers:data.statModifiers,settings:data.settings},null,2);
+  }catch(e){el('yahooStatus').textContent='⚠ '+e.message;}
+}
+async function importMatchedYahooNhl(){
+  if(!yahooCompared)return;
+  const slot=Number(el('yahooImportSlot').value);
+  if(!Number.isInteger(slot)||slot<1||slot>10){el('yahooStatus').textContent='Enter your draft slot from 1 to 10.';return;}
+  const existing=Object.values(LEAGUES).find(p=>p.yahooLeagueKey===yahooCompared.key);
+  if(existing){switchLeague(existing.id);el('yahooStatus').textContent='This Yahoo league is already imported; switched to it.';return;}
+  const owners=Array.from({length:10},(_,i)=>i+1===slot?'Me':`Team ${i+1}`);
+  const ownerSlot=Object.fromEntries(owners.map((owner,i)=>[owner,i+1]));
+  const body={...LEAGUES_DEFAULT['yahoo-nhl-public'],id:undefined,
+    name:yahooCompared.name, yahooLeagueKey:yahooCompared.key,
+    mySlot:slot,owners,ownerSlot,meOwner:'Me',draftDateLabel:'Check Yahoo draft room'};
+  try{
+    el('yahooStatus').textContent='Creating matched NHL profile…';
+    const r=await fetch('/api/leagues',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const profile=await r.json();if(!r.ok)throw new Error(profile.error||('HTTP '+r.status));
+    LEAGUES[profile.id]=profile;fillLeagueSelect();switchLeague(profile.id);
+    el('yahooStatus').textContent=`✓ Created ${profile.name} with your slot ${slot}. Record the Yahoo board as the draft runs; live pick sync is not yet implemented.`;
+    el('yahooImportBtn').disabled=true;
+  }catch(e){el('yahooStatus').textContent='⚠ '+e.message;}
 }
 
 // ---------- IN-SEASON / FAAB LAB ----------
@@ -4778,6 +5023,8 @@ el('yahooConnectBtn').onclick=connectYahoo;
 el('yahooStatusBtn').onclick=yahooStatusCheck;
 el('yahooDisconnectBtn').onclick=yahooDisconnect;
 el('yahooListBtn').onclick=listYahooLeagues;
+el('yahooSettingsBtn').onclick=compareYahooSettings;
+el('yahooImportBtn').onclick=importMatchedYahooNhl;
 el('lgOpenRosterBuilderBtn').onclick=openRosterBuilder;
 el('lgOwners').oninput=()=>{
   const owners=el('lgOwners').value.split(',').map(s=>s.trim()).filter(Boolean);

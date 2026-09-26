@@ -413,7 +413,8 @@ async function yahooJson(token, endpoint) {
 __name(yahooJson, "yahooJson");
 async function resolveYahooLeagueKey(token, profile) {
   if (profile.yahooLeagueKey) return profile.yahooLeagueKey;
-  const raw = await yahooJson(token, "users;use_login=1/games;game_keys=nfl/leagues");
+  const game = profile.sport === "nhl" ? "nhl" : "nfl";
+  const raw = await yahooJson(token, `users;use_login=1/games;game_keys=${game}/leagues`);
   const leagues = collectYahooEntities(raw, "league");
   const id = String(profile.yahooLeagueId || "");
   const byId = leagues.find((l) => id && String(l.league_key || "").endsWith(`.l.${id}`));
@@ -1460,8 +1461,9 @@ var worker_default = {
         try {
           const token = await getYahooAccessToken(env, kv, url);
           if (!token) return J({ error: "Yahoo account not connected. Visit /auth/yahoo/start first." }, 401);
+          const game = url.searchParams.get("game") === "nhl" ? "nhl" : "nfl";
           const r = await fetch(
-            "https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_keys=nfl/leagues?format=json",
+            `https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_keys=${game}/leagues?format=json`,
             { headers: { Authorization: `Bearer ${token}` } }
           );
           const text = await r.text();
@@ -1498,6 +1500,29 @@ var worker_default = {
           return J({ leagues, raw });
         } catch (e) {
           return J({ error: "Yahoo leagues request failed: " + e.message }, 502);
+        }
+      }
+      if (path === "/api/yahoo/league-settings") {
+        const denied = requireAdmin();
+        if (denied) return denied;
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const key = url.searchParams.get("key") || "";
+        if (!/^\d+\.l\.\d+$/.test(key)) return J({ error: "invalid Yahoo league key" }, 400);
+        try {
+          const token = await getYahooAccessToken(env, kv, url);
+          if (!token) return J({ error: "Yahoo account not connected." }, 401);
+          const raw = await yahooJson(token, `league/${key}/settings`);
+          const league = raw.fantasy_content && raw.fantasy_content.league || [];
+          const meta = Array.isArray(league) ? league[0] || {} : league;
+          const settings = Array.isArray(league) ? league[1] && league[1].settings && league[1].settings[0] || {} : {};
+          return J({ key, name: meta.name || "", teams: Number(meta.num_teams)||null,
+            draftType: settings.draft_type || null, scoringType: settings.scoring_type || null,
+            rosterPositions: settings.roster_positions || null,
+            statCategories: settings.stat_categories || null,
+            statModifiers: settings.stat_modifiers || null,
+            settings, raw });
+        } catch (e) {
+          return J({ error: "Yahoo settings request failed: " + e.message }, 502);
         }
       }
       return J({ error: "not found" }, 404);
