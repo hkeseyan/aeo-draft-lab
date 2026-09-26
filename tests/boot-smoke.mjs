@@ -156,6 +156,58 @@ ok &= check('surplus goalies are pushed below startable ones', () => {
 }, '[true,true]');
 ok &= check('every ranked player carries an explanation', 'PLAYERS.filter(p=>p.myRankWhy!=null).length', 400);
 ok &= check('football My Rank model is untouched', () => ev('SPORTS.nfl.myRankModel') + '/' + ev('SPORTS.nhl.myRankModel'), 'nfl/nhl');
+const oldFetch = w.fetch;
+w.fetch = async url => String(url).includes('/api/yahoo/league-settings')
+  ? { ok: true, json: async () => ({ name: 'Saturday NHL', teams: 10, scoringType: 'headpoint', draftType: 'live',
+    rosterPositions: ['C','LW','RW','D','G'].map((position,i)=>({roster_position:{position,count:[2,2,2,4,2][i]}})),
+    statCategories: { stats: [{stat:{stat_id:'1',name:'Goals'}}] },
+    statModifiers: { stats: [{stat:{stat_id:'1',value:'6'}}] }, settings:{} }) }
+  : oldFetch(url);
+w.document.getElementById('yahooLeagueSelect').innerHTML='<option value="999.l.123">Saturday NHL</option>';
+await ev('compareYahooSettings()');
+ok &= check('Yahoo settings comparison distinguishes partial scoring coverage',
+  () => w.document.getElementById('yahooStatus').textContent.includes('scoring checked 1/10'), true);
+w.fetch = async url => String(url).includes('/api/yahoo/league-settings')
+  ? { ok: true, json: async () => ({ name: 'Saturday NHL', teams: 10, scoringType: 'headpoint', draftType: 'live',
+    rosterPositions: ['C','LW','RW','D','G'].map((position,i)=>({roster_position:{position,count:[2,2,2,4,2][i]}})),
+    statCategories: { stats: Object.keys({g:1,a:1,pm:1,ppp:1,sog:1,blk:1,w:1,ga:1,sv:1,sho:1})
+      .map((code,i)=>({stat:{stat_id:String(i+1),name:({g:'Goals',a:'Assists',pm:'Plus/Minus',ppp:'Powerplay Points',sog:'Shots on Goal',blk:'Blocked Shots',w:'Wins',ga:'Goals Against',sv:'Saves',sho:'Shutouts'})[code]}})) },
+    statModifiers: { stats: Object.values({g:6,a:4,pm:2,ppp:2,sog:0.9,blk:1,w:5,ga:-3,sv:0.6,sho:5})
+      .map((value,i)=>({stat:{stat_id:String(i+1),value:String(value)}})) }, settings:{} }) }
+  : oldFetch(url);
+await ev('compareYahooSettings()');
+ok &= check('exact NHL settings comparison enables profile creation',
+  () => !w.document.getElementById('yahooImportBtn').disabled, true);
+w.fetch = oldFetch;
+
+// The recommendation panel is contextual; My Rank itself must remain stable.
+ok &= check('NHL live pick panel has six available candidates',
+  'nhlLiveRecommendations().length', 6);
+ok &= check('NHL live panel rendered separately from the rank table',
+  () => w.document.querySelectorAll('#nhlLivePicks .live-pick').length, 6);
+ok &= check('projection sits beside ADP, ECR and My Rank',
+  () => [...w.document.querySelectorAll('#poolTable th')].slice(1,5).map(x=>x.textContent).join(','), 'ADP,ECR,My,Proj');
+ok &= check('NHL portraits and team logos use NHL assets',
+  'headshotImg(PLAYERS.find(p=>p.name==="Cale Makar")).includes("assets.nhle.com/mugs") && teamLogoImg(PLAYERS.find(p=>p.name==="Cale Makar")).includes("COL_dark.svg")', true);
+ok &= check('recommendation includes next turn and roster state',
+  'nhlLiveRecommendations()[0].next > nhlLiveRecommendations()[0].now && nhlLiveRecommendations()[0].counts.G===0', true);
+ev('mySlot=10');
+ok &= check('turn picks use the following turn as the survival horizon',
+  'nhlLiveRecommendations()[0].now+1===11 && nhlLiveRecommendations()[0].next===30', true);
+ev('mySlot=1');
+const originalRank = ev('PLAYERS.find(p=>p.name==="Cale Makar").myRank');
+ev(`(function(){
+  makePick(PLAYERS.find(p=>p.name==='Igor Shesterkin').id,1);
+  makePick(PLAYERS.find(p=>p.name==='Carter Hart').id,20);
+  curPick=21; render();
+})()`);
+ok &= check('G3 is absent from the top six after drafting two goalies',
+  'nhlLiveRecommendations().every(x=>x.player.pos!=="G")', true);
+ok &= check('G3 carries a roster saturation reason',
+  'nhlLiveRecommendations(85).filter(x=>x.player.pos==="G").some(x=>x.reason.includes("G3"))', true);
+ok &= check('My Rank stays intrinsic when the roster changes',
+  'PLAYERS.find(p=>p.name==="Cale Makar").myRank', originalRank);
+ev('resetDraft()');
 
 // --- eligibility on the board ---
 ok &= check('the board shows every eligible position', () => {

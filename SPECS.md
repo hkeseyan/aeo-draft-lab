@@ -101,6 +101,34 @@ than "is this player this position", so a C/LW doesn't look unwanted the moment
 centre is full. Football profiles are unaffected — a single position parses to a
 one-entry eligibility list.
 
+**NHL live pick recommendations (first quantitative pass).** The Draft Room has a
+six-player "Who to pick now" panel separate from intrinsic My Rank. It recomputes
+after picks, undo, rewind, league switches, and setup loads. The score uses My
+Rank, the current roster's open starters, D1/D2/D3/D4 and G1/G2/G3 state,
+C-only count, round-dependent upside hypotheses, a bounded last-20-pick room
+signal, and a value-over-next-available proxy. Market ADP estimates whether a
+player or equivalent tier survives the next *turn*. At an end-of-round snake
+turn, both consecutive picks are treated as one decision window; the horizon is
+the following turn. The displayed TAKE NOW, WAIT, VALUE, and TIER CLIFF reasons
+are directional. ADP survival is an uncalibrated heuristic, not a probability
+forecast. Never present the result as a verified live Yahoo board unless the
+user has actually recorded/synced every pick. Upside catalyst tags from the four
+mock reviews are hypotheses with confidence discounts, not guaranteed PP/line
+assignments. Optional CSV fields `upside_tags` (pipe-separated) and
+`upside_confidence` (0–1) override the reviewed name registry. Static My Rank
+does not move with roster state.
+
+The Best Available table now places Proj beside ADP/ECR/My and displays NHL
+portraits and team logos from NHL assets when an NHL player ID/team is known.
+Yahoo league listing accepts NHL or NFL. A read-only NHL settings comparison
+fetches `/league/{league_key}/settings` and exposes its roster/scoring values.
+Only an exact 10-team points/roster/scoring match enables an explicit button to
+create a new profile using the reference pool and the user's entered draft slot;
+it never overwrites the reference profile. Yahoo Fantasy permission
+must work before this can verify a specific public-prize league. The baseline
+projection still uses prior-season rates, and the live score is not calibrated
+to a new league's scoring until that league's settings are confirmed.
+
 ## App shape
 
 Single-page app (`public/index.html`), ten tabs:
