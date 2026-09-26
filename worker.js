@@ -1340,9 +1340,13 @@ var worker_default = {
         if (!fxId) return J({ error: "Missing Fantrax league ID" }, 400);
         try {
           const base = "https://www.fantrax.com/fxea/general";
-          const [info, rosterResp] = await Promise.all([
+          const [info, rosterResp, playerIdsResp] = await Promise.all([
             fetch(`${base}/getLeagueInfo?leagueId=${encodeURIComponent(fxId)}`).then((r) => r.json()),
-            fetch(`${base}/getTeamRosters?leagueId=${encodeURIComponent(fxId)}`).then((r) => r.json())
+            fetch(`${base}/getTeamRosters?leagueId=${encodeURIComponent(fxId)}`).then((r) => r.json()),
+            // getLeagueInfo.playerInfo carries league-specific eligiblePos/status
+            // but not names. Fantrax's documented getPlayerIds endpoint maps the
+            // Fantrax ids back to names/teams for the whole NHL database.
+            fetch(`${base}/getPlayerIds?sport=NHL`).then((r) => r.ok ? r.json() : ({})).catch(() => ({}))
           ]);
           // Fantrax answers 200 with an error object rather than an HTTP status,
           // so the body is the only signal that the league id was wrong.
@@ -1353,19 +1357,36 @@ var worker_default = {
             return J({ error: "Fantrax: " + errOf(rosterResp) }, 404);
           }
           const playerInfo = info && info.playerInfo || {};
-          // playerInfo's per-player shape isn't contractually documented, so try the
-          // plausible spellings and fall back to the raw id rather than dropping a
-          // roster spot silently. Preserve Fantrax eligibility separately whenever
-          // the payload exposes it; never relabel a generic/FantasyPros position as
-          // Fantrax eligibility.
+          const rawIds = playerIdsResp && (playerIdsResp.players || playerIdsResp.playerInfo || playerIdsResp) || {};
+          const idMeta = {};
+          if (Array.isArray(rawIds)) {
+            rawIds.forEach((m) => {
+              const id = m && (m.fantraxId || m.id || m.playerId);
+              if (id) idMeta[String(id)] = m;
+            });
+          } else if (rawIds && typeof rawIds === "object") {
+            Object.entries(rawIds).forEach(([key, m]) => {
+              if (!m || typeof m !== "object") return;
+              const id = m.fantraxId || m.id || m.playerId || key;
+              idMeta[String(id)] = m;
+            });
+          }
+          // getLeagueInfo's documented PlayerStatus is {eligiblePos,status}; the
+          // separate id dictionary supplies name/team. Preserve league-specific
+          // eligibility for the entire player pool, not only rostered players.
           const nameOf = /* @__PURE__ */ __name((pid) => {
-            const m = playerInfo[pid] || playerInfo[String(pid)];
-            if (!m) return String(pid);
-            return m.name || m.playerName || m.fullName || [m.firstName, m.lastName].filter(Boolean).join(" ").trim() || String(pid);
+            const m = idMeta[String(pid)] || {};
+            const legacy = playerInfo[pid] || playerInfo[String(pid)] || {};
+            return m.name || m.playerName || m.fullName || legacy.name || legacy.playerName || legacy.fullName ||
+              [m.firstName, m.lastName].filter(Boolean).join(" ").trim() ||
+              [legacy.firstName, legacy.lastName].filter(Boolean).join(" ").trim() || String(pid);
           }, "nameOf");
           const posOf = /* @__PURE__ */ __name((pid, rosterItem) => {
             const m = playerInfo[pid] || playerInfo[String(pid)] || {};
-            const raw = m.eligiblePositions || m.positions || m.positionEligibility || m.position || rosterItem && (rosterItem.eligiblePositions || rosterItem.positions || rosterItem.position) || "";
+            const global = idMeta[String(pid)] || {};
+            const raw = m.eligiblePos || m.eligiblePositions || m.positions || m.positionEligibility || m.position ||
+              rosterItem && (rosterItem.eligiblePos || rosterItem.eligiblePositions || rosterItem.positions || rosterItem.position) ||
+              global.positions || global.position || "";
             const vals = Array.isArray(raw) ? raw : String(raw).split(/[,/|+]/);
             return [...new Set(vals.map((x) => String(x && (x.position || x) || "").trim().toUpperCase()).filter(Boolean))].join("/");
           }, "posOf");
@@ -1375,6 +1396,10 @@ var worker_default = {
           const ownerSlot = {};
           const rosterLines = [];
           const platformEligibility = {};
+          Object.keys(playerInfo).forEach((pid) => {
+            const nm = nameOf(pid), pos = posOf(pid, null);
+            if (nm && nm !== String(pid) && pos) platformEligibility[String(nm).toLowerCase()] = pos;
+          });
           let unresolved = 0;
           teamIds.forEach((tid, i) => {
             const entry = rostersRaw[tid] || {};
