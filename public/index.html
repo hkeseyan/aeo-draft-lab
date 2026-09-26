@@ -2249,7 +2249,7 @@ const LEAGUES_DEFAULT = {
   // plus 2 IR that are never drafted. Opponents are strangers in a public league,
   // so tendencies stay off and the rival model runs on value and roster need alone.
   'yahoo-nhl-public': {
-    id:'yahoo-nhl-public', name:'Yahoo NHL Public', sport:'nhl',
+    id:'yahoo-nhl-public', name:'Yahoo NHL Public — H2H Points (10-team reference)', sport:'nhl', platform:'yahoo',
     leagueType:'redraft', draftType:'snake', superflex:false,
     teams:10, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
     scoringLabel:'H2H Points', draftDateLabel:'TBD', keeperDeadlineLabel:'\u2014',
@@ -2263,8 +2263,32 @@ const LEAGUES_DEFAULT = {
     meOwner:'Me',
     ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
     poolDataRevision:'nhl-2026-09-17-market',
+    platformEligibility:{yahoo:{'jason robertson':'LW/RW'}},
     rostersRaw:'',
     playersCsv: PLAYERS_CSV_NHL,
+  },
+  'yahoo-nhl-public-categories': {
+    id:'yahoo-nhl-public-categories', name:'Yahoo NHL Public Free — H2H Categories', sport:'nhl', platform:'yahoo',
+    leagueType:'redraft', draftType:'snake', superflex:false,
+    teams:10, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
+    scoringLabel:'H2H Categories', draftDateLabel:'TBD', keeperDeadlineLabel:'—',
+    starters:{C:2,LW:2,RW:2,D:4,G:2}, flexEligible:[], scoringMode:'categories',
+    categoryStats:{skater:['G','A','+/-','PPP','SOG','HIT'],goalie:['W','GAA','SV%','SHO']},
+    maxAcquisitionsPerWeek:4,minGoalieGamesPerWeek:3,
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
+    meOwner:'Me',ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
+    platformEligibility:{yahoo:{'jason robertson':'LW/RW'}},rostersRaw:'',playersCsv:PLAYERS_CSV_NHL,
+  },
+  'yahoo-nhl-public-roto': {
+    id:'yahoo-nhl-public-roto', name:'Yahoo NHL Public Free — Rotisserie', sport:'nhl', platform:'yahoo',
+    leagueType:'redraft', draftType:'snake', superflex:false,
+    teams:10, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
+    scoringLabel:'Rotisserie', draftDateLabel:'TBD', keeperDeadlineLabel:'—',
+    starters:{C:2,LW:2,RW:2,D:4,G:2}, flexEligible:[], scoringMode:'roto',
+    categoryStats:{skater:['G','A','+/-','PPP','SOG','BLK'],goalie:['W','GAA','SV%','SHO']},
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
+    meOwner:'Me',ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
+    platformEligibility:{yahoo:{'jason robertson':'LW/RW'}},rostersRaw:'',playersCsv:PLAYERS_CSV_NHL,
   },
   'fantastic-auction': {
     id:'fantastic-auction', name:'Fantastic Keeper Auction', leagueType:'keeper',
@@ -4267,7 +4291,9 @@ async function saveCsvToLeague(){
 
 // ---------- LEAGUES (cloud: /api/leagues) ----------
 const LEAGUE_POSITIONS=['QB','RB','WR','TE','FLEX','SUPERFLEX','K','DST'];
+const NHL_LEAGUE_POSITIONS=['C','LW','RW','D','G'];
 let editingLeagueId=null;
+let PENDING_LEAGUE_META={};
 function renderLeaguesTab(){
   const sel=el('leaguesList'); if(!sel)return;
   sel.innerHTML=Object.values(LEAGUES).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
@@ -4276,7 +4302,7 @@ function renderLeaguesTab(){
 }
 function loadLeagueIntoForm(id){
   const p=LEAGUES[id]; if(!p)return;
-  editingLeagueId=id;
+  editingLeagueId=id; PENDING_LEAGUE_META={};
   el('lgName').value=p.name||'';
   el('lgTeams').value=p.teams||12;
   el('lgRounds').value=p.rounds||16;
@@ -4330,7 +4356,9 @@ async function restoreLeagueBackup(id,ts){
 }
 function renderStartersInputs(starters){
   const row=el('lgStartersRow'); if(!row)return;
-  row.innerHTML=LEAGUE_POSITIONS.map(pos=>
+  const sport=el('lgSport')?el('lgSport').value:ACTIVE_SPORT;
+  const positions=sport==='nhl'?NHL_LEAGUE_POSITIONS:LEAGUE_POSITIONS;
+  row.innerHTML=positions.map(pos=>
     `<label class="small">${pos} <input type="number" min="0" max="4" data-starter="${pos}" value="${starters[pos]||0}" style="width:50px"></label>`
   ).join('');
 }
@@ -4426,6 +4454,7 @@ function collectLeagueForm(){
   const existing=LEAGUES[editingLeagueId]||{};
   return {
     ...existing,
+    ...PENDING_LEAGUE_META,
     name: el('lgName').value.trim()||'New League',
     teams: +el('lgTeams').value||12,
     rounds: +el('lgRounds').value||existing.rounds||16,
@@ -4461,7 +4490,7 @@ async function saveLeagueForm(){
       : await fetch('/api/leagues/'+encodeURIComponent(editingLeagueId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r.ok)throw new Error('HTTP '+r.status);
     const saved=await r.json();
-    LEAGUES[saved.id]=saved; editingLeagueId=saved.id;
+    LEAGUES[saved.id]=saved; editingLeagueId=saved.id; PENDING_LEAGUE_META={};
     fillLeagueSelect();
     // Repopulate just the dropdown options (not the form) so the just-saved league
     // stays selected/visible — renderLeaguesTab() would reset selection back to
@@ -4474,7 +4503,7 @@ async function saveLeagueForm(){
   }catch(e){ el('leaguesStatus').textContent='⚠ Save failed: '+e.message; }
 }
 function newLeagueForm(){
-  editingLeagueId=null;
+  editingLeagueId=null; PENDING_LEAGUE_META={};
   el('lgName').value='New League'; el('lgTeams').value=12; el('lgRounds').value=16; el('lgDraftType').value='snake';
   if(el('lgSport')) el('lgSport').value=ACTIVE_SPORT;
   el('lgLeagueType').value='keeper'; updateLgKeeperFieldsVisibility();
@@ -4542,6 +4571,10 @@ async function importFromFantrax(){
     el('lgOwners').value=(data.owners||[]).join(', ');
     renderOwnerSlotInputs(data.owners||[], data.ownerSlot||{}, (data.owners||[])[0]||'');
     el('lgRostersRaw').value=data.rostersRaw||'';
+    PENDING_LEAGUE_META={platform:data.platform||'fantrax',sport:data.sport||'nhl',fantraxLeagueId:data._fantraxLeagueId||fid,platformEligibility:data.platformEligibility||{}};
+    if(el('lgSport'))el('lgSport').value=data.sport||'nhl';
+    if((data.sport||'nhl')==='nhl')el('lgPlayersCsv').value=PLAYERS_CSV_NHL;
+    renderStartersInputs({});
     // Fantrax actually reports these two, unlike Sleeper and MFL, so use them
     // rather than making the user retype what the source already knows.
     if(data.draftType) el('lgDraftType').value=data.draftType;
@@ -4839,6 +4872,7 @@ el('saveCsvToLeague').onclick=saveCsvToLeague;
 el('leaguesList').onchange=()=>loadLeagueIntoForm(el('leaguesList').value);
 el('newLeagueBtn').onclick=newLeagueForm;
 el('lgLeagueType').onchange=updateLgKeeperFieldsVisibility;
+el('lgSport').onchange=()=>renderStartersInputs({});
 el('lgDraftType').onchange=()=>{el('lgAuctionFields').style.display=el('lgDraftType').value==='auction'?'':'none';};
 el('deleteLeagueBtn').onclick=deleteSelectedLeague;
 el('saveLeagueBtn').onclick=saveLeagueForm;
@@ -5340,7 +5374,7 @@ async function fetchCloudLeagues(){
       // already in KV, so production kept running the generic defaults and priced
       // a backup quarterback at $9. Backfill each such field independently, and
       // only where the cloud copy has no value at all.
-      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','scoring','scoringMode','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'];
+      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','platform','platformEligibility','scoring','scoringMode','categoryStats','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'];
       const isEmpty=v=>v==null||v===''||(Array.isArray(v)&&!v.length)||(typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length);
       const toPatch=[];
       Object.values(LEAGUES_DEFAULT).forEach(def=>{
