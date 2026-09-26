@@ -63,9 +63,8 @@
   .pick-btn{background:var(--accent2);color:#04210f;border:none;border-radius:6px;padding:4px 8px;font-weight:700;cursor:pointer;font-size:12px}
   .kchip{font-size:10px;color:var(--warn);border:1px solid var(--warn);border-radius:10px;padding:0 5px;margin-left:4px}
   .headshot{width:20px;height:20px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:4px;background:#1a1f2b}
+  .teamlogo{width:18px;height:18px;object-fit:contain;vertical-align:middle;margin-left:5px}
   .rkchip{font-size:10px;color:var(--accent2);border:1px solid var(--accent2);border-radius:10px;padding:0 5px;margin-left:4px}
-  /* Multi-forward eligibility: the single most useful tiebreak in a daily league. */
-  .fchip{font-size:10px;color:var(--accent2);border:1px solid var(--accent2);border-radius:10px;padding:0 4px;margin-left:3px;font-weight:700}
   /* grid-template-columns is set inline per-league (team count varies); every
      header/cell is a direct grid child in row-major order so a taller cell
      (e.g. a wrapped long name) grows that whole row for every column instead
@@ -186,13 +185,18 @@
           </div>
           <div class="scroll">
             <table id="poolTable">
-              <thead><tr><th title="Queue">Q</th><th class="sortcol active" data-sort="adp" title="Click to sort by ADP">ADP</th><th class="sortcol" data-sort="ecr" title="Click to sort by ECR">ECR</th><th class="sortcol" data-sort="myRank" title="Click to sort by your own philosophy-adjusted rank, lower=better">My</th><th>Pos</th><th>Player</th><th>P.Rk</th><th>Proj</th><th class="dcol">Δ</th><th></th></tr></thead>
+              <thead><tr><th title="Queue">Q</th><th class="sortcol active" data-sort="adp" title="Click to sort by ADP">ADP</th><th class="sortcol" data-sort="ecr" title="Click to sort by ECR">ECR</th><th class="sortcol" data-sort="myRank" title="Click to sort by your intrinsic league-value rank, lower=better">My</th><th>Proj</th><th title="How many of your other drafted leagues roster this player">Exp</th><th>Pos</th><th>Player</th><th>P.Rk</th><th class="dcol">Δ</th><th></th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
         </div>
       </div>
       <div>
+        <div class="card" id="pickRecCard">
+          <h2>Pick recommendations <span class="muted small">(live · separate from My Rank)</span></h2>
+          <div id="streamControls" class="row small muted" style="margin-bottom:8px"></div>
+          <div id="pickRecommendations" class="small muted">Recommendations update as the board and your roster change.</div>
+        </div>
         <div class="card">
           <h2>Roster <select id="rosterOwnerSelect" style="margin-left:6px"></select></h2>
           <div id="rosterView" class="small muted">—</div>
@@ -557,8 +561,8 @@
       <div class="small muted" id="fantraxImportStatus" style="margin-top:6px"></div>
     </div>
     <div class="card">
-      <h2>Connect Yahoo (in progress)</h2>
-      <p class="small muted">This is where Yahoo gets connected — admin only, one grant covers every Yahoo league. Click <b>Connect Yahoo account</b>, approve in the tab that opens, then come back and click <b>List my leagues</b>. The FAAB Lab uses this connection for its best-effort Tuesday roster and waiver-pool sync; full league-profile import is still separate work.</p>
+      <h2>Connect / import Yahoo</h2>
+      <p class="small muted">One Yahoo grant covers your Yahoo leagues. Once Fantasy Sports read access works, <b>List my leagues</b> shows NHL and NFL leagues and lets you import the actual league settings, roster slots and Yahoo-specific player eligibility into Draft Lab.</p>
       <p class="small muted">If listing fails with <code>additional_authorization_required</code>, Yahoo is saying the <i>grant this token was issued under</i> has no fantasy access. A refresh token can never gain a permission it wasn't granted, so refreshing or reconnecting on top of the old grant won't help — and Yahoo skips the consent screen for an app you've already approved, quietly reissuing on the same grant. Two things to check, in order: (1) <b>Check status</b> below shows which client id this Worker actually holds — confirm it matches the app you edited in the Yahoo Developer console; (2) if it matches, revoke the app at <a href="https://login.yahoo.com/account/security" target="_blank" rel="noopener">Yahoo account security → apps</a>, click <b>Disconnect</b> here, then Connect again so Yahoo has to ask you fresh.</p>
       <div class="row">
         <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account</button>
@@ -567,6 +571,7 @@
         <button class="btn ghost" id="yahooDisconnectBtn">Disconnect</button>
       </div>
       <div class="small muted" id="yahooStatus" style="margin-top:6px"></div>
+      <div id="yahooLeagueList" class="small" style="margin-top:8px"></div>
       <pre id="yahooRaw" class="small muted" style="margin-top:6px;white-space:pre-wrap;max-height:240px;overflow:auto"></pre>
     </div>
     <div class="card">
