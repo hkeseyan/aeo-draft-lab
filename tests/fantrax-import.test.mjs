@@ -9,7 +9,7 @@ const env = { MOCKS: kv };
 function stubFantrax(responses) {
   globalThis.fetch = async (url) => {
     const u = String(url);
-    const key = u.includes('getLeagueInfo') ? 'info' : u.includes('getTeamRosters') ? 'rosters' : null;
+    const key = u.includes('getLeagueInfo') ? 'info' : u.includes('getTeamRosters') ? 'rosters' : u.includes('getPlayerIds') ? 'ids' : null;
     assert.ok(key, 'unexpected outbound request: ' + u);
     return { ok: true, status: 200, json: async () => responses[key] };
   };
@@ -24,10 +24,17 @@ stubFantrax({
     rosterInfo: { maxTotalPlayers: 20 },
     teamInfo: { t1: { name: 'Ice Cold', id: 't1' }, t2: { name: 'Blue Line', id: 't2' } },
     playerInfo: {
-      p1: { name: 'Connor McDavid' },
-      p2: { firstName: 'Cale', lastName: 'Makar' },
-      p3: { fullName: 'Igor Shesterkin' },
+      p1: { eligiblePos: 'C/LW', status: 'FA' },
+      p2: { eligiblePos: 'D', status: 'FA' },
+      p3: { eligiblePos: 'G', status: 'FA' },
+      p4: { eligiblePos: 'LW/RW', status: 'FA' },
     },
+  },
+  ids: {
+    p1: { name: 'Connor McDavid', fantraxId: 'p1', team: 'EDM', position: 'C' },
+    p2: { name: 'Cale Makar', fantraxId: 'p2', team: 'COL', position: 'D' },
+    p3: { name: 'Igor Shesterkin', fantraxId: 'p3', team: 'NYR', position: 'G' },
+    p4: { name: 'Jason Robertson', fantraxId: 'p4', team: 'DAL', position: 'LW' },
   },
   rosters: {
     period: 1,
@@ -48,7 +55,11 @@ assert.equal(body.draftType, 'snake', 'SNAKE_DRAFT should map to snake');
 assert.equal(body.rosterSize, 20);
 assert.equal(body.rostersRaw,
   'Ice Cold|Connor McDavid|FA|NONE\nIce Cold|Cale Makar|FA|NONE\nBlue Line|Igor Shesterkin|FA|NONE',
-  'all three name spellings should resolve');
+  'Fantrax ids should resolve through getPlayerIds');
+assert.equal(body.platform, 'fantrax');
+assert.equal(body.platformEligibility.fantrax['connor mcdavid'], 'C/LW');
+assert.equal(body.platformEligibility.fantrax['jason robertson'], 'LW/RW',
+  'eligibility should include unrostered players from getLeagueInfo.playerInfo');
 
 // ---- Fantrax reports failure in the body, with HTTP 200 -------------------
 stubFantrax({
