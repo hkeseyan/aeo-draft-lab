@@ -411,9 +411,15 @@ async function yahooJson(token, endpoint) {
   return JSON.parse(text);
 }
 __name(yahooJson, "yahooJson");
+function yahooGameCode(profile) {
+  const sport = String(profile && profile.sport || "nfl").toLowerCase();
+  return sport === "nhl" ? "nhl" : sport === "nba" ? "nba" : sport === "mlb" ? "mlb" : "nfl";
+}
+__name(yahooGameCode, "yahooGameCode");
 async function resolveYahooLeagueKey(token, profile) {
   if (profile.yahooLeagueKey) return profile.yahooLeagueKey;
-  const raw = await yahooJson(token, "users;use_login=1/games;game_keys=nfl/leagues");
+  const gameCode = yahooGameCode(profile);
+  const raw = await yahooJson(token, `users;use_login=1/games;game_keys=${gameCode}/leagues`);
   const leagues = collectYahooEntities(raw, "league");
   const id = String(profile.yahooLeagueId || "");
   const byId = leagues.find((l) => id && String(l.league_key || "").endsWith(`.l.${id}`));
@@ -427,7 +433,10 @@ function yahooPlayerRows(raw) {
   const seen = new Set();
   return collectYahooEntities(raw, "player").filter((p) => p.player_key && !seen.has(p.player_key) && seen.add(p.player_key)).map((p) => ({
     name: p.name || "Unknown",
-    pos: p.display_position || p.position || "",
+    // Yahoo's display_position is the platform-specific eligibility string.
+    // Normalize commas to slashes so the browser can consume the same shape as
+    // the draft-pool CSV without pretending FantasyPros eligibility is Yahoo's.
+    pos: String(p.display_position || p.position || "").replace(/\s*,\s*/g, "/"),
     team: p.editorial_team_abbr || "",
     status: p.status || "",
     bye_week: p.bye_week || "",
@@ -435,6 +444,169 @@ function yahooPlayerRows(raw) {
   }));
 }
 __name(yahooPlayerRows, "yahooPlayerRows");
+
+function yahooScoringMode(raw) {
+  const v = String(raw || "").toLowerCase();
+  if (v.includes("roto")) return "roto";
+  if (v.includes("head") && !v.includes("point")) return "categories";
+  if (v.includes("point")) return "points";
+  return "points";
+}
+__name(yahooScoringMode, "yahooScoringMode");
+function yahooStatKey(stat) {
+  const raw = String(stat && (stat.abbr || stat.display_name || stat.name) || "").toUpperCase().replace(/\s+/g, "");
+  const map = { "G":"g","A":"a","+/-":"pm","PLUS/MINUS":"pm","PPP":"ppp","SOG":"sog","BLK":"blk","HIT":"hit","W":"w","GA":"ga","SV":"sv","SHO":"sho","GAA":"gaa","SV%":"svp" };
+  return map[raw] || null;
+}
+__name(yahooStatKey, "yahooStatKey");
+function normalizeYahooLeagueImport(metaRaw, settingsRaw, teamsRaw, players, leagueKey, sport = "nhl") {
+  const league = collectYahooEntities(metaRaw, "league")[0] || {};
+  const settings = collectYahooEntities(settingsRaw, "settings")[0] || {};
+  const rosterPositions = collectYahooEntities(settingsRaw, "roster_position");
+  const statDefs = collectYahooEntities(settingsRaw, "stat");
+  const modifiers = collectYahooEntities(settingsRaw, "stat_modifier");
+  const teams = collectYahooEntities(teamsRaw, "team").filter((t) => t.team_key);
+  const owners = teams.map((t, i) => t.name || `Team ${i + 1}`);
+  const ownerSlot = {};
+  teams.forEach((t, i) => {
+    const owner = owners[i];
+    const n = Number(t.draft_position || t.team_id || i + 1);
+    ownerSlot[owner] = Number.isFinite(n) && n > 0 ? n : i + 1;
+  });
+  const mineIndex = teams.findIndex((t) => String(t.is_owned_by_current_login) === "1");
+  const meOwner = mineIndex >= 0 ? owners[mineIndex] : owners[0] || "Me";
+  const starters = {};
+  let bench = 0, irSlots = 0;
+  rosterPositions.forEach((r) => {
+    const pos = String(r.position || r.pos || "").toUpperCase();
+    const count = Number(r.count || r.position_count || 0) || 0;
+    if (!pos || !count) return;
+    if (pos === "BN" || pos === "BE") bench += count;
+    else if (pos === "IR" || pos === "IR+" || pos === "IL" || pos === "IL+") irSlots += count;
+    else starters[pos] = (starters[pos] || 0) + count;
+  });
+  const starterCount = Object.values(starters).reduce((a, b) => a + b, 0);
+  const rosterSize = starterCount + bench;
+  const statById = new Map(statDefs.map((st) => [String(st.stat_id || st.id || ""), st]));
+  const scoring = {};
+  modifiers.forEach((m) => {
+    const st = statById.get(String(m.stat_id || m.id || ""));
+    const key = yahooStatKey(st);
+    const val = Number(m.value);
+    if (key && Number.isFinite(val)) scoring[key] = val;
+  });
+  const categories = statDefs.map((st) => {
+    const key = yahooStatKey(st);
+    return key || String(st.abbr || st.display_name || st.name || "").trim();
+  }).filter(Boolean);
+  const rawScoring = settings.scoring_type || settings.scoring || league.scoring_type || "";
+  const scoringMode = yahooScoringMode(rawScoring);
+  const eligibility = {};
+  (players || []).forEach((p) => {
+    if (p && p.name && p.pos) eligibility[String(p.name).toLowerCase()] = p.pos;
+  });
+  const rawDraft = String(settings.draft_type || league.draft_type || "").toLowerCase();
+  const draftType = /auction|salary/.test(rawDraft) ? "auction" : /linear|straight/.test(rawDraft) ? "linear" : "snake";
+  const teamsCount = Number(league.num_teams || settings.num_teams || teams.length) || teams.length || 10;
+  const label = scoringMode === "categories" ? "H2H Categories" : scoringMode === "roto" ? "Rotisserie" : "H2H Points";
+  return {
+    name: league.name || "Imported Yahoo League",
+    teams: teamsCount,
+    owners,
+    ownerSlot,
+    meOwner,
+    mySlot: ownerSlot[meOwner] || null,
+    sport,
+    platform: "yahoo",
+    leagueType: "redraft",
+    draftType,
+    rounds: rosterSize || 16,
+    rosterSize: rosterSize || 16,
+    irSlots,
+    starters,
+    flexEligible: [],
+    scoringMode,
+    scoringLabel: label,
+    scoring: Object.keys(scoring).length ? scoring : null,
+    yahooLeagueKey: leagueKey,
+    yahooLeagueId: String(leagueKey || "").split(".l.").pop(),
+    platformEligibility: { yahoo: eligibility },
+    yahooSettings: {
+      scoringType: rawScoring,
+      draftType: settings.draft_type || league.draft_type || "",
+      rosterPositions,
+      categories,
+      scoring,
+      maxTeams: teamsCount
+    },
+    rostersRaw: "",
+    _source: "yahoo"
+  };
+}
+__name(normalizeYahooLeagueImport, "normalizeYahooLeagueImport");
+async function yahooLeagueEligibility(token, leagueKey, limit = 500) {
+  const rows = [];
+  const seen = new Set();
+  const batch = 25;
+  for (let start = 0; start < limit; start += batch) {
+    const raw = await yahooJson(token, `league/${leagueKey}/players;start=${start};count=${batch}`);
+    const got = yahooPlayerRows(raw).filter((p) => {
+      const k = String(p.name || "").toLowerCase();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    rows.push(...got);
+    if (got.length < batch) break;
+  }
+  return rows;
+}
+__name(yahooLeagueEligibility, "yahooLeagueEligibility");
+
+function clientPlayerIdNameMap(profile) {
+  const rows = csvMatrix(profile && profile.playersCsv || "");
+  const out = new Map();
+  if (!rows.length) return out;
+  const header = rows[0].map((h) => String(h).toLowerCase().trim());
+  const hasHeader = header.includes("name");
+  const nameIdx = hasHeader ? header.indexOf("name") : 0;
+  const start = hasHeader ? 1 : 0;
+  for (let i = start; i < rows.length; i++) {
+    const name = String(rows[i] && rows[i][nameIdx] || "").trim();
+    if (name) out.set(i, name);
+  }
+  return out;
+}
+__name(clientPlayerIdNameMap, "clientPlayerIdNameMap");
+function profileSlotForOverall(profile, ov) {
+  const n = Number(profile && profile.teams) || 12;
+  const r = Math.ceil(ov / n);
+  const idx = ov - (r - 1) * n;
+  if (String(profile && profile.draftType || "snake") === "linear") return idx;
+  return r % 2 === 1 ? idx : n - idx + 1;
+}
+__name(profileSlotForOverall, "profileSlotForOverall");
+function savedRosterNames(profile, setup) {
+  if (!setup) return [];
+  if (Array.isArray(setup.myRosterNames) && setup.myRosterNames.length) return [...new Set(setup.myRosterNames.filter(Boolean))];
+  const idToName = clientPlayerIdNameMap(profile);
+  const mySlot = Number(profile && profile.mySlot);
+  if (!mySlot) return [];
+  const names = [];
+  const overrides = setup.pickOwnerOverride || {};
+  (setup.picks || []).forEach((pk) => {
+    const ov = Number(pk.overall);
+    const owner = Number(overrides[ov] || profileSlotForOverall(profile, ov));
+    const name = idToName.get(Number(pk.playerId));
+    if (owner === mySlot && name) names.push(name);
+  });
+  (setup.auctionPicks || []).forEach((pk) => {
+    const name = idToName.get(Number(pk.playerId));
+    if (Number(pk.owner) === mySlot && name) names.push(name);
+  });
+  return [...new Set(names)];
+}
+__name(savedRosterNames, "savedRosterNames");
 function fantasyProsLeagueKey(value) {
   const raw = String(value || "").trim();
   let candidate = raw;
@@ -1112,6 +1284,54 @@ var worker_default = {
           return J({ error: "Sleeper import failed: " + e.message }, 502);
         }
       }
+      if (path === "/api/exposure") {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const current = await kv.get(leagueProfileKey(lg), { type: "json" });
+        if (!current) return J({ denominator: 0, counts: {}, leagues: [] });
+        const sport = String(current.sport || "nfl");
+        const list = await kv.list({ prefix: "league:" });
+        const profiles = (await Promise.all(list.keys.map((k) => kv.get(k.name, { type: "json" })))).filter(Boolean);
+        const counts = {};
+        const leagues = [];
+        for (const profile of profiles) {
+          if (!profile || profile.id === lg || String(profile.sport || "nfl") !== sport) continue;
+          const setup = await kv.get(scoped(setupKey(profile.id), me), { type: "json" });
+          const names = savedRosterNames(profile, setup);
+          if (!names.length) continue;
+          leagues.push({ id: profile.id, name: profile.name || profile.id, rostered: names.length });
+          names.forEach((name) => {
+            const key = String(name).trim().toLowerCase();
+            if (key) counts[key] = (counts[key] || 0) + 1;
+          });
+        }
+        return J({ denominator: leagues.length, counts, leagues });
+      }
+      if (path.startsWith("/api/import/yahoo/")) {
+        const denied = requireAdmin();
+        if (denied) return denied;
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const leagueKey = decodeURIComponent(path.split("/").pop());
+        const sport = String(url.searchParams.get("sport") || "nhl").toLowerCase();
+        try {
+          const token = await getYahooAccessToken(env, kv, url);
+          if (!token) return J({ error: "Yahoo account not connected. Visit /auth/yahoo/start first." }, 401);
+          const [metaRaw, settingsRaw, teamsRaw] = await Promise.all([
+            yahooJson(token, `league/${leagueKey}`),
+            yahooJson(token, `league/${leagueKey}/settings`),
+            yahooJson(token, `league/${leagueKey}/teams`)
+          ]);
+          let players = [];
+          try {
+            players = await yahooLeagueEligibility(token, leagueKey, 500);
+          } catch {
+            // Settings import is still useful if Yahoo rate-limits the optional
+            // player sweep; eligibility can be refreshed later.
+          }
+          return J(normalizeYahooLeagueImport(metaRaw, settingsRaw, teamsRaw, players, leagueKey, sport));
+        } catch (e) {
+          return J({ error: "Yahoo import failed: " + e.message }, 502);
+        }
+      }
       if (path.startsWith("/api/import/fantrax/")) {
         const denied = requireAdmin();
         if (denied) return denied;
@@ -1135,17 +1355,26 @@ var worker_default = {
           const playerInfo = info && info.playerInfo || {};
           // playerInfo's per-player shape isn't contractually documented, so try the
           // plausible spellings and fall back to the raw id rather than dropping a
-          // roster spot silently.
+          // roster spot silently. Preserve Fantrax eligibility separately whenever
+          // the payload exposes it; never relabel a generic/FantasyPros position as
+          // Fantrax eligibility.
           const nameOf = /* @__PURE__ */ __name((pid) => {
             const m = playerInfo[pid] || playerInfo[String(pid)];
             if (!m) return String(pid);
             return m.name || m.playerName || m.fullName || [m.firstName, m.lastName].filter(Boolean).join(" ").trim() || String(pid);
           }, "nameOf");
+          const posOf = /* @__PURE__ */ __name((pid, rosterItem) => {
+            const m = playerInfo[pid] || playerInfo[String(pid)] || {};
+            const raw = m.eligiblePositions || m.positions || m.positionEligibility || m.position || rosterItem && (rosterItem.eligiblePositions || rosterItem.positions || rosterItem.position) || "";
+            const vals = Array.isArray(raw) ? raw : String(raw).split(/[,/|+]/);
+            return [...new Set(vals.map((x) => String(x && (x.position || x) || "").trim().toUpperCase()).filter(Boolean))].join("/");
+          }, "posOf");
           const teamInfo = info && info.teamInfo || {};
           const teamIds = Object.keys(rostersRaw).length ? Object.keys(rostersRaw) : Object.keys(teamInfo);
           const owners = [];
           const ownerSlot = {};
           const rosterLines = [];
+          const platformEligibility = {};
           let unresolved = 0;
           teamIds.forEach((tid, i) => {
             const entry = rostersRaw[tid] || {};
@@ -1159,8 +1388,11 @@ var worker_default = {
             owners.push(owner);
             ownerSlot[owner] = i + 1;
             (entry.rosterItems || []).forEach((it) => {
-              const nm = nameOf(it && it.id);
-              if (nm === String(it && it.id)) unresolved++;
+              const pid = it && it.id;
+              const nm = nameOf(pid);
+              if (nm === String(pid)) unresolved++;
+              const pos = posOf(pid, it);
+              if (nm && pos) platformEligibility[String(nm).toLowerCase()] = pos;
               rosterLines.push(`${owner}|${nm}|FA|NONE`);
             });
           });
@@ -1179,6 +1411,9 @@ var worker_default = {
             rostersRaw: rosterLines.join("\n"),
             draftType,
             rosterSize,
+            sport: "nhl",
+            platform: "fantrax",
+            platformEligibility: { fantrax: platformEligibility },
             _source: "fantrax",
             _fantraxLeagueId: fxId,
             _note: notes.join(" ")
@@ -1460,42 +1695,54 @@ var worker_default = {
         try {
           const token = await getYahooAccessToken(env, kv, url);
           if (!token) return J({ error: "Yahoo account not connected. Visit /auth/yahoo/start first." }, 401);
-          const r = await fetch(
-            "https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_keys=nfl/leagues?format=json",
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          const text = await r.text();
-          if (!r.ok) {
-            const needsPerm = /additional_authorization_required/.test(text);
+          const wanted = String(url.searchParams.get("sport") || "").toLowerCase();
+          const sports = wanted ? [wanted] : ["nhl", "nfl"];
+          const leagues = [];
+          const errors = [];
+          const raw = {};
+          for (const sport of sports) {
+            const r = await fetch(
+              `https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_keys=${encodeURIComponent(sport)}/leagues?format=json`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            const text = await r.text();
+            if (!r.ok) {
+              errors.push({ sport, status: r.status, body: text.slice(0, 1e3) });
+              continue;
+            }
+            let parsed;
+            try { parsed = JSON.parse(text); } catch {
+              errors.push({ sport, status: 502, body: text.slice(0, 1e3) });
+              continue;
+            }
+            raw[sport] = parsed;
+            try {
+              const games = parsed.fantasy_content.users[0].user[1].games;
+              for (const gk of Object.keys(games)) {
+                if (gk === "count") continue;
+                const game = games[gk].game;
+                const leaguesObj = game[1] && game[1].leagues || {};
+                for (const lk of Object.keys(leaguesObj)) {
+                  if (lk === "count") continue;
+                  const league = leaguesObj[lk].league[0];
+                  leagues.push({ key: league.league_key, name: league.name, season: league.season, sport });
+                }
+              }
+            } catch {
+              errors.push({ sport, status: 502, body: "Yahoo response shape did not match expected league collection." });
+            }
+          }
+          if (!leagues.length && errors.length) {
+            const joined = errors.map((e) => `${e.sport}: HTTP ${e.status} ${e.body}`).join("\n");
+            const needsPerm = /additional_authorization_required|not authorized/i.test(joined);
             return J({
-              error: needsPerm ? "Yahoo says this app isn't authorized for Fantasy Sports data." : "Yahoo API returned " + r.status,
-              hint: needsPerm ? "In the Yahoo Developer console, open this app, tick Fantasy Sports \u2192 Read under API Permissions, save, then click Connect Yahoo account again to re-consent." : void 0,
-              body: text.slice(0, 1e3)
+              error: needsPerm ? "Yahoo says this OAuth grant is not authorized for Fantasy Sports data." : "Yahoo league listing failed.",
+              hint: needsPerm ? "Verify Fantasy Sports → Read on the exact Yahoo developer app shown by Check status. Then revoke that app under Yahoo account security, click Disconnect in Draft Lab, and Connect again so Yahoo creates a fresh grant." : void 0,
+              body: joined.slice(0, 2e3),
+              errors
             }, 502);
           }
-          let raw;
-          try {
-            raw = JSON.parse(text);
-          } catch {
-            return J({ error: "Yahoo response wasn't valid JSON", body: text.slice(0, 1e3) }, 502);
-          }
-          let leagues = [];
-          try {
-            const games = raw.fantasy_content.users[0].user[1].games;
-            for (const gk of Object.keys(games)) {
-              if (gk === "count") continue;
-              const game = games[gk].game;
-              const leaguesObj = game[1] && game[1].leagues || {};
-              for (const lk of Object.keys(leaguesObj)) {
-                if (lk === "count") continue;
-                const league = leaguesObj[lk].league[0];
-                leagues.push({ key: league.league_key, name: league.name, season: league.season });
-              }
-            }
-          } catch (e) {
-            leagues = null;
-          }
-          return J({ leagues, raw });
+          return J({ leagues, raw, errors });
         } catch (e) {
           return J({ error: "Yahoo leagues request failed: " + e.message }, 502);
         }
@@ -1516,6 +1763,8 @@ export {
   analyzeFaab,
   fantasyProsLeagueKey,
   normalizeFantasyProsMatchup,
+  normalizeYahooLeagueImport,
+  savedRosterNames,
   parseCsvObjects,
   worker_default as default
 };
