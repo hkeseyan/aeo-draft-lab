@@ -4706,8 +4706,42 @@ async function yahooDisconnect(){
     el('yahooStatus').textContent=r.ok?'Disconnected. Revoke the app at Yahoo account security too, then click Connect Yahoo account.':'⚠ '+(d.error||('HTTP '+r.status));
   }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
 }
+async function importFromYahoo(key,sport){
+  editingLeagueId=null;
+  PENDING_LEAGUE_META={};
+  el('yahooStatus').textContent='Importing Yahoo league settings and eligibility…';
+  try{
+    const r=await fetch('/api/import/yahoo/'+encodeURIComponent(key)+'?sport='+encodeURIComponent(sport||'nhl'));
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
+    const keep=['platform','sport','yahooLeagueKey','yahooLeagueId','platformEligibility','yahooSettings','scoringMode','scoring','categoryStats','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'];
+    keep.forEach(k=>{if(data[k]!==undefined)PENDING_LEAGUE_META[k]=data[k];});
+    PENDING_LEAGUE_META.platform='yahoo';
+    PENDING_LEAGUE_META.sport=data.sport||sport||'nhl';
+    el('lgName').value=data.name||'Yahoo League';
+    el('lgTeams').value=data.teams||10;
+    el('lgRounds').value=data.rounds||data.rosterSize||16;
+    if(el('lgSport'))el('lgSport').value=data.sport||sport||'nhl';
+    el('lgDraftType').value=data.draftType||'snake';
+    el('lgLeagueType').value='redraft';
+    updateLgKeeperFieldsVisibility();
+    el('lgScoring').value=data.scoringLabel||'TBD';
+    el('lgMySlot').value=data.mySlot||'';
+    el('lgRosterSize').value=data.rosterSize||data.rounds||16;
+    el('lgIrSlots').value=data.irSlots||0;
+    el('lgOwners').value=(data.owners||[]).join(', ');
+    el('lgRostersRaw').value=data.rostersRaw||'';
+    if((data.sport||sport)==='nhl')el('lgPlayersCsv').value=PLAYERS_CSV_NHL;
+    renderStartersInputs(data.starters||{});
+    renderOwnerSlotInputs(data.owners||[],data.ownerSlot||{},data.meOwner||(data.owners||[])[0]||'');
+    el('yahooStatus').textContent='✓ Imported '+(data.name||key)+' into the form below. Review it, then Save league. The imported settings are kept as Yahoo-specific metadata.';
+    if(data.yahooSettings)el('yahooRaw').textContent=JSON.stringify(data.yahooSettings,null,1);
+  }catch(e){el('yahooStatus').textContent='⚠ Yahoo import failed: '+e.message;}
+}
 async function listYahooLeagues(){
-  el('yahooStatus').textContent='Checking…'; el('yahooRaw').textContent='';
+  el('yahooStatus').textContent='Checking NHL and NFL leagues…';
+  el('yahooRaw').textContent='';
+  const list=el('yahooLeagueList');if(list)list.innerHTML='';
   try{
     const r=await fetch('/api/yahoo/leagues');
     const data=await r.json();
@@ -4717,11 +4751,15 @@ async function listYahooLeagues(){
       return;
     }
     if(Array.isArray(data.leagues)){
-      el('yahooStatus').textContent='✓ '+data.leagues.length+' league(s): '+data.leagues.map(l=>l.name+' ('+l.key+')').join(', ');
+      el('yahooStatus').textContent='✓ '+data.leagues.length+' Yahoo league(s) found.';
+      if(list)list.innerHTML=data.leagues.map(l=>
+        '<div class="mypick-row"><span><b>'+String(l.name||l.key)+'</b> <span class="muted">'+String(l.sport||'').toUpperCase()+' · '+String(l.key)+'</span></span><button class="pick-btn" data-yimport="'+String(l.key).replace(/"/g,'&quot;')+'" data-ysport="'+String(l.sport||'nhl')+'">import →</button></div>'
+      ).join('')||'<span class="muted">No leagues returned.</span>';
+      if(list)list.querySelectorAll('[data-yimport]').forEach(b=>b.onclick=()=>importFromYahoo(b.dataset.yimport,b.dataset.ysport));
     } else {
-      el('yahooStatus').textContent='Connected, but the response shape didn\'t match what we expected — raw JSON below for review.';
+      el('yahooStatus').textContent='Connected, but the response shape did not match what we expected.';
     }
-    el('yahooRaw').textContent=JSON.stringify(data.raw,null,1);
+    if(data.errors&&data.errors.length)el('yahooRaw').textContent='Partial errors:\n'+JSON.stringify(data.errors,null,1);
   }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
 }
 
