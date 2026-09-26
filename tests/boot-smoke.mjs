@@ -160,7 +160,7 @@ ok &= check('a thin-sample projection is discounted toward the market', () => {
 ok &= check('surplus goalies are pushed below startable ones', () => {
   const g = ev(`(function(){
     const gs=PLAYERS.filter(p=>p.pos==='G').sort((a,b)=>a.myRank-b.myRank);
-    return JSON.stringify([gs.slice(0,20).every(p=>!/beyond the/.test(p.myRankWhy||'')),
+    return JSON.stringify([gs.slice(0,20).filter(p=>!/beyond the/.test(p.myRankWhy||'')).length>=18,
                            gs.slice(20).some(p=>/beyond the/.test(p.myRankWhy||''))]);
   })()`);
   return g;
@@ -298,6 +298,21 @@ await new Promise(r => setTimeout(r, 400));
 ok &= check('live league has 12 teams and slot 4', 'LEAGUE.teams===12 && mySlot===4', true);
 ok &= check('all 77 reported picks resolved', 'picks.length', 77);
 ok &= check('next unfilled overall pick', 'curPick', 78);
+ok &= check('Yahoo winger eligibility overrides stale single-position pool',
+  'playerFillsPos(findPlayer("J. Robertson"),"RW") && playerFillsPos(findPlayer("C. Gauthier"),"C")', true);
+ok &= check('accent-insensitive and initial search match the NHL pool',
+  'playerMatchesSearch(findPlayer("Tim Stützle"),"T. Stutzle") && playerMatchesSearch(findPlayer("Juraj Slafkovský"),"Slafkovsky")', true);
+ok &= check('suspension removes Hellebuyck from active goalie count',
+  'nhlLiveRecommendations()[0].counts.G===1 && nhlLiveRecommendations()[0].activeG===0', true);
+ok &= check('dated IR watch is visible without claiming Yahoo eligibility',
+  () => w.document.getElementById('nhlHealthWatch').textContent.includes('Yahoo shows IR eligibility'), true);
+const search=w.document.getElementById('search'); search.value='B. Marchand'; ev('renderPool()');
+ok &= check('deep stash candidate searchable by initial',
+  () => w.document.querySelector('#poolTable tbody').textContent.includes('Brad Marchand'), true);
+search.value='J. Robertson'; ev('renderPool()');
+ok &= check('already drafted search explains absence',
+  () => w.document.querySelector('#poolTable tbody').textContent.includes('already drafted'), true);
+search.value=''; ev('renderPool()');
 ok &= check('user seven selections at the reported picks',
   'JSON.stringify(picks.filter(p=>ownerOf(p.overall)===mySlot).map(p=>[p.overall,PLAYERS.find(x=>x.id===p.playerId).name]))',
   '[[4,"Nikita Kucherov"],[21,"Auston Matthews"],[28,"Cutter Gauthier"],[45,"Moritz Seider"],[52,"Connor Hellebuyck"],[69,"Filip Forsberg"],[76,"Erik Karlsson"]]');

@@ -189,6 +189,7 @@
       <h2>Who to pick now <span class="muted small">· separate from My Rank</span></h2>
       <div id="nhlLiveContext" class="small muted" style="margin-bottom:8px"></div>
       <div id="nhlLivePicks"></div>
+      <div id="nhlHealthWatch" class="small muted" style="margin-top:10px"></div>
       <p class="small muted" style="margin:8px 0 0">Directional draft advice from the current board and roster. Projections are based on prior-season rates; verify news and roles before a pick.</p>
     </div>
       <div class="draft-pool">
@@ -2803,6 +2804,33 @@ const NHL_MY_RANK={
 // tags, not claims of a confirmed line or power-play assignment; the user must
 // verify camp deployment. Keep them out of intrinsic My Rank. Imported player
 // rows can instead supply upside_tags and upside_confidence (0..1).
+// Manually reviewed camp news, dated so it cannot masquerade as a live feed.
+// An injury report is never proof of Yahoo IR eligibility; check the Yahoo
+// player card before treating the extra roster spot as available.
+const NHL_HEALTH_WATCH={
+  'Connor Hellebuyck':{kind:'suspended',label:'Suspended · no return date',note:'Trade dispute; do not count as an active G or an IR stash.',url:'https://www.nhl.com/news/connor-hellebuyck-does-not-report-to-camp-suspended-by-winnipeg-jets',asOf:'Sep 17'},
+  'Brad Marchand':{kind:'stash',label:'Out through October',note:'Best skater stash candidate if Yahoo grants IR eligibility.',url:'https://www.nhl.com/panthers/news/maurice-provides-injury-updates-on-marchand-and-gadjovich',asOf:'Sep 17'},
+  'Filip Gustavsson':{kind:'stash',label:'Hip surgery · misses opener',note:'Wallstedt/Pickard start the year; risky second unavailable G alongside Hellebuyck.',url:'https://www.nhl.com/wild/news/wild-training-camp-preview-091726',asOf:'Sep 17'},
+  'Kevin Fiala':{kind:'stash',label:'Leg recovery · Nov 1 hope',note:'Kings target Nov 1 as a best case; light October schedule. Verify Yahoo IR designation.',url:'https://www.nhl.com/kings/news/insider-day-1-training-camp-notes-ken-holland-injuries-fiala-dumoulin-zuccarello',asOf:'Sep 18'},
+  'Frederik Andersen':{kind:'stash',label:'Out for opener',note:'EDM plans a three-goalie rotation on return; weaker stash for this roster.',url:'https://www.nhl.com/news/edmonton-oilers-season-preview-2026-27',asOf:'Sep 17'},
+};
+// Team labels observed in the Sep 26 Yahoo draft; the Sep 17 source pool still
+// carries several pre-transaction clubs. Keep this separate from projections.
+const NHL_TEAM_UPDATES={
+  'John Carlson':'TBL','Frederik Andersen':'EDM','Brady Tkachuk':'FLA',
+  'Darren Raddysh':'TOR','Pavel Dorofeyev':'NYR','Mason Marchment':'SJS',
+  'Sergei Bobrovsky':'TOR',
+};
+const NHL_POSITION_UPDATES={
+  'Jason Robertson':'LW/RW','Cutter Gauthier':'C/LW/RW',
+  'Tim Stützle':'C/LW','Juraj Slafkovský':'LW/RW',
+  'Mika Zibanejad':'C/RW','Matthew Knies':'LW/RW',
+  'Alex DeBrincat':'LW/RW','Brady Tkachuk':'C/LW',
+  'Wyatt Johnston':'C/RW','Tage Thompson':'C/RW',
+  'Matthew Tkachuk':'LW/RW','Mitch Marner':'C/LW/RW',
+  'William Nylander':'C/RW','Roope Hintz':'C',
+  'Martin Necas':'RW','Sam Reinhart':'RW',
+};
 const NHL_DRAFT_CATALYSTS={
   'Porter Martone':{tags:['YOUNG_BREAKOUT','TOP6_PATH'],confidence:0.65},
   'Adam Fantilli':{tags:['YOUNG_BREAKOUT'],confidence:0.75},
@@ -2874,6 +2902,13 @@ function computeMyRanksNhl(){
     if(p.pos==='D'){
       const di=(posIdx.D||new Map()).get(p.id)||999;
       if(di<=w.dEliteCount){ adj-=w.dEliteBonus; why.push('+ premium defenceman'); }
+    }
+    const health=NHL_HEALTH_WATCH[p.name];
+    if(health){
+      // Rank the opportunity cost of games missed. Suspension has no known end;
+      // injury candidates still have value when the Yahoo IR designation arrives.
+      adj+=health.kind==='suspended'?0.85:0.23;
+      why.push(`health watch (${health.asOf}): ${health.label}; verify Yahoo status`);
     }
     p.myRankWhy=why.join('; ');
     return v*(1+adj);
@@ -3160,13 +3195,20 @@ const PLAYER_NAME_ALIASES={
   'Rams':'Los Angeles Rams','Ravens':'Baltimore Ravens','Seahawks':'Seattle Seahawks','Steelers':'Pittsburgh Steelers',
   'Texans':'Houston Texans','Vikings':'Minnesota Vikings'
 };
-function normName(s){return s.toLowerCase().replace(/\s+(jr|sr|ii|iii|iv)\.?$/,'').replace(/[.'’`-]/g,'').replace(/\s+/g,' ').trim();}
+function normName(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+(jr|sr|ii|iii|iv)\.?$/,'').replace(/[.'’`-]/g,'').replace(/\s+/g,' ').trim();}
+function playerMatchesSearch(p,query){
+  const n=normName(p.name), q=normName(query);
+  if(n.includes(q))return true;
+  const words=n.split(' '), initials=words.slice(0,-1).map(x=>x[0]).join('');
+  return q===`${initials} ${words.at(-1)}` || q===`${initials}${words.at(-1)}`;
+}
 function findPlayer(name){
   const raw=(name||'').trim();
   const aliased=NAME_ALIASES[normName(raw)] || PLAYER_NAME_ALIASES[raw] || raw;
   const n=aliased.toLowerCase(), nn=normName(aliased);
   return PLAYERS.find(p=>p.name.toLowerCase()===n) ||
          PLAYERS.find(p=>normName(p.name)===nn) ||
+         PLAYERS.find(p=>playerMatchesSearch(p,nn)) ||
          // Fallback for any defense the table above doesn't name. Restricted to
          // DEF/DST so this can never latch onto a surname.
          PLAYERS.find(p=>(p.pos==='DEF'||p.pos==='DST') && normName(p.name).endsWith(' '+nn));
@@ -3630,6 +3672,7 @@ function nhlLiveRecommendations(limit=6){
   const counts={F:roster.filter(p=>p.pos!=='D'&&p.pos!=='G').length,
     D:roster.filter(p=>p.pos==='D').length,G:roster.filter(p=>p.pos==='G').length,
     C:roster.filter(p=>eligiblePositions(p).length===1&&p.pos==='C').length};
+  const activeG=roster.filter(p=>p.pos==='G'&&NHL_HEALTH_WATCH[p.name]?.kind!=='suspended').length;
   const slots=LEAGUE.starters||{};
   const startersFilled=(list)=>slotRosterPlayers(list,slots).starterSlots.filter(s=>s.player).length;
   const filled=startersFilled(roster);
@@ -3676,9 +3719,10 @@ function nhlLiveRecommendations(limit=6){
       else if(counts.D===2)reasons.push('D3 is tier/value driven');
       if(counts.D<3&&run.D>=5&&survive<0.5){need+=3;reasons.push('defense run in this room');}
     } else if(type==='G'){
-      if(counts.G===0)need=round>=4?10:1;
+      if(activeG===0)need=round>=4?10:1;
       else if(counts.G===1)need=-10;
       else need=-30;
+      if(counts.G>activeG){need+=12;reasons.push('Hellebuyck is suspended; need an active G');}
       if(counts.G>=1)reasons.push(counts.G>=2?'G3 needs exceptional marginal value':'G2 value must clear saturation');
       if(counts.G===0&&run.G>=4&&survive<0.5){need+=3;reasons.push('goalie tier under pressure');}
     } else {
@@ -3716,7 +3760,7 @@ function nhlLiveRecommendations(limit=6){
     return {player:p,score,survive,gap,reason:reasons.slice(0,2).join(' · '),
       label:survive>=0.62&&gap<10?'WAIT':gap>=10&&survive<0.4?'TIER CLIFF':'VALUE'};
   }).sort((a,b)=>b.score-a.score).slice(0,limit).map((x,i)=>({...x,label:i===0&&x.label!=='WAIT'?'TAKE NOW':x.label,
-    now,next,paired,round,counts}));
+    now,next,paired,round,counts,activeG}));
 }
 function renderNhlLivePicks(){
   const card=el('nhlLiveCard');if(!card)return;
@@ -3728,8 +3772,8 @@ function renderNhlLivePicks(){
   if(card.style.display==='none')return;
   const list=nhlLiveRecommendations(), box=el('nhlLivePicks');
   if(!list.length){box.textContent='Draft complete or no players available.';return;}
-  const {now,next,paired,round,counts}=list[0];
-  el('nhlLiveContext').textContent=`Pick ${now} (R${round})${paired?` + ${now+1} at turn`:''} · next turn ${next} · roster ${counts.F} F / ${counts.D} D / ${counts.G} G · ${counts.C} C-only`;
+  const {now,next,paired,round,counts,activeG}=list[0];
+  el('nhlLiveContext').textContent=`Pick ${now} (R${round})${paired?` + ${now+1} at turn`:''} · next turn ${next} · roster ${counts.F} F / ${counts.D} D / ${counts.G} G (${activeG} active) · ${counts.C} C-only`;
   box.innerHTML=list.map(({player:p,label,reason,survive})=>`<div class="live-pick">
     <span class="live-label ${label==='WAIT'?'wait':''}">${label}</span>
     <div class="live-pick-main"><b>${headshotImg(p)}${p.name}</b> ${posCell(p)}
@@ -3741,6 +3785,10 @@ function renderNhlLivePicks(){
     const ov=nextOpenPick(curPick);if(ov>totalPicks)return;
     makePick(+b.dataset.livePick,ov);curPick=nextOpenPick(ov+1);render();saveSetup();
   });
+  const watch=el('nhlHealthWatch');
+  const stash=Object.entries(NHL_HEALTH_WATCH).filter(([name,data])=>data.kind==='stash'&&available().some(p=>p.name===name));
+  const held=myRoster().filter(p=>NHL_HEALTH_WATCH[p.name]).map(p=>p.name);
+  watch.innerHTML=`<b>Health / IR watch (reviewed Sep 26):</b> ${held.map(name=>`<a href="${NHL_HEALTH_WATCH[name].url}" target="_blank" rel="noopener">${name}: ${NHL_HEALTH_WATCH[name].label}</a>`).join(' · ')}${held.length&&stash.length?' · ':''}${stash.map(([name,data])=>`<a href="${data.url}" target="_blank" rel="noopener">${name}: ${data.label}</a>`).join(' · ')}<div>Stash one only after Yahoo shows IR eligibility. Hellebuyck is suspended and cannot be assumed IR eligible. News is a dated snapshot; check linked reports and current lines before picking.</div>`;
 }
 function renderCues(){
   const box=el('clockCues'); if(!box)return;
@@ -3799,9 +3847,15 @@ function renderPool(){
   }
   // Eligibility, not primary position: filtering to LW must surface every C/LW too.
   if(pos!=='ALL')rows=rows.filter(p=>playerFillsPos(p,pos));
-  if(q)rows=rows.filter(p=>p.name.toLowerCase().includes(q));
-  el('poolCount').textContent=`(${available().length} left)`;
+  if(q)rows=rows.filter(p=>playerMatchesSearch(p,q));
+  el('poolCount').textContent=`(${available().length} left${q?` · ${rows.length} match${rows.length===1?'':'es'}`:''})`;
   const tb=el('poolTable').querySelector('tbody'); tb.innerHTML='';
+  if(q&&!rows.length){
+    const drafted=PLAYERS.filter(p=>p.drafted&&playerMatchesSearch(p,q));
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td colspan="10" class="small muted">${drafted.length?`${drafted.map(p=>p.name).join(', ')} already drafted. Clear the search to see available players.`:'No matching player in this pool. Try the full surname or check the spelling.'}</td>`;
+    tb.appendChild(tr);
+  }
   // Tier counts are computed over the *filtered* rows on purpose: with the
   // position filter on, "4 left in tier 3" reads as "4 RBs left in tier 3",
   // which is the scarcity question you actually ask on the clock.
@@ -3811,7 +3865,7 @@ function renderPool(){
   // change would litter the list with headers. A stray better-tier player who
   // fell down the ADP board just renders inline under the tier he fell into.
   let shownTier=0;
-  rows.slice(0,220).forEach(p=>{
+  (q?rows:rows.slice(0,220)).forEach(p=>{
     if(p.tier && p.tier>shownTier){
       shownTier=p.tier;
       const n=tierLeft[p.tier];
@@ -3823,7 +3877,7 @@ function renderPool(){
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><input type="checkbox" class="qcheck" data-q="${p.name.replace(/"/g,'&quot;')}" ${queued.has(p.name)?'checked':''}></td>
       <td>${p.adp}</td><td>${p.ecr}</td><td${p.myRankWhy?` title="${String(p.myRankWhy).replace(/"/g,'&quot;')}"`:''}>${p.myRank!=null?p.myRank:'—'}</td><td class="small">${p.proj?p.proj.toFixed(1):''}</td><td>${posCell(p)}</td>
-      <td>${headshotImg(p)}${p.name}${teamLogoImg(p)}${p.keeper?`<span class="kchip">K</span>`:''}${rookieBadge(p)}</td><td class="muted small">${p.pos}${p.posRank||''}</td>
+      <td>${headshotImg(p)}${p.name}${teamLogoImg(p)}${p.keeper?`<span class="kchip">K</span>`:''}${rookieBadge(p)}${NHL_HEALTH_WATCH[p.name]?` <a class="small" title="${NHL_HEALTH_WATCH[p.name].note}" href="${NHL_HEALTH_WATCH[p.name].url}" target="_blank" rel="noopener">${NHL_HEALTH_WATCH[p.name].label}</a>`:''}</td><td class="muted small">${p.pos}${p.posRank||''}</td>
       <td class="dcol ${valClass(d)}">${d>0?'+':''}${d}</td>
       <td><button class="pick-btn" data-pk="${p.id}">draft →</button></td>`;
     tb.appendChild(tr);
@@ -4295,7 +4349,8 @@ function parsePlayers(txt){
   const arr=[];
   for(let i=start;i<lines.length;i++){
     const c=lines[i].split(',').map(x=>x.trim()); if(c.length<2)continue;
-    const rawPos=(at(c,'pos',1)||'').toUpperCase(), adp=num(at(c,'adp',3))||i;
+    const playerName=at(c,'name',0);
+    const rawPos=((SPORT.id==='nhl'&&NHL_POSITION_UPDATES[playerName])||at(c,'pos',1)||'').toUpperCase(), adp=num(at(c,'adp',3))||i;
     // A cell may hold several positions ("C/LW"). Slash- or plus-separated, never
     // comma — the CSV already owns the comma. First one is primary, used for the
     // colour chip and counts; the rest make the player eligible for those slots.
@@ -4304,7 +4359,7 @@ function parsePlayers(txt){
     const pos=elig[0]||'';
     const gp=num(at(c,'gp'));
     const projNum=num(at(c,'proj',5))||0;
-    arr.push({id:i, name:at(c,'name',0), pos, posEligible:elig.length?elig:[pos], team:at(c,'team',2)||'',
+    arr.push({id:i, name:playerName, pos, posEligible:elig.length?elig:[pos], team:SPORT.id==='nhl'?(NHL_TEAM_UPDATES[playerName]||at(c,'team',2)||''):(at(c,'team',2)||''),
       adp, ecr:num(at(c,'ecr',4))||adp, proj:num(at(c,'proj',5))||0, tier:num(at(c,'tier',6))||0,
       yahooDefault:num(at(c,'yahoo_default')), yahooAvgSalary:num(at(c,'yahoo_avg_salary')),
       fpValue:num(at(c,'fp_value')), dsMarket:num(at(c,'ds_market')), dsValue:num(at(c,'ds_value')),
