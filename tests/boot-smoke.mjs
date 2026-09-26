@@ -79,6 +79,16 @@ ev('switchLeague("yahoo-nhl-public")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('switched to the NHL league', 'CURRENT_LEAGUE_ID', 'yahoo-nhl-public');
 ok &= check('NHL sport pack active', 'SPORT.id', 'nhl');
+ok &= check('recommendations share a row with the full player list', () =>
+  w.document.getElementById('nhlLiveCard').parentElement.id === 'snakeDraftGrid' &&
+  w.document.getElementById('snakeDraftGrid').classList.contains('nhl-layout') &&
+  w.document.querySelector('.draft-pool').parentElement.id === 'snakeDraftGrid', true);
+w.document.getElementById('draftSlotInput').value = '4';
+await ev('setNhlDraftSlot()');
+ok &= check('fourth slot applied to board and roster owner',
+  'mySlot===4 && LEAGUE.mySlot===4 && OWNER_SLOT.Me===4 && overall(1,mySlot)===4', true);
+w.document.getElementById('draftSlotInput').value = '1';
+await ev('setNhlDraftSlot()');
 ok &= check('NHL pool loaded', 'PLAYERS.length', 400);
 ok &= check('top NHL player is a real skater', 'PLAYERS[0].name', v => /MacKinnon|McDavid|Kucherov/.test(v));
 ok &= check('fantasy points per game computed', 'PLAYERS[0].fppg', v => v > 5);
