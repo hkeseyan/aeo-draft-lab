@@ -189,7 +189,6 @@
       <h2>Who to pick now <span class="muted small">· separate from My Rank</span></h2>
       <div id="nhlLiveContext" class="small muted" style="margin-bottom:8px"></div>
       <div id="nhlLivePicks"></div>
-      <div id="nhlHealthWatch" class="small muted" style="margin-top:10px"></div>
       <p class="small muted" style="margin:8px 0 0">Directional draft advice from the current board and roster. Projections are based on prior-season rates; verify news and roles before a pick.</p>
     </div>
       <div class="draft-pool">
@@ -3696,8 +3695,13 @@ function nhlLiveRecommendations(limit=6){
   };
   const group=(p)=>p.pos==='D'?'D':p.pos==='G'?'G':'F';
   const ranked=pool.slice().sort((a,b)=>(a.myRank||999)-(b.myRank||999));
-  const candidates=ranked.slice(0,85);
-  return candidates.map(p=>{
+  // A healthy, expensive player with a short injury can still rank normally.
+  // The special stash opportunity is reserved for our final two selections.
+  const stashWindow=upcoming.length<=2 && !roster.some(p=>NHL_HEALTH_WATCH[p.name]?.kind==='stash');
+  const stashCandidates=stashWindow?ranked.filter(p=>NHL_HEALTH_WATCH[p.name]?.kind==='stash'
+    && (p.pos!=='G'||activeG>0)):[];
+  const candidates=[...new Map(ranked.slice(0,85).concat(stashCandidates).map(p=>[p.id,p])).values()];
+  const assessed=candidates.map(p=>{
     const type=group(p), survive=survival(p), reasons=[];
     const alternatives=ranked.filter(q=>q.id!==p.id&&group(q)===type);
     const nextEquivalent=alternatives.find(q=>survival(q)>=0.42);
@@ -3759,7 +3763,25 @@ function nhlLiveRecommendations(limit=6){
     if(!reasons.length)reasons.push('strong intrinsic value');
     return {player:p,score,survive,gap,reason:reasons.slice(0,2).join(' · '),
       label:survive>=0.62&&gap<10?'WAIT':gap>=10&&survive<0.4?'TIER CLIFF':'VALUE'};
-  }).sort((a,b)=>b.score-a.score).slice(0,limit).map((x,i)=>({...x,label:i===0&&x.label!=='WAIT'?'TAKE NOW':x.label,
+  });
+  if(stashWindow&&stashCandidates.length){
+    const ordinary=assessed.filter(x=>NHL_HEALTH_WATCH[x.player.name]?.kind!=='stash').sort((a,b)=>b.score-a.score);
+    const stash=assessed.filter(x=>NHL_HEALTH_WATCH[x.player.name]?.kind==='stash')
+      .sort((a,b)=>{
+        // Prefer a skater on this Hellebuyck roster; among like positions,
+        // prior per-game scoring breaks the tie, with uncertainty still noted.
+        const ap=a.player.pos==='G'?0:1,bp=b.player.pos==='G'?0:1;
+        return bp-ap || (b.player.fppg||0)-(a.player.fppg||0);
+      })[0];
+    if(stash){
+      stash.score=Math.max(stash.score,ordinary[Math.min(3,ordinary.length-1)]?.score||stash.score);
+      stash.label='IR STASH';
+      stash.reason='late upside stash · Yahoo IR eligibility pending';
+      // One roster slot is budgeted for this strategy, not every injured name.
+      assessed.splice(0,assessed.length,...ordinary,stash);
+    }
+  }
+  return assessed.sort((a,b)=>b.score-a.score).slice(0,limit).map((x,i)=>({...x,label:i===0&&x.label!=='WAIT'&&x.label!=='IR STASH'?'TAKE NOW':x.label,
     now,next,paired,round,counts,activeG}));
 }
 function renderNhlLivePicks(){
@@ -3785,10 +3807,6 @@ function renderNhlLivePicks(){
     const ov=nextOpenPick(curPick);if(ov>totalPicks)return;
     makePick(+b.dataset.livePick,ov);curPick=nextOpenPick(ov+1);render();saveSetup();
   });
-  const watch=el('nhlHealthWatch');
-  const stash=Object.entries(NHL_HEALTH_WATCH).filter(([name,data])=>data.kind==='stash'&&available().some(p=>p.name===name));
-  const held=myRoster().filter(p=>NHL_HEALTH_WATCH[p.name]).map(p=>p.name);
-  watch.innerHTML=`<b>Health / IR watch (reviewed Sep 26):</b> ${held.map(name=>`<a href="${NHL_HEALTH_WATCH[name].url}" target="_blank" rel="noopener">${name}: ${NHL_HEALTH_WATCH[name].label}</a>`).join(' · ')}${held.length&&stash.length?' · ':''}${stash.map(([name,data])=>`<a href="${data.url}" target="_blank" rel="noopener">${name}: ${data.label}</a>`).join(' · ')}<div>Stash one only after Yahoo shows IR eligibility. Hellebuyck is suspended and cannot be assumed IR eligible. News is a dated snapshot; check linked reports and current lines before picking.</div>`;
 }
 function renderCues(){
   const box=el('clockCues'); if(!box)return;
