@@ -12,6 +12,8 @@ Hellebuyck was suspended for failing to report to camp after requesting a trade.
 
 The Public Prize points format has two IR slots, but Yahoo IR eligibility requires the league's designation. An injury report or an `O` tag alone does not guarantee it. Check the player card before relying on the extra spot. Prefer a skater for this particular roster:
 
+There is no separate IR panel in the draft room. When two personal picks remain, the recommender can elevate one undrafted stash candidate into its normal top six, clearly marking Yahoo IR eligibility as pending. It does not reserve a second stash once one is rostered. An injured star whose normal expected value supports an earlier pick remains eligible for an earlier recommendation; this late boost is for candidates otherwise buried in the market list. Recheck designations and recovery reports on Monday, September 28, before roster moves.
+
 1. **Brad Marchand:** Panthers coach expects him out through October. Good stash if Yahoo grants IR and his price is cheap enough.
 2. **Kevin Fiala:** the Kings hope for a November 1 return, described as a best-case path in their September 18 camp report. Only six games in the first three weeks limits the missed-game cost, but reassess progress before drafting.
 3. **Filip Gustavsson:** Wild say he will miss the season start after hip surgery; Wallstedt and Pickard begin in net. Goalie upside, but clashes with the Hellebuyck exposure.

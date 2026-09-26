@@ -304,8 +304,16 @@ ok &= check('accent-insensitive and initial search match the NHL pool',
   'playerMatchesSearch(findPlayer("Tim Stützle"),"T. Stutzle") && playerMatchesSearch(findPlayer("Juraj Slafkovský"),"Slafkovsky")', true);
 ok &= check('suspension removes Hellebuyck from active goalie count',
   'nhlLiveRecommendations()[0].counts.G===1 && nhlLiveRecommendations()[0].activeG===0', true);
-ok &= check('dated IR watch is visible without claiming Yahoo eligibility',
-  () => w.document.getElementById('nhlHealthWatch').textContent.includes('Yahoo shows IR eligibility'), true);
+ok &= check('no separate IR watch panel clutters recommendations',
+  () => !w.document.getElementById('nhlHealthWatch'), true);
+ok &= check('stash does not crowd the mid-draft top six',
+  'nhlLiveRecommendations().every(x=>x.label!=="IR STASH")', true);
+ev('curPick=169');
+ok &= check('one late stash appears with Yahoo status caveat',
+  'nhlLiveRecommendations().filter(x=>x.label==="IR STASH" && /Yahoo IR eligibility pending/.test(x.reason)).length', 1);
+ok &= check('Hellebuyck-only roster favors a skater stash',
+  'nhlLiveRecommendations().find(x=>x.label==="IR STASH").player.pos!=="G"', true);
+ev('curPick=78');
 const search=w.document.getElementById('search'); search.value='B. Marchand'; ev('renderPool()');
 ok &= check('deep stash candidate searchable by initial',
   () => w.document.querySelector('#poolTable tbody').textContent.includes('Brad Marchand'), true);
