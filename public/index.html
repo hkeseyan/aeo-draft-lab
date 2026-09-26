@@ -2739,98 +2739,64 @@ function computeMyRanks(){
   };
   PLAYERS.slice().sort((a,b)=>adjScore(a)-adjScore(b)).forEach((p,i)=>{p.myRank=i+1;});
 }
-// Yahoo's default points league pays for offence — goals, assists and a premium on
-// power-play production — which is why centres dominate the raw projection board.
-// That same fact makes centre the easiest position to stream, so a centre-ONLY
-// forward is worth less than his projection says: you can start only two a night,
-// and whoever you would drop for him is cheap and replaceable. Dual eligibility is
-// the mirror image — it buys a lineup slot on a crowded night, which is where a
-// daily league is actually won. My Rank exists to price that in, on top of the
-// market (adp) and this league's own scoring (proj).
+// NHL My Rank is intrinsic league value, not market timing. ADP belongs in the
+// live recommendation layer below. For points leagues, score the player's season
+// projection against a platform-aware positional replacement level, then make only
+// small adjustments for uncertainty and multi-position option value.
 const NHL_MY_RANK={
-  adpWeight: 0.65,           // the market is the spine: it prices role, health and
-                             // line deployment that our projection cannot see
-  projWeight: 0.35,          // what this league's own point values actually say
-  projTrustGames: 65,        // ...believed in proportion to the sample behind it
-  // Adjustments are PROPORTIONAL, not a flat number of spots. The board is far
-  // denser at the top than the bottom — a flat eight-spot bonus is the entire
-  // elite tier but a rounding error at pick 200 — so each adjustment is a
-  // percentage of where the player already sits.
-  dualForwardBonus: 0.10,    // a second forward position
-  tripleForwardBonus: 0.16,
-  centerOnlyPenalty: 0.15,
-  eliteGraceTop: 5,          // the top of the board is ordered on merit alone: a
-                             // McDavid transcends roster construction, and you
-                             // build the rest of the roster around him later
-  eliteGraceFull: 30,        // the centre-only penalty then phases in, because the
-                             // streaming argument is really an argument about
-                             // REPLACEABILITY, and an elite centre isn't replaceable
-  goaliePremiumCount: 8,     // one true volume starter is worth paying up for
-  goaliePremiumBonus: 0.12,
-  goalieSurplusPenalty: 0.20,// past the league's startable goalies, a third G is a luxury
-  dEliteCount: 8,            // a premium defenceman early, without reaching
-  dEliteBonus: 0.06,
+  projTrustGames:65,
+  minConfidence:0.85,
+  flexibilityBonusPerExtra:0.035,
+  replacementBenchShare:{C:0.25,LW:0.55,RW:0.55,D:0.65,G:0.35},
 };
-function computeMyRanksNhl(){
-  const w=NHL_MY_RANK;
-  const rankMap=(key,dir)=>{
-    const m=new Map();
-    PLAYERS.slice().sort((a,b)=>dir*((a[key]||0)-(b[key]||0))).forEach((p,i)=>m.set(p.id,i+1));
-    return m;
-  };
-  const adpR=rankMap('adp',1), projR=rankMap('proj',-1);
-  const base=new Map();
-  PLAYERS.forEach(p=>{
-    // Trust our projection in proportion to the sample behind it. A prospect with
-    // a twelve-game cameo, or a star who missed half a season, has a projection
-    // built mostly on noise — leaning on it would bury players the market rates
-    // for reasons we can't see. Confidence we withhold goes back to the market.
-    const conf=Math.min(1,(p.gp||0)/w.projTrustGames);
-    const projW=w.projWeight*conf;
-    p.myRankTrust=conf;
-    base.set(p.id, (1-projW)*adpR.get(p.id) + projW*projR.get(p.id));
+function nhlReplacementLevels(){
+  const out={};
+  SPORT.positions.forEach(pos=>{
+    const starters=(LEAGUE.teams||10)*((LEAGUE.starters&&LEAGUE.starters[pos])||0);
+    const extra=Math.round((LEAGUE.teams||10)*(NHL_MY_RANK.replacementBenchShare[pos]||0.25));
+    const demand=Math.max(1,starters+extra);
+    const pool=PLAYERS.filter(p=>playerFillsPos(p,pos)&&Number.isFinite(+p.proj)&&+p.proj>0)
+      .slice().sort((a,b)=>b.proj-a.proj);
+    const replacement=pool[Math.min(pool.length-1,demand)]||pool[pool.length-1];
+    out[pos]=replacement?replacement.proj:0;
   });
-  // A provisional order first, so "is he a top-5 pick" and "is he a top-8 goalie"
-  // are answerable before the positional adjustments are applied.
-  const prelim=PLAYERS.slice().sort((a,b)=>base.get(a.id)-base.get(b.id));
-  const overall=new Map(prelim.map((p,i)=>[p.id,i+1]));
-  const posIdx={};
-  prelim.forEach(p=>{ const m=posIdx[p.pos]=posIdx[p.pos]||new Map(); m.set(p.id,m.size+1); });
-  const gSlots=(LEAGUE.teams||10)*((LEAGUE.starters&&LEAGUE.starters.G)||2);
-  const score=(p)=>{
-    const v=base.get(p.id), why=[], i=overall.get(p.id);
-    if(p.myRankTrust!=null && p.myRankTrust<0.85)
-      why.push(`projection discounted \u2014 only ${Math.round(p.myRankTrust*100)}% sample confidence`);
-    // Inside the elite tier nothing positional applies — not the penalty, and not
-    // the flexibility bonus either, or a dual-eligible forward would leapfrog the
-    // best player in the draft, which is the same mistake from the other side.
-    if(i<=w.eliteGraceTop){
-      p.myRankWhy='elite tier \u2014 ranked on merit, roster construction comes later';
-      return v;
-    }
-    let adj=0;
-    const fwd=eligiblePositions(p).filter(x=>x==='C'||x==='LW'||x==='RW');
-    if(fwd.length>=3){ adj-=w.tripleForwardBonus; why.push('+ eligible at three forward spots'); }
-    else if(fwd.length===2){ adj-=w.dualForwardBonus; why.push('+ dual forward eligibility'); }
-    else if(fwd.length===1 && fwd[0]==='C'){
-      const ramp=Math.max(0,Math.min(1,(i-w.eliteGraceTop)/Math.max(1,w.eliteGraceFull-w.eliteGraceTop)));
-      adj+=w.centerOnlyPenalty*ramp;
-      why.push(ramp<1?'\u2212 centre-only, discounted lightly this early (still hard to replace)'
-                     :'\u2212 centre-only: only two start, and centre is the easiest spot to stream');
-    }
-    if(p.pos==='G'){
-      const gi=(posIdx.G||new Map()).get(p.id)||999;
-      if(gi<=w.goaliePremiumCount){ adj-=w.goaliePremiumBonus; why.push('+ premium volume starter'); }
-      if(gi>gSlots){ adj+=w.goalieSurplusPenalty; why.push('\u2212 beyond the league\u2019s startable goalies'); }
-    }
-    if(p.pos==='D'){
-      const di=(posIdx.D||new Map()).get(p.id)||999;
-      if(di<=w.dEliteCount){ adj-=w.dEliteBonus; why.push('+ premium defenceman'); }
-    }
+  return out;
+}
+function computeMyRanksNhl(){
+  // We do not fake a points conversion for category/roto leagues. Until the
+  // category z-score/ratio model is complete, ECR is the explicit fallback.
+  if(LEAGUE.scoringMode!=='points'){
+    PLAYERS.slice().sort((a,b)=>(a.ecr||a.adp||999)-(b.ecr||b.adp||999)).forEach((p,i)=>{
+      p.myRank=i+1;
+      p.myValue=-(i+1);
+      p.myRankTrust=null;
+      p.myRankWhy='category/roto model pending — using ECR as the intrinsic fallback, not Yahoo ADP';
+    });
+    return;
+  }
+  const replacement=nhlReplacementLevels();
+  PLAYERS.forEach(p=>{
+    const elig=eligiblePositions(p).filter(pos=>replacement[pos]!=null);
+    const choices=(elig.length?elig:[p.pos]).map(pos=>({pos,vorp:(p.proj||0)-(replacement[pos]||0)}));
+    choices.sort((a,b)=>b.vorp-a.vorp);
+    const best=choices[0]||{pos:p.pos,vorp:p.proj||0};
+    const sample=Math.min(1,(p.gp||0)/NHL_MY_RANK.projTrustGames);
+    const confidence=NHL_MY_RANK.minConfidence+(1-NHL_MY_RANK.minConfidence)*sample;
+    const flexBonus=Math.max(0,best.vorp)*NHL_MY_RANK.flexibilityBonusPerExtra*Math.max(0,elig.length-1);
+    p.myRankTrust=confidence;
+    p.myReplacementPos=best.pos;
+    p.myReplacementProj=replacement[best.pos]||0;
+    p.myValue=best.vorp*confidence+flexBonus;
+    const why=[
+      'proj '+Number(p.proj||0).toFixed(1),
+      best.pos+' replacement '+Number(p.myReplacementProj||0).toFixed(1),
+      'VORP '+Number(best.vorp||0).toFixed(1)
+    ];
+    if(elig.length>1)why.push('+ platform flexibility '+elig.join('/'));
+    if(confidence<0.97)why.push('uncertainty '+Math.round(confidence*100)+'%');
     p.myRankWhy=why.join('; ');
-    return v*(1+adj);
-  };
-  PLAYERS.map(p=>[p,score(p)]).sort((a,b)=>a[1]-b[1]).forEach(([p],i)=>{p.myRank=i+1;});
+  });
+  PLAYERS.slice().sort((a,b)=>(b.myValue||-99999)-(a.myValue||-99999)).forEach((p,i)=>{p.myRank=i+1;});
 }
 function adpRoundOf(name){const p=findPlayer(name); return p?Math.ceil(p.adp/LEAGUE.teams):null;}
 // Auction pricing deliberately has TWO layers: (1) opponent market behavior,
@@ -3390,6 +3356,98 @@ function rewindTo(ov){
 // ---------- ROSTER NEED ----------
 function myRoster(){return LEAGUE.draftType==='auction'?rosterOf(mySlot):picks.filter(p=>ownerOf(p.overall)===mySlot).map(p=>PLAYERS.find(x=>x.id===p.playerId)).filter(Boolean);}
 
+function nextOwnedPick(from){
+  for(let ov=Math.max(1,from);ov<=totalPicks;ov++)if(ownerOf(ov)===mySlot&&!pickTakenAt(ov))return ov;
+  return null;
+}
+function nhlRosterState(){
+  const roster=myRoster();
+  const fit=slotRosterPlayers(roster,LEAGUE.starters||{});
+  const deficits={};
+  fit.starterSlots.filter(x=>!x.player).forEach(x=>{deficits[x.label]=(deficits[x.label]||0)+1;});
+  const byPos={C:0,LW:0,RW:0,D:0,G:0};
+  roster.forEach(p=>eligiblePositions(p).forEach(pos=>{if(byPos[pos]!=null)byPos[pos]++;}));
+  return {roster,fit,deficits,byPos};
+}
+function nhlRecommendationScore(p,state){
+  const why=[];
+  let score=220-(p.myRank||p.ecr||p.adp||999);
+  const ov=nextOpenPick(curPick);
+  const nextMine=nextOwnedPick(ov+1);
+  const progress=Math.min(1,Math.max(0,(ov-1)/Math.max(1,totalPicks)));
+  const elig=eligiblePositions(p);
+  // Dynamic urgency: unfilled starter slots matter more as the draft advances.
+  const open=elig.reduce((n,pos)=>n+(state.deficits[pos]||0),0);
+  if(open){
+    const b=6+14*progress+Math.min(6,open*2);
+    score+=b; why.push('fills '+open+' open starter slot'+(open===1?'':'s'));
+  }
+  // Market timing / VONA lives here, not in My Rank.
+  if(nextMine&&Number.isFinite(+p.adp)){
+    const beforeNext=nextMine-p.adp;
+    if(beforeNext>0){const b=Math.min(16,beforeNext*0.35);score+=b;why.push('ADP says he may not reach your next pick');}
+    else if(beforeNext<-10){score-=Math.min(7,(-beforeNext-10)*0.12);why.push('market suggests some room to wait');}
+  }
+  // Tier cliff: if comparable platform-eligible players disappear after this one,
+  // the cost of passing rises.
+  const same=available().filter(q=>q.id!==p.id&&eligiblePositions(q).some(pos=>elig.includes(pos)))
+    .slice().sort((a,b)=>(a.myRank||999)-(b.myRank||999));
+  const next=same.find(q=>(q.myRank||999)>(p.myRank||999));
+  if(next){
+    const cliff=(next.myRank||999)-(p.myRank||999);
+    if(cliff>=5){score+=Math.min(10,cliff*0.7);why.push('tier/value cliff behind him');}
+  }
+  // Progressive saturation, never a hard cap.
+  if(elig.includes('D')){
+    const d=state.byPos.D||0;
+    if(d>=2){const pen=(d-1)*(10-4*progress);score-=pen;why.push('D'+(d+1)+' carries a saturation cost');}
+  }
+  if(elig.includes('G')){
+    const g=state.byPos.G||0;
+    if(g>=1){const pen=g*(9-3*progress);score-=pen;why.push(g===1?'G2 can wait unless value falls':'extra goalie saturation');}
+  }
+  if(elig.length===1&&elig[0]==='C'&&(state.byPos.C||0)>=2){
+    score-=7*(1-progress*0.4);why.push('centre-only congestion');
+  }
+  // Streaming confidence is a live roster-construction input. High confidence
+  // makes us more willing to wait at that position; it never changes intrinsic rank.
+  const conf=elig.length?Math.max(...elig.map(pos=>STREAM_CONFIDENCE[pos]||0)):0;
+  if(conf>0&& !open){score-=conf*7;why.push('streamable position ('+Math.round(conf*100)+'% confidence)');}
+  if(elig.length>1){score+=Math.min(5,(elig.length-1)*2.5);why.push('multi-position flexibility');}
+  return {score,why};
+}
+function renderStreamControls(){
+  const box=el('streamControls'); if(!box)return;
+  if(SPORT.id!=='nhl'){box.innerHTML='';return;}
+  box.innerHTML=['C','LW','RW','D','G'].map(pos=>{
+    const v=Math.round((STREAM_CONFIDENCE[pos]||0)*100);
+    return '<label>'+pos+' stream <b data-stream-value="'+pos+'">'+v+'%</b> <input type="range" min="0" max="100" step="5" value="'+v+'" data-stream="'+pos+'" style="width:82px"></label>';
+  }).join('');
+  box.querySelectorAll('[data-stream]').forEach(inp=>inp.oninput=()=>{
+    STREAM_CONFIDENCE[inp.dataset.stream]=(+inp.value||0)/100;
+    const v=box.querySelector('[data-stream-value="'+inp.dataset.stream+'"]');if(v)v.textContent=inp.value+'%';
+    renderRecommendations();saveSetup();
+  });
+}
+function renderRecommendations(){
+  const card=el('pickRecCard'),box=el('pickRecommendations');if(!card||!box)return;
+  if(SPORT.id!=='nhl'){card.style.display='none';return;}
+  card.style.display='';
+  renderStreamControls();
+  const state=nhlRosterState();
+  const ranked=available().slice(0,120).map(p=>({p,...nhlRecommendationScore(p,state)}))
+    .sort((a,b)=>b.score-a.score).slice(0,6);
+  if(!ranked.length){box.innerHTML='Draft complete.';return;}
+  box.innerHTML=ranked.map((r,i)=>{
+    const why=r.why.slice(0,3).join(' · ')||'intrinsic value';
+    return '<div class="mypick-row"><span><b>#'+(i+1)+'</b> '+headshotImg(r.p)+posCell(r.p)+' <b>'+r.p.name+'</b>'+teamLogoImg(r.p)+'<br><span class="muted" style="margin-left:22px">My '+(r.p.myRank||'—')+' · ADP '+(r.p.adp||'—')+' · '+why+'</span></span><button class="pick-btn" data-recpick="'+r.p.id+'">draft →</button></div>';
+  }).join('');
+  box.querySelectorAll('[data-recpick]').forEach(b=>b.onclick=()=>{
+    const ov=nextOpenPick(curPick);if(ov>totalPicks)return;
+    makePick(+b.dataset.recpick,ov);curPick=nextOpenPick(ov+1);render();saveSetup();
+  });
+}
+
 // ---------- RENDER ----------
 const el=id=>document.getElementById(id);
 function setDraftRoomMode(auction){
@@ -3401,7 +3459,7 @@ function setDraftRoomMode(auction){
 function render(){
   const isAuction=LEAGUE.draftType==='auction'; setDraftRoomMode(isAuction);
   if(isAuction){renderAuctionRoom();return;}
-  renderPool();renderBoard();renderMyPicks();renderRoster();renderOnClock();renderCues();renderKeeperList();renderQueue();
+  renderPool();renderBoard();renderMyPicks();renderRoster();renderRecommendations();renderOnClock();renderCues();renderKeeperList();renderQueue();
 }
 function renderAuctionPlaceholder(){
   renderAuctionRoom();
