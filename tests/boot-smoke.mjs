@@ -122,7 +122,7 @@ ok &= check('no K/DST lateness rule in hockey', 'SPORT.lateRoundPositions.length
 ok &= check('scoring values carried onto LEAGUE', 'LEAGUE.scoring.sog', 0.9);
 ok &= check('weekly acquisition cap carried', 'LEAGUE.maxAcquisitionsPerWeek', 4);
 ok &= check('sport bar shows both sports', () => w.document.getElementById('sportBar').children.length, 2);
-ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','), 'yahoo-nhl-public');
+ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','), 'yahoo-nhl-public,public-points-league-1');
 ok &= check('position filter is hockey', () => [...w.document.getElementById('posFilter').options].map(o => o.value).join(','), 'ALL,C,LW,RW,D,G');
 ok &= check('tendency columns are hockey', () => [...w.document.getElementById('tendHead').children].map(x => x.textContent).join(','), 'Use,Owner,C,LW,RW,D,G');
 
@@ -292,6 +292,14 @@ ok &= check('more games beats fewer at equal rate', () => JSON.parse(ev(`(functi
   return JSON.stringify(score(10,'EDM') > score(10,'TOR'));
 })()`)), true);
 
+ev('switchLeague("public-points-league-1")');
+await new Promise(r => setTimeout(r, 400));
+ok &= check('live league has 12 teams and slot 4', 'LEAGUE.teams===12 && mySlot===4', true);
+ok &= check('all 58 reported picks resolved', 'picks.length', 58);
+ok &= check('next unfilled overall pick', 'curPick', 59);
+ok &= check('user five selections at the reported picks',
+  'JSON.stringify(picks.filter(p=>ownerOf(p.overall)===mySlot).map(p=>[p.overall,PLAYERS.find(x=>x.id===p.playerId).name]))',
+  '[[4,"Nikita Kucherov"],[21,"Auston Matthews"],[28,"Cutter Gauthier"],[45,"Moritz Seider"],[52,"Connor Hellebuyck"]]');
 ev('switchLeague("aeo-keepers")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('football unaffected after switching back', () => ev('SPORT.id') + ' ' + slots(), 'nfl QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');
