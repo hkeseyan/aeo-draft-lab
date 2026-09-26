@@ -73,6 +73,12 @@
   .live-pick-reason{color:var(--muted);font-size:12px;white-space:normal}
   .live-label{font-size:10px;font-weight:700;color:var(--accent2);white-space:nowrap}
   .live-label.wait{color:var(--warn)}
+  .draft-workspace{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:start}
+  .draft-workspace.nhl-layout{grid-template-columns:minmax(350px,36%) minmax(0,1fr)}
+  .draft-workspace .draft-pool,.draft-workspace .draft-side{min-width:0}
+  .draft-workspace.nhl-layout .draft-side{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .draft-workspace.nhl-layout .draft-side .card{min-width:0}
+  @media(max-width:1000px){.draft-workspace,.draft-workspace.nhl-layout{grid-template-columns:1fr}.draft-workspace.nhl-layout .draft-side{grid-column:auto;grid-template-columns:1fr}}
   /* grid-template-columns is set inline per-league (team count varies); every
      header/cell is a direct grid child in row-major order so a taller cell
      (e.g. a wrapped long name) grows that whole row for every column instead
@@ -166,6 +172,7 @@
         <button class="btn ghost" id="undo">↩ Undo</button>
         <button class="btn warn" id="resetDraft">Reset draft (keep keepers)</button>
         <span class="muted small" id="onClock"></span>
+        <label class="small" id="draftSlotControl" style="display:none">My slot <input type="number" id="draftSlotInput" min="1" max="10" style="width:58px"></label>
         <label class="row small" style="margin-left:auto;gap:4px">Rival noise
           <input type="range" id="noise" min="0" max="6" value="2" style="width:90px">
           <span id="noiseVal" class="muted">±2</span>
@@ -177,14 +184,14 @@
       <h2>Draft board <span class="muted small">(dashed = keeper · click a filled cell to rewind there · scrolls for later rounds)</span></h2>
       <div class="board" id="boardGrid"></div>
     </div>
+    <div class="draft-workspace" id="snakeDraftGrid">
     <div class="card" id="nhlLiveCard" style="display:none">
       <h2>Who to pick now <span class="muted small">· separate from My Rank</span></h2>
       <div id="nhlLiveContext" class="small muted" style="margin-bottom:8px"></div>
       <div id="nhlLivePicks"></div>
       <p class="small muted" style="margin:8px 0 0">Directional draft advice from the current board and roster. Projections are based on prior-season rates; verify news and roles before a pick.</p>
     </div>
-    <div class="grid2" id="snakeDraftGrid">
-      <div>
+      <div class="draft-pool">
         <div class="card">
           <h2>Best available <span class="muted" id="poolCount"></span></h2>
           <div class="row" style="margin-bottom:8px">
@@ -205,7 +212,7 @@
           </div>
         </div>
       </div>
-      <div>
+      <div class="draft-side">
         <div class="card">
           <h2>Roster <select id="rosterOwnerSelect" style="margin-left:6px"></select></h2>
           <div id="rosterView" class="small muted">—</div>
@@ -579,7 +586,7 @@
         <button class="btn ghost" id="yahooListBtn">List my leagues</button>
         <select id="yahooLeagueSelect" aria-label="Yahoo league to inspect" style="min-width:170px"><option value="">List leagues first</option></select>
         <button class="btn ghost" id="yahooSettingsBtn">Compare settings</button>
-        <label class="small">My draft slot <input type="number" id="yahooImportSlot" min="1" max="10" style="width:58px"></label>
+        <label class="small">My draft slot <input type="number" id="yahooImportSlot" min="1" max="10" value="4" style="width:58px"></label>
         <button class="btn ghost" id="yahooImportBtn" disabled>Create matched NHL profile</button>
         <button class="btn ghost" id="yahooStatusBtn">Check status</button>
         <button class="btn ghost" id="yahooDisconnectBtn">Disconnect</button>
@@ -3679,6 +3686,10 @@ function nhlLiveRecommendations(limit=6){
 function renderNhlLivePicks(){
   const card=el('nhlLiveCard');if(!card)return;
   card.style.display=SPORT.id==='nhl'&&LEAGUE.draftType!=='auction'?'':'none';
+  el('snakeDraftGrid').classList.toggle('nhl-layout',card.style.display!=='none');
+  el('draftSlotControl').style.display=SPORT.id==='nhl'&&LEAGUE.draftType!=='auction'?'':'none';
+  el('draftSlotInput').max=LEAGUE.teams;
+  if(document.activeElement!==el('draftSlotInput'))el('draftSlotInput').value=mySlot||'';
   if(card.style.display==='none')return;
   const list=nhlLiveRecommendations(), box=el('nhlLivePicks');
   if(!list.length){box.textContent='Draft complete or no players available.';return;}
@@ -4807,6 +4818,26 @@ async function importMatchedYahooNhl(){
     el('yahooImportBtn').disabled=true;
   }catch(e){el('yahooStatus').textContent='⚠ '+e.message;}
 }
+async function setNhlDraftSlot(){
+  const input=el('draftSlotInput'),slot=Number(input.value);
+  if(SPORT.id!=='nhl'||!Number.isInteger(slot)||slot<1||slot>LEAGUE.teams){input.value=mySlot||'';return;}
+  if(slot===mySlot)return;
+  if(picks.some(p=>!p.keeper)){
+    input.value=mySlot||'';el('onClock').textContent='Reset this draft before changing your slot.';return;
+  }
+  const profile=LEAGUES[CURRENT_LEAGUE_ID],previous=profile.mySlot;
+  const map={...(profile.ownerSlot||{})},mine=profile.meOwner||'Me';
+  const other=Object.keys(map).find(name=>name!==mine&&Number(map[name])===slot);
+  if(other)map[other]=previous;
+  map[mine]=slot;
+  profile.mySlot=LEAGUE.mySlot=mySlot=slot;profile.ownerSlot=map;
+  OWNER_SLOT=map;rebuildSlotOwner();fillRosterOwnerSelect();render();
+  try{
+    const r=await fetch('/api/leagues/'+encodeURIComponent(profile.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(profile)});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    LEAGUES[profile.id]=await r.json();
+  }catch(e){el('onClock').textContent=`Slot ${slot} active here; cloud save failed: ${e.message}`;}
+}
 
 // ---------- IN-SEASON / FAAB LAB ----------
 let FAAB_REPORT=null;
@@ -5025,6 +5056,7 @@ el('yahooDisconnectBtn').onclick=yahooDisconnect;
 el('yahooListBtn').onclick=listYahooLeagues;
 el('yahooSettingsBtn').onclick=compareYahooSettings;
 el('yahooImportBtn').onclick=importMatchedYahooNhl;
+el('draftSlotInput').onchange=setNhlDraftSlot;
 el('lgOpenRosterBuilderBtn').onclick=openRosterBuilder;
 el('lgOwners').oninput=()=>{
   const owners=el('lgOwners').value.split(',').map(s=>s.trim()).filter(Boolean);
