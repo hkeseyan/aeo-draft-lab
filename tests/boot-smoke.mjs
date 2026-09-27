@@ -182,15 +182,15 @@ ok &= check('NHL portraits and team logos use NHL assets',
   'headshotImg(PLAYERS.find(p=>p.name==="Cale Makar")).includes("assets.nhle.com/mugs") && teamLogoImg(PLAYERS.find(p=>p.name==="Cale Makar")).includes("COL_dark.svg")', true);
 ok &= check('recommendation includes next turn and roster state',
   'nhlLiveRecommendations()[0].next > nhlLiveRecommendations()[0].now && nhlLiveRecommendations()[0].counts.G===0', true);
-ev('mySlot=10');
+ev('mySlot=12');
 ok &= check('turn picks use the following turn as the survival horizon',
-  'nhlLiveRecommendations()[0].now+1===11 && nhlLiveRecommendations()[0].next===30', true);
+  'nhlLiveRecommendations()[0].now===12 && nhlLiveRecommendations()[0].now+1===13 && nhlLiveRecommendations()[0].next===36', true);
 ev('mySlot=1');
 const originalRank = ev('PLAYERS.find(p=>p.name==="Cale Makar").myRank');
 ev(`(function(){
   makePick(PLAYERS.find(p=>p.name==='Igor Shesterkin').id,1);
-  makePick(PLAYERS.find(p=>p.name==='Carter Hart').id,20);
-  curPick=21; render();
+  makePick(PLAYERS.find(p=>p.name==='Carter Hart').id,24);
+  curPick=25; render();
 })()`);
 ok &= check('G3 is absent from the top six after drafting two goalies',
   'nhlLiveRecommendations().every(x=>x.player.pos!=="G")', true);
