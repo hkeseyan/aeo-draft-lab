@@ -138,6 +138,11 @@
   .faab-metric{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px;text-align:center}
   .faab-metric b{display:block;font-size:18px;color:var(--accent)}
   .faab-good{color:var(--good);font-weight:700}.faab-pass{color:var(--warn);font-weight:700}
+  .ticket-status{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 7px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+  .ticket-status.approved,.ticket-status.submitted{border-color:var(--accent);color:var(--accent)}
+  .ticket-status.verified{border-color:var(--good);color:var(--good)}
+  .ticket-status.not_won,.ticket-status.cancelled{border-color:var(--muted);color:var(--muted)}
+  .ticket-actions{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
 </style>
 </head>
 <body>
@@ -150,7 +155,7 @@
   <span class="seedwarn" id="seedWarn">⚠ Baseline ranking (SEED) — replace with FantasyPros/Yahoo ADP in the Data tab</span>
   <nav>
     <button data-view="room" class="active">Draft Room</button>
-    <button data-view="inseason">FAAB Lab</button>
+    <button data-view="inseason">Waiver Lab</button>
     <button data-view="teams">Teams & Keepers</button>
     <button data-view="trades">Trades</button>
     <button data-view="mocks">Mocks</button>
@@ -359,13 +364,13 @@
   <!-- IN-SEASON / FAAB -->
   <section class="view" id="view-inseason">
     <div class="card">
-      <h2>In-season FAAB Lab</h2>
-      <p class="small muted">Built for the Tuesday guillotine run after Monday Night Football. It separates the bid that fits your roster, the amount the market is projected to require, and your absolute stretch ceiling. The model uses the preserved 2025 history plus the 2026 bid results; opponent remaining budgets are the next calibration layer.</p>
+      <h2>In-season Waiver Lab</h2>
+      <p class="small muted">Turn a refreshed league snapshot into a reviewable waiver ticket. FAAB bids remain calibrated for guillotine leagues; dynasty and keeper leagues use the same record, decision context, and manual verification workflow without pretending every claim is a FAAB decision.</p>
       <div class="row">
         <label class="small">Week <input id="faabWeek" type="number" min="1" max="18" value="2" style="width:60px"></label>
         <label class="small">Starting FAAB $<input id="faabStartingBudget" type="number" min="1" value="1000" style="width:80px"></label>
         <label class="small">Remaining $<input id="faabRemainingBudget" type="number" min="0" value="1000" style="width:80px"></label>
-        <label class="small">Teams alive <input id="faabTeamsAlive" type="number" min="2" max="32" value="18" style="width:65px"></label>
+        <label class="small">Teams alive <input id="faabTeamsAlive" type="number" min="2" max="32" value="18" style="width:65px" title="Used by the guillotine bid model; leave at full league size for non-guillotine leagues."></label>
         <label class="small">Discipline <select id="faabAggression"><option value="0.65">Conservative</option><option value="0.8" selected>Balanced</option><option value="0.95">Aggressive</option></select></label>
       </div>
       <div class="row" style="margin-top:8px">
@@ -374,6 +379,19 @@
         <button class="btn ghost" id="faabSave">Save inputs</button>
         <button class="btn ghost" id="faabCalendar">Add Tuesday calendar reminder</button>
         <span class="small muted" id="faabStatus"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Decision context</h2>
+      <p class="small muted">This is the layer FantasyPros does not know: what this team is trying to do, how this league awards draft position, and which waiver route applies. It is saved with every ticket so our Waiver Lab sessions become reusable history.</p>
+      <div class="row">
+        <label class="small">Team direction <select id="waiverTeamDirection"><option value="unspecified">Unspecified</option><option value="survive">Survive / guillotine</option><option value="contend">Contend</option><option value="retool">Retool</option><option value="rebuild">Rebuild</option><option value="tank">Deliberate tank</option></select></label>
+        <label class="small">Waiver route <select id="waiverMethod"><option value="unknown">Confirm later</option><option value="faab">FAAB</option><option value="waiver_priority">Waiver priority</option><option value="free_agency">Free agency</option></select></label>
+        <label class="small">Decision deadline <input id="waiverDeadline" type="datetime-local"></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input id="waiverDraftOrderRule" placeholder="Draft-order rule, e.g. max points-for or consolation bracket" style="flex:1;min-width:260px">
+        <input id="waiverTrigger" placeholder="What changed? Injury, role, trending add, roster need…" style="flex:2;min-width:300px">
       </div>
     </div>
     <div class="card">
@@ -410,9 +428,14 @@
         <button class="btn ghost" id="faabEmailNow">Email this report</button>
       </div>
       <div class="scroll" style="margin-top:8px">
-        <table><thead><tr><th>Player</th><th>Roster impact</th><th>Bid levels</th><th>Reasoning</th></tr></thead><tbody id="faabResults"><tr><td colspan="4" class="muted">Run the analysis after the waiver pool updates.</td></tr></tbody></table>
+        <table><thead><tr><th>Player</th><th>Roster impact</th><th>Bid levels</th><th>Reasoning</th><th></th></tr></thead><tbody id="faabResults"><tr><td colspan="5" class="muted">Run the analysis after the waiver pool updates.</td></tr></tbody></table>
       </div>
       <details style="margin-top:10px"><summary class="small muted">Prior Tuesday reports</summary><div class="scroll"><table><thead><tr><th>When</th><th>Week</th><th>Top recommendations</th><th></th></tr></thead><tbody id="faabHistory"></tbody></table></div></details>
+    </div>
+    <div class="card">
+      <div class="row"><h2 style="margin:0">Waiver ticket list</h2><span class="small muted" id="waiverTicketStatus" style="margin-left:auto"></span></div>
+      <p class="small muted">Create a ticket from a recommendation, then move it through approval, manual submission, and verified readback. Mark “verified” only after the host/FantasyPros roster has been refreshed.</p>
+      <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Status</th><th>Action</th><th>Bid / route</th><th>Context</th><th>Next step</th></tr></thead><tbody id="waiverTickets"><tr><td colspan="5" class="muted">No tickets yet.</td></tr></tbody></table></div>
     </div>
   </section>
 
@@ -5114,8 +5137,10 @@ async function setNhlDraftSlot(){
   }catch(e){el('onClock').textContent=`Slot ${slot} active here; cloud save failed: ${e.message}`;}
 }
 
-// ---------- IN-SEASON / FAAB LAB ----------
+// ---------- IN-SEASON / WAIVER LAB ----------
 let FAAB_REPORT=null;
+let INSEASON_STATE={};
+let WAIVER_TICKETS=[];
 const FAAB_ROSTER_HEADERS=['name','pos','team','week_proj','ros_rank','status','bye_week'];
 const FAAB_AVAILABLE_HEADERS=['name','pos','team','week_proj','ros_rank','endgame','role','schedule','injury','teammate','bye_week','status','notes'];
 function faabEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -5180,9 +5205,16 @@ function faabStateFromForm(){return {
   availableCsv:el('faabAvailableCsv').value,
   scheduleEnabled:el('faabScheduleEnabled').checked,
   emailEnabled:el('faabEmailEnabled').checked,
-  emailTo:el('faabEmail').value.trim()
+  emailTo:el('faabEmail').value.trim(),
+  teamDirection:el('waiverTeamDirection').value,
+  waiverMethod:el('waiverMethod').value,
+  waiverDeadline:el('waiverDeadline').value,
+  draftOrderRule:el('waiverDraftOrderRule').value.trim(),
+  waiverTrigger:el('waiverTrigger').value.trim()
 };}
 function applyFaabState(s={}){
+  INSEASON_STATE={...s};
+  const guillotine=LEAGUE.leagueType==='guillotine';
   el('faabWeek').value=s.week||2;
   el('faabStartingBudget').value=s.startingBudget||1000;
   el('faabRemainingBudget').value=s.remainingBudget==null?(s.startingBudget||1000):s.remainingBudget;
@@ -5191,6 +5223,11 @@ function applyFaabState(s={}){
   el('faabScheduleEnabled').checked=s.scheduleEnabled!==false;
   el('faabEmailEnabled').checked=!!s.emailEnabled;
   el('faabEmail').value=s.emailTo||s.emailDefault||(ME.user&&ME.user.email)||'';
+  el('waiverTeamDirection').value=s.teamDirection||(guillotine?'survive':'unspecified');
+  el('waiverMethod').value=s.waiverMethod||(guillotine?'faab':'unknown');
+  el('waiverDeadline').value=s.waiverDeadline||'';
+  el('waiverDraftOrderRule').value=s.draftOrderRule||'';
+  el('waiverTrigger').value=s.waiverTrigger||'';
   el('faabRosterCsv').value=s.rosterCsv||(s.roster?faabRowsCsv(s.roster,FAAB_ROSTER_HEADERS):defaultFaabRosterCsv());
   el('faabAvailableCsv').value=s.availableCsv||(s.available?faabRowsCsv(s.available,FAAB_AVAILABLE_HEADERS):FAAB_AVAILABLE_HEADERS.join(',')+'\n');
   if(s.dataSyncedAt)el('faabStatus').textContent='League data last refreshed '+new Date(s.dataSyncedAt).toLocaleString();
@@ -5211,16 +5248,78 @@ async function loadFaabHistory(openLatest=false){
     if(openLatest && rows && rows[0])await openFaabReport(rows[0].id);
   }catch(e){body.innerHTML='<tr><td colspan="4" class="muted">History unavailable.</td></tr>';}
 }
+function waiverTicketStatusText(status){return ({draft:'Draft',approved:'Approved',submitted:'Submitted',verified:'Verified',not_won:'Not won',cancelled:'Cancelled'})[status]||'Draft';}
+function waiverTicketActions(ticket){
+  const button=(status,label)=>`<button class="btn ghost" data-ticket-status="${status}" data-ticket-id="${faabEsc(ticket.id)}">${label}</button>`;
+  if(ticket.status==='draft')return button('approved','Approve')+button('cancelled','Cancel');
+  if(ticket.status==='approved')return button('submitted','Mark submitted')+button('cancelled','Cancel');
+  if(ticket.status==='submitted')return button('verified','Verify after refresh')+button('not_won','Not won')+button('cancelled','Cancel');
+  return '<span class="small muted">Closed</span>';
+}
+function renderWaiverTickets(tickets=WAIVER_TICKETS){
+  const body=el('waiverTickets');if(!body)return;
+  body.innerHTML=(tickets||[]).map(t=>{
+    const action=(t.action||'add').replace(/_/g,' ');
+    const bid=t.waiverMethod==='faab'?`$${t.recommendedBid||0} FAAB`:(t.waiverMethod||'Confirm route').replace(/_/g,' ');
+    const deadline=t.deadline?new Date(t.deadline).toLocaleString():'No deadline set';
+    const context=[t.teamDirection||'unspecified',t.draftOrderRule||'draft-order rule not set',deadline].map(faabEsc).join(' · ');
+    const details=[t.trigger,t.rationale].filter(Boolean).map(faabEsc).join(' · ');
+    return `<tr><td><span class="ticket-status ${faabEsc(t.status)}">${faabEsc(waiverTicketStatusText(t.status))}</span><div class="small muted" style="margin-top:4px">${new Date(t.updatedAt||t.createdAt).toLocaleString()}</div></td><td><b>${faabEsc(action)} ${faabEsc(t.player||'')}</b>${t.pos?` <span class="muted">${faabEsc(t.pos)}</span>`:''}${t.suggestedDrop?`<div class="small muted">drop ${faabEsc(t.suggestedDrop)}</div>`:''}</td><td><b>${faabEsc(bid)}</b><div class="small muted">${faabEsc((t.waiverMethod||'unknown').replace(/_/g,' '))}</div></td><td class="small">${context}${details?`<div class="muted" style="margin-top:4px">${details}</div>`:''}</td><td><div class="ticket-actions">${waiverTicketActions(t)}</div></td></tr>`;
+  }).join('')||'<tr><td colspan="5" class="muted">No tickets yet. Run a report, then create a ticket from a recommendation.</td></tr>';
+  body.querySelectorAll('[data-ticket-status]').forEach(b=>b.onclick=()=>updateWaiverTicket(b.dataset.ticketId,b.dataset.ticketStatus));
+}
+async function loadWaiverTickets(){
+  const status=el('waiverTicketStatus');if(status)status.textContent='Loading tickets…';
+  try{
+    const r=await fetch('/api/inseason/tickets?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    WAIVER_TICKETS=Array.isArray(d)?d:[];renderWaiverTickets();
+    if(status)status.textContent=WAIVER_TICKETS.length?`${WAIVER_TICKETS.length} saved ticket${WAIVER_TICKETS.length===1?'':'s'}`:'No tickets yet.';
+  }catch(e){if(status)status.textContent='⚠ '+e.message;}
+}
+async function updateWaiverTicket(id,status){
+  const label=waiverTicketStatusText(status);const notice=el('waiverTicketStatus');if(notice)notice.textContent=`Saving ${label.toLowerCase()} status…`;
+  try{
+    const r=await fetch('/api/inseason/tickets/'+encodeURIComponent(id)+'?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method:'PUT',headers:{'Content-Type':'application/json',...tokenHdr()},body:JSON.stringify({status})});const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    WAIVER_TICKETS=WAIVER_TICKETS.map(t=>t.id===d.id?d:t);renderWaiverTickets();
+    if(notice)notice.textContent=`✓ ${label}`;
+  }catch(e){if(notice)notice.textContent='⚠ '+e.message;}
+}
+async function createWaiverTicket(index){
+  const player=(FAAB_REPORT&&FAAB_REPORT.recommendations||[])[index];
+  const notice=el('waiverTicketStatus');
+  if(!player){if(notice)notice.textContent='Open a report before creating a ticket.';return;}
+  const duplicate=WAIVER_TICKETS.find(t=>t.player===player.name&&['draft','approved','submitted'].includes(t.status));
+  if(duplicate){if(notice)notice.textContent=`An open ticket already exists for ${player.name}.`;return;}
+  const context=faabStateFromForm();if(notice)notice.textContent=`Creating ${player.name} ticket…`;
+  try{
+    const payload={
+      action:'add',player:player.name,pos:player.pos,team:player.team,suggestedDrop:player.replacement||'',
+      recommendedBid:player.recommendedBid,projectedWinningBid:player.projectedWinningBid,stretchBid:player.stretchBid,
+      waiverMethod:context.waiverMethod,deadline:context.waiverDeadline,teamDirection:context.teamDirection,
+      draftOrderRule:context.draftOrderRule,trigger:context.waiverTrigger,rationale:[...(player.reasons||[]),player.notes||''].filter(Boolean).join(' · '),
+      reportId:FAAB_REPORT.id,snapshotAt:INSEASON_STATE.dataSyncedAt||FAAB_REPORT.createdAt
+    };
+    const r=await fetch('/api/inseason/tickets?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method:'POST',headers:{'Content-Type':'application/json',...tokenHdr()},body:JSON.stringify(payload)});const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    WAIVER_TICKETS=[d,...WAIVER_TICKETS.filter(t=>t.id!==d.id)];renderWaiverTickets();
+    if(notice)notice.textContent=`✓ ${player.name} ticket drafted`;
+  }catch(e){if(notice)notice.textContent='⚠ '+e.message;}
+}
 function renderFaabReport(report){
   FAAB_REPORT=report;
-  el('faabReportMeta').textContent=`Week ${report.week} · ${report.teamsAlive} alive · $${report.remainingBudget} left · ${new Date(report.createdAt).toLocaleString()}`;
+  const showFaab=el('waiverMethod').value==='faab';
+  el('faabReportMeta').textContent=showFaab?`Week ${report.week} · ${report.teamsAlive} alive · $${report.remainingBudget} left · ${new Date(report.createdAt).toLocaleString()}`:`Week ${report.week} · claim route: ${(el('waiverMethod').value||'unknown').replace(/_/g,' ')} · ${new Date(report.createdAt).toLocaleString()}`;
   const body=el('faabResults');
-  body.innerHTML=(report.recommendations||[]).map(p=>`<tr>
-    <td><b>${faabEsc(p.name)}</b><div class="small muted">${faabEsc(p.team)} · ${faabEsc(p.pos)} · ${faabEsc(p.tier)}</div><div class="small ${p.marketReachable?'faab-good':'faab-pass'}">${p.marketReachable?'Market is within your ceiling':'Disciplined pass at projected market'}</div></td>
+  body.innerHTML=(report.recommendations||[]).map((p,i)=>`<tr>
+    <td><b>${faabEsc(p.name)}</b><div class="small muted">${faabEsc(p.team)} · ${faabEsc(p.pos)} · ${faabEsc(p.tier)}</div><div class="small ${showFaab?(p.marketReachable?'faab-good':'faab-pass'):'muted'}">${showFaab?(p.marketReachable?'Market is within your ceiling':'Disciplined pass at projected market'):'Candidate for manual claim review'}</div></td>
     <td><b>${p.adjustedWeekProjection} pts</b><div class="small muted">lineup upgrade +${p.lineupUpgrade}${p.replacement?' over '+faabEsc(p.replacement):''}</div><div class="small muted">ROS rank ${p.rosRank<999?p.rosRank:'—'} · endgame ${Math.round(p.endgame*100)}%</div></td>
-    <td><div class="faab-metrics"><div class="faab-metric"><span class="small muted">Bid</span><b>$${p.recommendedBid}</b></div><div class="faab-metric"><span class="small muted">Projected win</span><b>$${p.projectedWinningBid}</b></div><div class="faab-metric"><span class="small muted">Stretch max</span><b>$${p.stretchBid}</b></div></div><div class="small muted" style="margin-top:4px">Independent fair value: $${p.fairBid}</div></td>
+    <td>${showFaab?`<div class="faab-metrics"><div class="faab-metric"><span class="small muted">Bid</span><b>$${p.recommendedBid}</b></div><div class="faab-metric"><span class="small muted">Projected win</span><b>$${p.projectedWinningBid}</b></div><div class="faab-metric"><span class="small muted">Stretch max</span><b>$${p.stretchBid}</b></div></div><div class="small muted" style="margin-top:4px">Independent fair value: $${p.fairBid}</div>`:`<div class="small muted">No FAAB bid applied. Confirm the host’s claim route before submission.</div>`}</td>
     <td class="small">${(p.reasons||[]).map(faabEsc).join(' · ')}${p.notes?'<div class="muted" style="margin-top:4px">'+faabEsc(p.notes)+'</div>':''}</td>
-  </tr>`).join('')||'<tr><td colspan="4" class="muted">No available players were supplied.</td></tr>';
+    <td><button class="btn ghost" data-create-ticket="${i}">Create ticket</button></td>
+  </tr>`).join('')||'<tr><td colspan="5" class="muted">No available players were supplied.</td></tr>';
+  body.querySelectorAll('[data-create-ticket]').forEach(b=>b.onclick=()=>createWaiverTicket(+b.dataset.createTicket));
 }
 async function openFaabReport(id){
   const r=await fetch('/api/inseason/reports/'+encodeURIComponent(id)+'?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});const d=await r.json();if(!r.ok)throw new Error(d.error||('HTTP '+r.status));renderFaabReport(d);
@@ -5251,9 +5350,11 @@ function downloadFaabCalendar(){
 async function loadInSeasonState(){
   if(!el('faabWeek'))return;
   FAAB_REPORT=null;
-  try{const r=await fetch('/api/inseason/state?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});const d=await r.json();if(r.ok)applyFaabState(d);}catch(e){applyFaabState({});}
+  WAIVER_TICKETS=[];renderWaiverTickets();
+  try{const r=await fetch('/api/inseason/state?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});const d=await r.json();applyFaabState(r.ok?d:{});}catch(e){applyFaabState({});}
   loadFaabSources();
   loadFaabHistory(true);
+  loadWaiverTickets();
 }
 
 // ---------- EVENTS ----------

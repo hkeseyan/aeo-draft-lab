@@ -71,4 +71,45 @@ try {
   globalThis.fetch = nativeFetch;
 }
 
+response = await worker.fetch(new Request(`https://draft.test/api/inseason/tickets?league=${leagueId}`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    action: 'add', player: 'Puka Nacua', pos: 'WR', team: 'LAR', suggestedDrop: 'Courtland Sutton',
+    recommendedBid: 127, projectedWinningBid: 115, stretchBid: 160, waiverMethod: 'faab',
+    deadline: '2026-09-29T01:00', teamDirection: 'survive', draftOrderRule: 'highest score is eliminated',
+    trigger: 'A weekly starter was lost', rationale: 'Immediate lineup upgrade', reportId: 'report-1', snapshotAt: 1760000000000
+  })
+}), env, {});
+assert.equal(response.status, 201);
+const draftedTicket = await response.json();
+assert.equal(draftedTicket.status, 'draft');
+assert.equal(draftedTicket.player, 'Puka Nacua');
+assert.equal(draftedTicket.draftOrderRule, 'highest score is eliminated');
+
+response = await worker.fetch(new Request(`https://draft.test/api/inseason/tickets?league=${leagueId}`), env, {});
+assert.equal(response.status, 200);
+const ticketList = await response.json();
+assert.equal(ticketList.length, 1);
+assert.equal(ticketList[0].trigger, 'A weekly starter was lost');
+assert.equal(ticketList[0].rationale, 'Immediate lineup upgrade');
+
+response = await worker.fetch(new Request(`https://draft.test/api/inseason/tickets/${encodeURIComponent(draftedTicket.id)}?league=${leagueId}`, {
+  method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'submitted' })
+}), env, {});
+assert.equal(response.status, 200);
+const submittedTicket = await response.json();
+assert.equal(submittedTicket.status, 'submitted');
+assert.ok(submittedTicket.submittedAt);
+assert.equal(submittedTicket.player, 'Puka Nacua');
+
+response = await worker.fetch(new Request(`https://draft.test/api/inseason/tickets/${encodeURIComponent(draftedTicket.id)}?league=${leagueId}`, {
+  method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'verified' })
+}), env, {});
+assert.equal(response.status, 200);
+const verifiedTicket = await response.json();
+assert.equal(verifiedTicket.status, 'verified');
+assert.ok(verifiedTicket.verifiedAt);
+assert.ok(verifiedTicket.submittedAt);
+
 console.log('League source sync tests passed');
