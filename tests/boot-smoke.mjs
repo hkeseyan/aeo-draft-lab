@@ -43,6 +43,7 @@ const dom = new JSDOM(html, {
       if (u.startsWith('/api/commish')) return j({});
       if (u.startsWith('/api/mocks')) return j([]);
       if (u.startsWith('/api/nhl/schedule')) return j(SCHED);
+      if (u.startsWith('/api/exposure')) return j({ denominator: 4, counts: { 'jason robertson': 2 }, leagues: [] });
       return j({});
     };
     w.addEventListener('error', (e) => errors.push('window error: ' + (e.error?.stack || e.message)));
@@ -123,50 +124,27 @@ ok &= check('no K/DST lateness rule in hockey', 'SPORT.lateRoundPositions.length
 ok &= check('scoring values carried onto LEAGUE', 'LEAGUE.scoring.sog', 0.9);
 ok &= check('weekly acquisition cap carried', 'LEAGUE.maxAcquisitionsPerWeek', 4);
 ok &= check('sport bar shows both sports', () => w.document.getElementById('sportBar').children.length, 2);
-ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','), 'yahoo-nhl-public,public-points-league-1');
+ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','), 'yahoo-nhl-public,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1');
 ok &= check('position filter is hockey', () => [...w.document.getElementById('posFilter').options].map(o => o.value).join(','), 'ALL,C,LW,RW,D,G');
 ok &= check('tendency columns are hockey', () => [...w.document.getElementById('tendHead').children].map(x => x.textContent).join(','), 'Use,Owner,C,LW,RW,D,G');
 
-// --- My Rank: points-league value plus roster construction ---
-ok &= check('My Rank leaves the elite tier on merit alone', () => {
-  const byMy = ev('PLAYERS.slice().sort((a,b)=>a.myRank-b.myRank).slice(0,5).map(p=>p.name).join("|")');
-  const byAdp = ev('PLAYERS.slice().sort((a,b)=>a.adp-b.adp).slice(0,5).map(p=>p.name).join("|")');
-  return byMy === byAdp ? true : byMy + ' vs ' + byAdp;
-}, true);
-ok &= check('a dual-eligible forward never leapfrogs the best player', () => {
-  // Draisaitl is C/LW and Yahoo's fifth pick; his flexibility bonus must not put
-  // him above McDavid, or the bonus is overwhelming the board's compressed top.
-  return ev('(PLAYERS.find(p=>p.name==="Leon Draisaitl")||{}).myRank > (PLAYERS.find(p=>p.name==="Connor McDavid")||{}).myRank');
-}, true);
-ok &= check('centre-only forwards are marked down against the market', () => {
-  const avg = ev(`(function(){
-    const seg=PLAYERS.filter(p=>p.adp<=150&&p.posEligible.length===1&&p.posEligible[0]==='C');
-    return seg.length? seg.reduce((s,p)=>s+(p.adp-p.myRank),0)/seg.length : 0;
-  })()`);
-  return avg < -4 ? true : 'avg move ' + avg;
-}, true);
-ok &= check('centre+wing forwards are marked up against the market', () => {
-  const avg = ev(`(function(){
-    const seg=PLAYERS.filter(p=>p.adp<=150&&p.posEligible.includes('C')&&p.posEligible.length>1);
-    return seg.length? seg.reduce((s,p)=>s+(p.adp-p.myRank),0)/seg.length : 0;
-  })()`);
-  return avg > 4 ? true : 'avg move ' + avg;
-}, true);
-ok &= check('a thin-sample projection is discounted toward the market', () => {
-  // Someone with a part-season behind them should carry a visible confidence note
-  // rather than being ranked as though the projection were solid.
-  return ev('PLAYERS.filter(p=>p.myRankTrust<0.6 && /sample confidence/.test(p.myRankWhy||"")).length');
-}, v => v > 0);
-ok &= check('surplus goalies are pushed below startable ones', () => {
-  const g = ev(`(function(){
-    const gs=PLAYERS.filter(p=>p.pos==='G').sort((a,b)=>a.myRank-b.myRank);
-    return JSON.stringify([gs.slice(0,20).filter(p=>!/beyond the/.test(p.myRankWhy||'')).length>=18,
-                           gs.slice(20).some(p=>/beyond the/.test(p.myRankWhy||''))]);
-  })()`);
-  return g;
-}, '[true,true]');
-ok &= check('every ranked player carries an explanation', 'PLAYERS.filter(p=>p.myRankWhy!=null).length', 400);
-ok &= check('football My Rank model is untouched', () => ev('SPORTS.nfl.myRankModel') + '/' + ev('SPORTS.nhl.myRankModel'), 'nfl/nhl');
+// --- My Rank: stable intrinsic league value; ADP is market context only ---
+ok &= check('points My Rank uses active-league scoring and replacement value',
+  'PLAYERS.filter(p=>p.leagueProj>0 && /replacement/.test(p.myRankWhy||"")).length', v => v > 300);
+ok &= check('My Rank is independent of ADP changes', () => ev(`(function(){
+  const original=PLAYERS.map(p=>p.adp), before=PLAYERS.map(p=>p.myRank).join(',');
+  PLAYERS.forEach((p,i)=>p.adp=1000-i); computeMyRanks();
+  const after=PLAYERS.map(p=>p.myRank).join(',');
+  PLAYERS.forEach((p,i)=>p.adp=original[i]); computeMyRanks();
+  return before===after;
+})()`), true);
+ok &= check('platform-aware Yahoo eligibility corrects Jason Robertson',
+  'JSON.stringify(eligiblePositions(PLAYERS.find(p=>p.name==="Jason Robertson")))', '["LW","RW"]');
+ok &= check('every ranked NHL player carries an explanation',
+  'PLAYERS.filter(p=>p.myRankWhy!=null).length', 400);
+ok &= check('football My Rank model is untouched',
+  () => ev('SPORTS.nfl.myRankModel') + '/' + ev('SPORTS.nhl.myRankModel'), 'nfl/nhl');
+
 const oldFetch = w.fetch;
 w.fetch = async url => String(url).includes('/api/yahoo/league-settings')
   ? { ok: true, json: async () => ({ name: 'Saturday NHL', teams: 10, scoringType: 'headpoint', draftType: 'live',
@@ -220,18 +198,25 @@ ok &= check('My Rank stays intrinsic when the roster changes',
   'PLAYERS.find(p=>p.name==="Cale Makar").myRank', originalRank);
 ev('resetDraft()');
 
-// --- eligibility on the board ---
-ok &= check('the board shows every eligible position', () => {
-  const cell = ev('posCell(PLAYERS.find(p=>p.name==="Leon Draisaitl"))');
-  return /C\/LW/.test(cell) && /fchip/.test(cell) ? true : cell;
+// --- eligibility, exposure and flexible roster slots ---
+ok &= check('the board shows all eligible positions without the old F pip', () => {
+  const cell = ev('posCell(PLAYERS.find(p=>p.name==="Jason Robertson"))');
+  return /LW\/RW/.test(cell) && !/fchip/.test(cell) ? true : cell;
 }, true);
-ok &= check('single-position players get no F chip', () => {
-  const cell = ev('posCell(PLAYERS.find(p=>p.posEligible.length===1&&p.pos==="D"))');
-  return /fchip/.test(cell) ? 'D wrongly chipped' : true;
-}, true);
-ok &= check('filtering to LW surfaces C/LW players too', () => ev(`(function(){
+ok &= check('fallback multi-position eligibility still works', () => ev(`(function(){
   const d=PLAYERS.find(p=>p.name==='Leon Draisaitl');
   return playerFillsPos(d,'LW') && playerFillsPos(d,'C') && !playerFillsPos(d,'RW');
+})()`), true);
+ok &= check('exposure renders as prior-league fraction',
+  'exposureText(PLAYERS.find(p=>p.name==="Jason Robertson"))', '2/4');
+ok &= check('draft table keeps Proj and Exposure beside rankings',
+  () => [...w.document.querySelectorAll('#poolTable th')].slice(1,6).map(x=>x.textContent).join(','), 'ADP,ECR,My,Proj,Exp');
+ok &= check('reserved bench rows match the four-slot Yahoo bench',
+  'slotRosterPlayers([],LEAGUE.starters).benchSlots.length', 4);
+ok &= check('multi-position roster matching reroutes players to keep starters filled', () => ev(`(function(){
+  const flex=PLAYERS.find(p=>p.name==='Leon Draisaitl'), c=PLAYERS.find(p=>p.name==='Connor McDavid');
+  const fit=slotRosterPlayers([flex,c],{C:1,LW:1});
+  return fit.starterSlots.every(x=>x.player)&&fit.starterSlots.find(x=>x.label==='LW').player.name==='Leon Draisaitl';
 })()`), true);
 
 ok &= check('rivals complete a full NHL draft', 'resetDraft(); for(let i=1;i<=160;i++) rivalPick(i,0); picks.length', v => v >= 150);
@@ -292,6 +277,17 @@ ok &= check('more games beats fewer at equal rate', () => JSON.parse(ev(`(functi
   };
   return JSON.stringify(score(10,'EDM') > score(10,'TOR'));
 })()`)), true);
+
+ev('switchLeague("yahoo-nhl-public-categories")');
+await new Promise(r => setTimeout(r, 200));
+ok &= check('Yahoo H2H categories reference is 10 teams', 'LEAGUE.teams', 10);
+ok &= check('H2H categories uses category intrinsic value',
+  'PLAYERS.filter(p=>Number.isFinite(p.categoryValue)&&/H2H cat z/.test(p.myRankWhy||"")).length', v => v > 300);
+ev('switchLeague("yahoo-nhl-public-roto")');
+await new Promise(r => setTimeout(r, 200));
+ok &= check('Yahoo roto reference is 10 teams', 'LEAGUE.teams', 10);
+ok &= check('roto template uses blocks rather than hits',
+  'LEAGUE.categoryStats.skater.join(",")', 'G,A,+/-,PPP,SOG,BLK');
 
 ev('switchLeague("public-points-league-1")');
 await new Promise(r => setTimeout(r, 400));
