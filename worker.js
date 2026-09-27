@@ -148,7 +148,7 @@ __name(yahooTokenRequest, "yahooTokenRequest");
 async function getYahooAccessToken(env, kv, url) {
   const auth = await kv.get(YAHOO_AUTH_KEY, { type: "json" });
   if (!auth) return null;
-  if (auth.client_id && env.YAHOO_CLIENT_ID && auth.client_id !== env.YAHOO_CLIENT_ID) {
+  if (env.YAHOO_CLIENT_ID && auth.client_id !== env.YAHOO_CLIENT_ID) {
     await kv.delete(YAHOO_AUTH_KEY);
     return null;
   }
@@ -1560,7 +1560,7 @@ var worker_default = {
         if (request.method !== "GET") return J({ error: "method" }, 405);
         const auth = await kv.get(YAHOO_AUTH_KEY, { type: "json" });
         const cid = env.YAHOO_CLIENT_ID || "";
-        const clientMatch = !!auth && (!auth.client_id || !cid || auth.client_id === cid);
+        const clientMatch = !!auth && (!cid || auth.client_id === cid);
         const hint = (x) => x ? `${x.slice(0, 12)}…${x.slice(-8)} (${x.length} chars)` : null;
         return J({
           connected: !!auth && clientMatch,
