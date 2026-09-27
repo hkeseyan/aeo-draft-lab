@@ -39,10 +39,13 @@ try {
   assert.equal(data.teams, 10);
   assert.equal(data.rosterPositions[0].roster_position.count, 4);
   assert.equal(data.scoringType, 'headpoint');
-  assert.equal(seen.length, 2);
+  // Three outbound calls, not two: listing leagues, then settings, then the
+  // per-league eligibility pull that the settings route now also performs.
+  assert.equal(seen.length, 3);
   res = await worker.fetch(new Request('https://draft.test/api/yahoo/league-settings?key=not-a-key'), { MOCKS: kv }, {});
   assert.equal(res.status, 400);
-  assert.equal(seen.length, 2);
+  // An invalid key is rejected before any request goes out, so the count holds.
+  assert.equal(seen.length, 3);
   console.log('Yahoo NHL league and settings tests passed');
 } finally {
   globalThis.fetch = oldFetch;

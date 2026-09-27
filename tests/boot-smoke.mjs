@@ -216,6 +216,32 @@ ok &= check('multi-position matching reroutes flexible player', () => ev(`(funct
   return fit.starterSlots.every(x=>x.player)&&fit.starterSlots.find(x=>x.label==='LW').player.name==='Leon Draisaitl';
 })()`), true);
 
+ok &= check('position colours: G red, C blue, LW green, RW purple, D yellow', () => {
+  const css = fs.readFileSync('public/index.html','utf8');
+  const m = css.match(/--posc:(#\w+); --poslw:(#\w+); --posrw:(#\w+); --posd:(#\w+); --posg:(#\w+);/);
+  return m ? m.slice(1).join(',') : 'vars not found';
+}, '#60a5fa,#34d399,#c084fc,#fbbf24,#f97066');
+ok &= check('no F chip on the board', () => {
+  const cell = ev('posCell(PLAYERS.find(p=>p.posEligible.length>1)||PLAYERS[0])');
+  return /fchip/.test(cell) || />F</.test(cell) ? cell : true;
+}, true);
+ok &= check('eligibility shows slash-separated positions only', () => {
+  const p = ev('JSON.stringify((PLAYERS.find(x=>x.posEligible.length>1)||{}).posEligible||[])');
+  const cell = ev('posCell(PLAYERS.find(x=>x.posEligible.length>1))');
+  const want = JSON.parse(p).join('/');
+  return cell.includes(want) ? true : cell + ' missing ' + want;
+}, true);
+ok &= check('board flags when eligibility is not the platform\'s own', () => {
+  // The Yahoo reference league has no real Yahoo eligibility loaded yet, so the
+  // board must say so rather than passing FantasyPros off as Yahoo's.
+  return ev('eligibilitySourceNote()');
+}, v => /FantasyPros|confirmed from yahoo/.test(v));
+ok &= check('platform-specific eligibility wins when present', () => ev(`(function(){
+  const p=PLAYERS.find(x=>x.name==='Jason Robertson');
+  if(!p) return 'player missing';
+  return JSON.stringify(eligiblePositions(p,'yahoo'));
+})()`), v => v === '["LW","RW"]' || v);
+
 ok &= check('rivals complete a full NHL draft', 'resetDraft(); for(let i=1;i<=160;i++) rivalPick(i,0); picks.length', v => v >= 150);
 ok &= check('rivals build balanced rosters, not one position', () => {
   const c = JSON.parse(ev('JSON.stringify(countsOf(rosterOf(3)))'));

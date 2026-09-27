@@ -169,10 +169,27 @@ winning team + price for every completed sale. Falls back to local-only
 ("Save config" in the Data tab) when the cloud API isn't reachable.
 
 **Eligibility on the board.** Best Available shows *every* position a player is
-eligible for (`C/LW`), coloured by his primary, plus an **F** chip for anyone
-eligible at more than one forward spot — the tiebreak that matters most in a daily
-league. The position filter matches eligibility rather than the primary position, so
-filtering to LW surfaces every C/LW too.
+eligible for, slash-separated (`C/LW`), coloured by his primary — no chips or
+abbreviations. The position filter matches eligibility rather than the primary
+position, so filtering to LW surfaces every C/LW too.
+
+Hockey position colours: **G red, C blue, LW green, RW purple, D yellow**.
+
+**Eligibility is per platform, because it differs per platform.** Fantrax may list a
+forward `C/LW` where Yahoo lists the same player `C/LW/RW`, and the wrong one is
+actively misleading for draft-day tiebreaks and for in-season pickups, trades and
+start decisions. Each player therefore carries an `eligibility` map keyed by platform
+(`yahoo`, `fantrax`, plus a `fallback`), a league profile names its `platform`, and
+`eligiblePositions(p, platform)` resolves platform-specific first and falls back only
+when nothing platform-specific exists. Sources, in order of precedence: the
+`yahoo_pos` / `fantrax_pos` player-CSV columns, then a `platformEligibility`
+override map on the league profile (keyed platform → player name), then the generic
+fallback parsed from the `pos` column.
+
+Because the fallback is **FantasyPros'** — neither Yahoo's nor Fantrax's — the Best
+Available header states which source the position column is actually showing, and
+warns outright when no platform eligibility is loaded for the active league. A
+third-party guess must never be mistaken for the league's own truth.
 
 ### Add Radar
 Only shown for sports with daily lineups (hockey today; basketball and baseball
