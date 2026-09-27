@@ -49,85 +49,45 @@ as a flag on our projection, not a bargain. Players FantasyPros doesn't rank sor
 behind those it does, ordered by our projection, so the deep pool the Add Radar needs
 doesn't interleave with real draft picks.
 
-**My Rank (hockey).** A points-league board that builds on the market rather than
-replacing it, and prices in roster construction that no ranking source models. Each
-sport names its model on the sport pack (`myRankModel`); football's original
-elite-QB/TE-and-rookie heuristic is untouched.
+**My Rank (hockey).** `My Rank` is the stable **intrinsic league-value** board.
+It deliberately excludes ADP. Market timing belongs in the separate live pick
+recommendation layer, so a player's underlying value cannot improve merely because
+the market is drafting him earlier.
 
-The baseline is a blend of market ADP and our projection rank, where **our
-projection is trusted in proportion to the sample behind it** — a prospect with a
-twelve-game cameo, or a star who missed half a season, has a projection built mostly
-on noise, so confidence we withhold from it goes back to the market. This is what
-stops a rookie the market likes from cratering to rank 200 on a projection that
-never had the data to say so.
+For **points leagues**, projected component stats are rescored through the active
+league's scoring settings. The model then estimates replacement at each position
+from team count, starter demand, bench depth, and the player's active-platform
+eligibility. Core value is VORP at the best eligible position, with a modest
+projection-confidence discount and a small option-value bonus for extra positions.
+`myRankWhy` exposes league projection, replacement level, VORP, eligibility,
+confidence, and any dated health-watch adjustment.
 
-On top of that sit **proportional** positional adjustments — percentages of where a
-player already sits, not a flat number of spots, because the board is far denser at
-the top than the bottom and a flat eight-spot bonus would be the entire elite tier
-at pick 5 and a rounding error at pick 200:
+For **H2H Categories and Rotisserie**, the same architecture uses standardized
+category value before positional replacement. The 10-team Yahoo references use
+H2H skater G/A/+/-/PPP/SOG/HIT and goalie W/GAA/SV%/SHO; Roto changes HIT to BLK
+and records the 82-game position cap. Goalie GAA is currently approximated from
+projected GA/game because the embedded projection does not carry goalie TOI.
 
-- **Centre-only forwards are marked down.** Yahoo's default scoring pays for offence,
-  which is why centres dominate the raw projection board — and that same fact makes
-  centre the easiest position to stream. Only two start a night, and whoever you'd
-  drop for one is cheap. The penalty phases in from the elite tier down to about
-  pick 30, because the streaming argument is really an argument about
-  *replaceability*, and an elite centre isn't replaceable.
-- **Dual and triple forward eligibility are marked up.** A C/LW buys a lineup slot
-  on a crowded night, which is where a daily league is won.
-- **The elite tier is exempt from all of it.** Nothing positional applies to the top
-  few picks — not the penalty and not the flexibility bonus either, or a
-  dual-eligible forward would leapfrog the best player in the draft, which is the
-  same mistake from the other side. You build the roster around a McDavid later.
-- **Goalies**: a premium bump for the handful of true volume starters, and a markdown
-  once past the league's startable goalie count (`teams × G slots`), since a third
-  goalie is a luxury.
-- **Defence**: a small bump for the premium few, and nothing else — the aim is to get
-  one or two early without reaching.
+**Live pick recommendations are separate from My Rank.** The existing NHL live
+shortlist starts from intrinsic rank, then adds draft-state inputs: ADP/VONA timing
+to the next turn, tier cliffs, open starter urgency, progressive position
+saturation, health/IR context, upside catalysts, and user-adjustable streaming
+confidence for C/LW/RW/D/G. Streaming confidence can reduce the urgency of filling
+an open slot, but never changes intrinsic My Rank. There are no hard round rules.
 
-Every player carries a plain-language `myRankWhy`, shown as a tooltip on the My Rank
-cell, so the number is always explainable.
+**Platform-specific position eligibility.** Players can carry independent Yahoo,
+Fantrax, and fallback eligibility sets. `eligiblePositions()` uses the active
+league platform first and falls back only when platform-specific data is absent.
+Yahoo eligibility is fetched with league settings once OAuth works; Fantrax imports
+retain league `eligiblePos` values. Display, filters, roster fitting, scarcity, and
+recommendations all use the same eligibility. The old green `F` pip is removed
+because the full position string is already shown.
 
-Weights live in `NHL_MY_RANK` as named constants. **`ecr` is deliberately not an
-input**: FantasyPros' NHL consensus is two experts scoring ROTO, which is a different
-game from a points league — it's kept as a visible column for reference, not fed into
-the ranking.
-
-**Multi-position eligibility.** A player's `pos` cell may name several positions
-(`C/LW` — slash or plus separated, never comma, since the CSV owns the comma). The
-first is primary and drives the colour chip and roster counts; the rest make the
-player eligible to fill those starting slots. Roster slotting, the rival model's
-roster-need score, and flex filling all ask "can this player fill this slot" rather
-than "is this player this position", so a C/LW doesn't look unwanted the moment
-centre is full. Football profiles are unaffected — a single position parses to a
-one-entry eligibility list.
-
-**NHL live pick recommendations (first quantitative pass).** The Draft Room has a
-six-player "Who to pick now" panel separate from intrinsic My Rank. It recomputes
-after picks, undo, rewind, league switches, and setup loads. The score uses My
-Rank, the current roster's open starters, D1/D2/D3/D4 and G1/G2/G3 state,
-C-only count, round-dependent upside hypotheses, a bounded last-20-pick room
-signal, and a value-over-next-available proxy. Market ADP estimates whether a
-player or equivalent tier survives the next *turn*. At an end-of-round snake
-turn, both consecutive picks are treated as one decision window; the horizon is
-the following turn. The displayed TAKE NOW, WAIT, VALUE, and TIER CLIFF reasons
-are directional. ADP survival is an uncalibrated heuristic, not a probability
-forecast. Never present the result as a verified live Yahoo board unless the
-user has actually recorded/synced every pick. Upside catalyst tags from the four
-mock reviews are hypotheses with confidence discounts, not guaranteed PP/line
-assignments. Optional CSV fields `upside_tags` (pipe-separated) and
-`upside_confidence` (0–1) override the reviewed name registry. Static My Rank
-does not move with roster state.
-
-The Best Available table now places Proj beside ADP/ECR/My and displays NHL
-portraits and team logos from NHL assets when an NHL player ID/team is known.
-Yahoo league listing accepts NHL or NFL. A read-only NHL settings comparison
-fetches `/league/{league_key}/settings` and exposes its roster/scoring values.
-Only an exact 10-team points/roster/scoring match enables an explicit button to
-create a new profile using the reference pool and the user's entered draft slot;
-it never overwrites the reference profile. Yahoo Fantasy permission
-must work before this can verify a specific public-prize league. The baseline
-projection still uses prior-season rates, and the live score is not calibrated
-to a new league's scoring until that league's settings are confirmed.
+**Yahoo references and imported leagues.** Generic Yahoo public hockey references
+remain **10-team** for H2H Points, H2H Categories, and Rotisserie. The completed
+`public-points-league-1` / Yahoo 135526 profile is separately 12-team because that
+specific prize league actually drafted with 12 teams; it must not be used as the
+generic public reference. Custom/bangers formats are imported rather than guessed.
 
 ## App shape
 
@@ -158,14 +118,17 @@ traded-pick tags show the real owner name (`ownerLabel(slot)`, falling back
 to `T<slot>` only if a slot genuinely has no owner name), not a bare `T1`/
 `T2`/`→T4`.
 
-**Roster**: next to Best Available, a dropdown (defaulting to you) shows any
-owner's roster slotted into starters — one row per starting slot in
-`LEAGUE.starters` order (exact positions, then FLEX, then SUPERFLEX if the
-league has one), with unfilled slots shown as "— empty —" so you can see how
-full a lineup is at a glance — then a bench list of whatever's left over.
-Best-ECR-first within a position: a worse-ECR keeper doesn't camp an exact
-starter slot ahead of a better-ECR player drafted later — the better player
-wins the exact slot and the keeper gets pushed to FLEX/bench instead.
+**Roster**: next to Best Available, a dropdown shows any owner's roster in fixed
+rows for every starter **and every bench slot**, including empty rows. An augmenting
+matching pass re-slots multi-position players after each pick, so a C/LW can move
+from C to LW when a C-only player is drafted. Roster rows show the same full
+active-platform position eligibility, portrait, and team logo as the draft list.
+
+**Exposure**: Best Available includes `Exp` such as `2/4`: the numerator is how many
+of the user's other saved leagues in the same sport roster that player; the
+denominator is how many prior same-sport leagues currently have a saved drafted
+roster. The active draft is excluded. Exposure is context only and does not silently
+alter My Rank.
 
 **Queue**: check "Q" next to any player in Best Available to add them to
 "My Queue" — a shortlist of upcoming targets, shown in ADP order with a

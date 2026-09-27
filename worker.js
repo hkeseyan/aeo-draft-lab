@@ -148,6 +148,10 @@ __name(yahooTokenRequest, "yahooTokenRequest");
 async function getYahooAccessToken(env, kv, url) {
   const auth = await kv.get(YAHOO_AUTH_KEY, { type: "json" });
   if (!auth) return null;
+  if (env.YAHOO_CLIENT_ID && auth.client_id !== env.YAHOO_CLIENT_ID) {
+    await kv.delete(YAHOO_AUTH_KEY);
+    return null;
+  }
   if (Date.now() < auth.expires_at - 6e4) return auth.access_token;
   const tok = await yahooTokenRequest(env, {
     grant_type: "refresh_token",
@@ -158,8 +162,8 @@ async function getYahooAccessToken(env, kv, url) {
     access_token: tok.access_token,
     refresh_token: tok.refresh_token || auth.refresh_token,
     expires_at: Date.now() + tok.expires_in * 1e3,
-    connected_at: auth.connected_at || null
-    // survives refreshes; see the callback
+    connected_at: auth.connected_at || null,
+    client_id: env.YAHOO_CLIENT_ID || auth.client_id || null
   };
   await kv.put(YAHOO_AUTH_KEY, JSON.stringify(updated));
   return updated.access_token;
@@ -428,7 +432,7 @@ function yahooPlayerRows(raw) {
   const seen = new Set();
   return collectYahooEntities(raw, "player").filter((p) => p.player_key && !seen.has(p.player_key) && seen.add(p.player_key)).map((p) => ({
     name: p.name || "Unknown",
-    pos: p.display_position || p.position || "",
+    pos: String(p.display_position || p.position || "").replace(/\s*,\s*/g, "/"),
     team: p.editorial_team_abbr || "",
     status: p.status || "",
     bye_week: p.bye_week || "",
@@ -436,6 +440,68 @@ function yahooPlayerRows(raw) {
   }));
 }
 __name(yahooPlayerRows, "yahooPlayerRows");
+async function yahooLeagueEligibility(token, leagueKey, limit = 500) {
+  const rows = [], seen = new Set(), batch = 25;
+  for (let start = 0; start < limit; start += batch) {
+    const raw = await yahooJson(token, `league/${leagueKey}/players;start=${start};count=${batch}`);
+    const got = yahooPlayerRows(raw).filter((p) => {
+      const key = String(p.name || "").trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    rows.push(...got);
+    if (got.length < batch) break;
+  }
+  return rows;
+}
+__name(yahooLeagueEligibility, "yahooLeagueEligibility");
+function clientPlayerIdNameMap(profile) {
+  const rows = csvMatrix(profile && profile.playersCsv || "");
+  const out = new Map();
+  if (!rows.length) return out;
+  const header = rows[0].map((h) => String(h).toLowerCase().trim());
+  const hasHeader = header.includes("name");
+  const nameIdx = hasHeader ? header.indexOf("name") : 0;
+  const start = hasHeader ? 1 : 0;
+  for (let i = start; i < rows.length; i++) {
+    const name = String(rows[i] && rows[i][nameIdx] || "").trim();
+    if (name) out.set(i, name);
+  }
+  return out;
+}
+__name(clientPlayerIdNameMap, "clientPlayerIdNameMap");
+function profileSlotForOverall(profile, ov) {
+  const teams = Number(profile && profile.teams) || 12;
+  const round = Math.ceil(ov / teams);
+  const idx = ov - (round - 1) * teams;
+  if (String(profile && profile.draftType || "snake") === "linear") return idx;
+  return round % 2 === 1 ? idx : teams - idx + 1;
+}
+__name(profileSlotForOverall, "profileSlotForOverall");
+function savedRosterNames(profile, setup) {
+  if (!setup) return [];
+  if (Array.isArray(setup.myRosterNames) && setup.myRosterNames.length) {
+    return [...new Set(setup.myRosterNames.map(String).map((x) => x.trim()).filter(Boolean))];
+  }
+  const idToName = clientPlayerIdNameMap(profile);
+  const mySlot = Number(profile && profile.mySlot);
+  if (!mySlot) return [];
+  const names = [];
+  const overrides = setup.pickOwnerOverride || {};
+  (setup.picks || []).forEach((pk) => {
+    const ov = Number(pk.overall);
+    const owner = Number(overrides[ov] || profileSlotForOverall(profile, ov));
+    const name = idToName.get(Number(pk.playerId));
+    if (owner === mySlot && name) names.push(name);
+  });
+  (setup.auctionPicks || []).forEach((pk) => {
+    const name = idToName.get(Number(pk.playerId));
+    if (Number(pk.owner) === mySlot && name) names.push(name);
+  });
+  return [...new Set(names)];
+}
+__name(savedRosterNames, "savedRosterNames");
 function fantasyProsLeagueKey(value) {
   const raw = String(value || "").trim();
   let candidate = raw;
@@ -726,11 +792,13 @@ var worker_default = {
       if (!env.YAHOO_CLIENT_ID) return new Response("Yahoo OAuth isn't configured (missing YAHOO_CLIENT_ID secret).", { status: 500 });
       const yme = env.MOCKS ? await currentUser(request, env, env.MOCKS) : null;
       if (!yme || !yme.admin) return new Response("Only the admin can connect a Yahoo account.", { status: 403 });
+      if (url.searchParams.get("force") === "1" && env.MOCKS) await env.MOCKS.delete(YAHOO_AUTH_KEY);
       const authUrl = "https://api.login.yahoo.com/oauth2/request_auth?" + new URLSearchParams({
         client_id: env.YAHOO_CLIENT_ID,
         redirect_uri: yahooRedirectUri(url),
         response_type: "code",
-        language: "en-us"
+        language: "en-us",
+        prompt: "consent"
       }).toString();
       return Response.redirect(authUrl, 302);
     }
@@ -753,7 +821,8 @@ var worker_default = {
           // made before the Yahoo app had Fantasy Sports permission stays
           // permission-less no matter how many times it is refreshed. This
           // timestamp is what tells us to stop refreshing and re-consent.
-          connected_at: Date.now()
+          connected_at: Date.now(),
+          client_id: env.YAHOO_CLIENT_ID || null
         }));
         return new Response("Yahoo account connected. You can close this tab and go back to the app's Leagues tab.", { headers: { "Content-Type": "text/plain" } });
       } catch (e) {
@@ -1113,6 +1182,28 @@ var worker_default = {
           return J({ error: "Sleeper import failed: " + e.message }, 502);
         }
       }
+      if (path === "/api/exposure") {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const current = await kv.get(leagueProfileKey(lg), { type: "json" });
+        if (!current) return J({ denominator: 0, counts: {}, leagues: [] });
+        const sport = String(current.sport || "nfl");
+        const listed = await kv.list({ prefix: "league:" });
+        const profiles = (await Promise.all(listed.keys.map((k) => kv.get(k.name, { type: "json" })))).filter(Boolean);
+        const counts = {};
+        const leagues = [];
+        for (const profile of profiles) {
+          if (!profile || profile.id === lg || String(profile.sport || "nfl") !== sport) continue;
+          const setup = await kv.get(scoped(setupKey(profile.id), me), { type: "json" });
+          const names = savedRosterNames(profile, setup);
+          if (!names.length) continue;
+          leagues.push({ id: profile.id, name: profile.name || profile.id, rostered: names.length });
+          names.forEach((name) => {
+            const key = String(name).trim().toLowerCase();
+            if (key) counts[key] = (counts[key] || 0) + 1;
+          });
+        }
+        return J({ denominator: leagues.length, counts, leagues });
+      }
       if (path.startsWith("/api/import/fantrax/")) {
         const denied = requireAdmin();
         if (denied) return denied;
@@ -1121,12 +1212,11 @@ var worker_default = {
         if (!fxId) return J({ error: "Missing Fantrax league ID" }, 400);
         try {
           const base = "https://www.fantrax.com/fxea/general";
-          const [info, rosterResp] = await Promise.all([
+          const [info, rosterResp, playerIdsResp] = await Promise.all([
             fetch(`${base}/getLeagueInfo?leagueId=${encodeURIComponent(fxId)}`).then((r) => r.json()),
-            fetch(`${base}/getTeamRosters?leagueId=${encodeURIComponent(fxId)}`).then((r) => r.json())
+            fetch(`${base}/getTeamRosters?leagueId=${encodeURIComponent(fxId)}`).then((r) => r.json()),
+            fetch(`${base}/getPlayerIds?sport=NHL`).then((r) => r.ok ? r.json() : ({})).catch(() => ({}))
           ]);
-          // Fantrax answers 200 with an error object rather than an HTTP status,
-          // so the body is the only signal that the league id was wrong.
           const errOf = /* @__PURE__ */ __name((x) => x && x.error && (x.error.message || x.error.code), "errOf");
           if (errOf(info)) return J({ error: "Fantrax: " + errOf(info) }, 404);
           const rostersRaw = rosterResp && rosterResp.rosters || {};
@@ -1134,44 +1224,71 @@ var worker_default = {
             return J({ error: "Fantrax: " + errOf(rosterResp) }, 404);
           }
           const playerInfo = info && info.playerInfo || {};
-          // playerInfo's per-player shape isn't contractually documented, so try the
-          // plausible spellings and fall back to the raw id rather than dropping a
-          // roster spot silently.
+          const rawIds = playerIdsResp && (playerIdsResp.players || playerIdsResp.playerInfo || playerIdsResp) || {};
+          const idMeta = {};
+          if (Array.isArray(rawIds)) {
+            rawIds.forEach((m) => {
+              const id = m && (m.fantraxId || m.id || m.playerId);
+              if (id) idMeta[String(id)] = m;
+            });
+          } else if (rawIds && typeof rawIds === "object") {
+            Object.entries(rawIds).forEach(([key, m]) => {
+              if (!m || typeof m !== "object") return;
+              const id = m.fantraxId || m.id || m.playerId || key;
+              idMeta[String(id)] = m;
+            });
+          }
           const nameOf = /* @__PURE__ */ __name((pid) => {
-            const m = playerInfo[pid] || playerInfo[String(pid)];
-            if (!m) return String(pid);
-            return m.name || m.playerName || m.fullName || [m.firstName, m.lastName].filter(Boolean).join(" ").trim() || String(pid);
+            const m = idMeta[String(pid)] || {};
+            const legacy = playerInfo[pid] || playerInfo[String(pid)] || {};
+            return m.name || m.playerName || m.fullName || legacy.name || legacy.playerName || legacy.fullName ||
+              [m.firstName, m.lastName].filter(Boolean).join(" ").trim() ||
+              [legacy.firstName, legacy.lastName].filter(Boolean).join(" ").trim() || String(pid);
           }, "nameOf");
+          const posOf = /* @__PURE__ */ __name((pid, rosterItem) => {
+            const m = playerInfo[pid] || playerInfo[String(pid)] || {};
+            const global = idMeta[String(pid)] || {};
+            const raw = m.eligiblePos || m.eligiblePositions || m.positions || m.positionEligibility || m.position ||
+              rosterItem && (rosterItem.eligiblePos || rosterItem.eligiblePositions || rosterItem.positions || rosterItem.position) ||
+              global.positions || global.position || "";
+            const vals = Array.isArray(raw) ? raw : String(raw).split(/[,/|+]/);
+            return [...new Set(vals.map((x) => String(x && (x.position || x) || "").trim().toUpperCase()).filter(Boolean))].join("/");
+          }, "posOf");
           const teamInfo = info && info.teamInfo || {};
           const teamIds = Object.keys(rostersRaw).length ? Object.keys(rostersRaw) : Object.keys(teamInfo);
           const owners = [];
           const ownerSlot = {};
           const rosterLines = [];
+          const platformEligibility = {};
+          Object.keys(playerInfo).forEach((pid) => {
+            const nm = nameOf(pid), pos = posOf(pid, null);
+            if (nm && nm !== String(pid) && pos) platformEligibility[String(nm).toLowerCase()] = pos;
+          });
           let unresolved = 0;
           teamIds.forEach((tid, i) => {
             const entry = rostersRaw[tid] || {};
             const meta = teamInfo[tid] || {};
             let owner = entry.teamName || meta.name || `Team ${i + 1}`;
-            // Two franchises may share a display name; the app keys rosters by owner
-            // name, so a collision would merge two rosters into one.
-            let uniq = owner, n = 2;
-            while (owners.includes(uniq)) uniq = `${owner} (${n++})`;
+            let uniq = owner, suffix = 2;
+            while (owners.includes(uniq)) uniq = `${owner} (${suffix++})`;
             owner = uniq;
             owners.push(owner);
             ownerSlot[owner] = i + 1;
             (entry.rosterItems || []).forEach((it) => {
-              const nm = nameOf(it && it.id);
-              if (nm === String(it && it.id)) unresolved++;
+              const pid = it && it.id;
+              const nm = nameOf(pid), pos = posOf(pid, it);
+              if (nm === String(pid)) unresolved++;
+              if (nm && nm !== String(pid) && pos) platformEligibility[String(nm).toLowerCase()] = pos;
               rosterLines.push(`${owner}|${nm}|FA|NONE`);
             });
           });
           const fxDraft = String(info && (info.draftType || info.draftSettings && info.draftSettings.draftType) || "").toUpperCase();
           const draftType = fxDraft.includes("AUCTION") ? "auction" : fxDraft.includes("SNAKE") ? "snake" : fxDraft.includes("LINEAR") || fxDraft.includes("STRAIGHT") ? "linear" : "";
           const rosterSize = info && info.rosterInfo && info.rosterInfo.maxTotalPlayers || null;
-          const notes = ["Structure only \u2014 review scoring, keeper rules and dates before saving."];
+          const notes = ["Structure only — review scoring, keeper rules and dates before saving."];
           if (draftType) notes.push(`Fantrax reports a ${draftType} draft.`);
-          if (unresolved) notes.push(`${unresolved} roster entries kept their Fantrax player id because the league's player dictionary didn't name them \u2014 fix those names before saving.`);
-          notes.push("Fantrax's roster endpoint carries no drafted round or keeper flag, so every player is marked FA/NONE; set keepers on Teams & Keepers after saving.");
+          if (unresolved) notes.push(`${unresolved} roster entries kept their Fantrax player id because the player dictionary did not name them.`);
+          notes.push("Fantrax roster data carries no drafted round or keeper flag, so players are marked FA/NONE.");
           return J({
             name: info && info.leagueName || "Imported Fantrax League",
             teams: teamIds.length || 12,
@@ -1180,6 +1297,9 @@ var worker_default = {
             rostersRaw: rosterLines.join("\n"),
             draftType,
             rosterSize,
+            sport: "nhl",
+            platform: "fantrax",
+            platformEligibility: { fantrax: platformEligibility },
             _source: "fantrax",
             _fantraxLeagueId: fxId,
             _note: notes.join(" ")
@@ -1440,11 +1560,15 @@ var worker_default = {
         if (request.method !== "GET") return J({ error: "method" }, 405);
         const auth = await kv.get(YAHOO_AUTH_KEY, { type: "json" });
         const cid = env.YAHOO_CLIENT_ID || "";
+        const clientMatch = !!auth && (!cid || auth.client_id === cid);
+        const hint = (x) => x ? `${x.slice(0, 12)}…${x.slice(-8)} (${x.length} chars)` : null;
         return J({
-          connected: !!auth,
+          connected: !!auth && clientMatch,
+          stale_grant: !!auth && !clientMatch,
           connected_at: auth ? auth.connected_at || null : null,
           expires_at: auth ? auth.expires_at || null : null,
-          client_id_hint: cid ? `${cid.slice(0, 12)}\u2026${cid.slice(-8)} (${cid.length} chars)` : null
+          grant_client_id_hint: auth ? hint(auth.client_id || "") : null,
+          client_id_hint: hint(cid)
         });
       }
       if (path === "/api/yahoo/disconnect") {
@@ -1515,11 +1639,23 @@ var worker_default = {
           const league = raw.fantasy_content && raw.fantasy_content.league || [];
           const meta = Array.isArray(league) ? league[0] || {} : league;
           const settings = Array.isArray(league) ? league[1] && league[1].settings && league[1].settings[0] || {} : {};
+          const platformEligibility = {};
+          try {
+            const players = await yahooLeagueEligibility(token, key, 500);
+            players.forEach((p) => {
+              if (p && p.name && p.pos) platformEligibility[String(p.name).trim().toLowerCase()] = p.pos;
+            });
+          } catch (eligErr) {
+            // Settings comparison can still proceed if the optional full player
+            // sweep is temporarily unavailable. The reference eligibility remains
+            // the explicit fallback until a later refresh succeeds.
+          }
           return J({ key, name: meta.name || "", teams: Number(meta.num_teams)||null,
             draftType: settings.draft_type || null, scoringType: settings.scoring_type || null,
             rosterPositions: settings.roster_positions || null,
             statCategories: settings.stat_categories || null,
             statModifiers: settings.stat_modifiers || null,
+            platformEligibility,
             settings, raw });
         } catch (e) {
           return J({ error: "Yahoo settings request failed: " + e.message }, 502);
