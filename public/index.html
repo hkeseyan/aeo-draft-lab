@@ -188,6 +188,7 @@
     <div class="card" id="nhlLiveCard" style="display:none">
       <h2>Who to pick now <span class="muted small">· separate from My Rank</span></h2>
       <div id="nhlLiveContext" class="small muted" style="margin-bottom:8px"></div>
+      <div id="nhlStreamControls" class="row small muted" style="margin-bottom:8px"></div>
       <div id="nhlLivePicks"></div>
       <p class="small muted" style="margin:8px 0 0">Directional draft advice from the current board and roster. Projections are based on prior-season rates; verify news and roles before a pick.</p>
     </div>
@@ -206,7 +207,7 @@
           </div>
           <div class="scroll">
             <table id="poolTable">
-              <thead><tr><th title="Queue">Q</th><th class="sortcol active" data-sort="adp" title="Click to sort by ADP">ADP</th><th class="sortcol" data-sort="ecr" title="Click to sort by ECR">ECR</th><th class="sortcol" data-sort="myRank" title="Click to sort by your own philosophy-adjusted rank, lower=better">My</th><th>Proj</th><th>Pos</th><th>Player</th><th>P.Rk</th><th class="dcol">Δ</th><th></th></tr></thead>
+              <thead><tr><th title="Queue">Q</th><th class="sortcol active" data-sort="adp" title="Click to sort by ADP">ADP</th><th class="sortcol" data-sort="ecr" title="Click to sort by ECR">ECR</th><th class="sortcol" data-sort="myRank" title="Click to sort by intrinsic league value, lower=better">My</th><th>Proj</th><th title="Exposure across your other drafted leagues in this sport">Exp</th><th>Pos</th><th>Player</th><th>P.Rk</th><th class="dcol">Δ</th><th></th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -2269,7 +2270,7 @@ const LEAGUES_DEFAULT = {
   // plus 2 IR that are never drafted. Opponents are strangers in a public league,
   // so tendencies stay off and the rival model runs on value and roster need alone.
   'yahoo-nhl-public': {
-    id:'yahoo-nhl-public', name:'Yahoo NHL Public', sport:'nhl',
+    id:'yahoo-nhl-public', name:'Yahoo NHL Public — H2H Points (10-team reference)', sport:'nhl', platform:'yahoo',
     leagueType:'redraft', draftType:'snake', superflex:false,
     teams:10, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
     scoringLabel:'H2H Points', draftDateLabel:'TBD', keeperDeadlineLabel:'\u2014',
@@ -2282,9 +2283,33 @@ const LEAGUES_DEFAULT = {
     owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
     meOwner:'Me',
     ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
-    poolDataRevision:'nhl-2026-09-17-market',
+    poolDataRevision:'nhl-2026-09-26-platform-eligibility',
+    platformEligibility:{yahoo:{'jason robertson':'LW/RW'}},
     rostersRaw:'',
     playersCsv: PLAYERS_CSV_NHL,
+  },
+  'yahoo-nhl-public-categories': {
+    id:'yahoo-nhl-public-categories', name:'Yahoo NHL Public — H2H Categories (10-team reference)', sport:'nhl', platform:'yahoo',
+    leagueType:'redraft', draftType:'snake', superflex:false,
+    teams:10, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
+    scoringLabel:'H2H Categories', draftDateLabel:'TBD', keeperDeadlineLabel:'—',
+    starters:{C:2,LW:2,RW:2,D:4,G:2}, flexEligible:[], scoringMode:'categories',
+    categoryStats:{skater:['G','A','+/-','PPP','SOG','HIT'],goalie:['W','GAA','SV%','SHO']},
+    maxAcquisitionsPerWeek:4,minGoalieGamesPerWeek:3,
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
+    meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
+    platformEligibility:{yahoo:{'jason robertson':'LW/RW'}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
+  },
+  'yahoo-nhl-public-roto': {
+    id:'yahoo-nhl-public-roto', name:'Yahoo NHL Public — Rotisserie (10-team reference)', sport:'nhl', platform:'yahoo',
+    leagueType:'redraft', draftType:'snake', superflex:false,
+    teams:10, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
+    scoringLabel:'Rotisserie', draftDateLabel:'TBD', keeperDeadlineLabel:'—',
+    starters:{C:2,LW:2,RW:2,D:4,G:2}, flexEligible:[], scoringMode:'roto',
+    categoryStats:{skater:['G','A','+/-','PPP','SOG','BLK'],goalie:['W','GAA','SV%','SHO']}, maxGamesPlayed:82,
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
+    meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
+    platformEligibility:{yahoo:{'jason robertson':'LW/RW'}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
   },
   'fantastic-auction': {
     id:'fantastic-auction', name:'Fantastic Keeper Auction', leagueType:'keeper',
@@ -2710,6 +2735,9 @@ let totalPicks; // LEAGUE.teams*LEAGUE.rounds, set by applyLeagueProfile()
 let OWNERS=[], ME_OWNER='', OWNER_SLOT={}, TEAM_NAMES={}, MY_LOCKED=[];
 let ROSTERS_RAW='', PLAYERS_CSV='';
 let CURRENT_LEAGUE_ID='aeo-keepers';
+let EXPOSURE={denominator:0,counts:{}};
+const DEFAULT_STREAM_CONFIDENCE={C:0.80,LW:0.30,RW:0.30,D:0.60,G:0.75};
+let STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE};
 
 // parse rosters: owner -> [{player, drafted, keeper:(int|null)}]
 let ROSTERS={};
@@ -5578,7 +5606,8 @@ function applyLeagueProfile(id){
     keeperRules:profile.keeperRules||{},
     auctionBudget:profile.auctionBudget||200,rosterSize:profile.rosterSize||profile.rounds||16,irSlots:profile.irSlots||0,minBid:profile.minBid||1,
     scoringLabel:profile.scoringLabel||'TBD', draftDateLabel:profile.draftDateLabel||'TBD', keeperDeadlineLabel:profile.keeperDeadlineLabel||'TBD',
-    sport:SPORT.id, scoringMode:profile.scoringMode||'points', scoring:profile.scoring||null,
+    sport:SPORT.id, platform:profile.platform||null, scoringMode:profile.scoringMode||'points', scoring:profile.scoring||null,
+    categoryStats:profile.categoryStats||null, maxGamesPlayed:profile.maxGamesPlayed||null,
     maxAcquisitionsPerWeek:profile.maxAcquisitionsPerWeek||null, minGoalieGamesPerWeek:profile.minGoalieGamesPerWeek||null,
   };
   mySlot=LEAGUE.mySlot;
@@ -5594,10 +5623,12 @@ function applyLeagueProfile(id){
   rebuildSlotOwner(); rebuildTendencies(); fillRosterOwnerSelect();
 
   assigned=new Set(); cutPlayers=new Set(); pickOwnerOverride={}; playerTrades={}; queued=new Set(); KEEPERS=[]; picks=[]; auctionPicks=[]; curPick=1;
+  STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE};
 
   const w=el('seedWarn');
   if(PLAYERS_CSV && PLAYERS_CSV.indexOf('__PLAYERS')!==0 && PLAYERS_CSV.trim().length>20){
     loadPlayersData(PLAYERS_CSV);
+    applyPlatformEligibility(profile);
     if(w)w.style.display='none';
   } else if(profile.id==='aeo-keepers'){
     seedPool(); // baseline fallback, only meaningful for AEO-Keepers (real SEED data)
@@ -5639,6 +5670,7 @@ function applyLeagueProfile(id){
     if(el('faabWeek'))loadInSeasonState();
   }
   loadSetup();
+  loadExposure();
 }
 function switchLeague(id){
   if(!LEAGUES[id])return;
@@ -5671,7 +5703,7 @@ async function fetchCloudLeagues(){
       // already in KV, so production kept running the generic defaults and priced
       // a backup quarterback at $9. Backfill each such field independently, and
       // only where the cloud copy has no value at all.
-      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','scoring','scoringMode','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'];
+      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','platform','platformEligibility','scoring','scoringMode','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'];
       const isEmpty=v=>v==null||v===''||(Array.isArray(v)&&!v.length)||(typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length);
       const toPatch=[];
       Object.values(LEAGUES_DEFAULT).forEach(def=>{
