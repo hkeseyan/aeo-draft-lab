@@ -1,3 +1,5 @@
+- 🆕 2026-09-26 — **Correction: Yahoo NHL Public Prize leagues are 12-team.** Yahoo's current Prize help/default-settings material requires 12 managers for Public Prize Hockey, and the user's first official league, **Yahoo Prize H2H-Pts 135526**, completed with 12 teams. The earlier 10-team note conflated Public Free/default-public material with Public Prize. Draft Lab Prize references for H2H Points, H2H Categories, and Rotisserie are now 12-team; imported Yahoo leagues still trust the league's reported size because Public Free is a separate product. League 135526 is the user's first and only official NHL draft so far; its 192 picks and supplied Yahoo position eligibility are canonical for exposure and draft-history purposes.
+
 # Feedback inbox
 
 A running log of feedback and improvement ideas captured while actually using

@@ -587,7 +587,7 @@
         <button class="btn ghost" id="yahooListBtn">List my leagues</button>
         <select id="yahooLeagueSelect" aria-label="Yahoo league to inspect" style="min-width:170px"><option value="">List leagues first</option></select>
         <button class="btn ghost" id="yahooSettingsBtn">Compare settings</button>
-        <label class="small">My draft slot <input type="number" id="yahooImportSlot" min="1" max="10" value="4" style="width:58px"></label>
+        <label class="small">My draft slot <input type="number" id="yahooImportSlot" min="1" max="20" value="4" style="width:58px"></label>
         <button class="btn ghost" id="yahooImportBtn" disabled>Create matched NHL profile</button>
         <button class="btn ghost" id="yahooStatusBtn">Check status</button>
         <button class="btn ghost" id="yahooDisconnectBtn">Disconnect</button>
@@ -604,6 +604,7 @@
         <label class="small">Sport <select id="lgSport"><option value="nfl">🏈 NFL</option><option value="nhl">🏒 NHL</option></select></label>
         <label class="small">Draft type <select id="lgDraftType"><option value="snake">Snake</option><option value="linear">Linear (no snake)</option><option value="auction">Auction</option></select></label>
         <label class="small"><input type="checkbox" id="lgSuperflex"> Superflex</label>
+        <label class="small" title="Only official drafted leagues count toward cross-league player exposure. Mocks and reference profiles do not."><input type="checkbox" id="lgOfficialDraft"> Official drafted league</label>
       </div>
       <div class="row" style="margin-top:8px">
         <label class="small">League type <select id="lgLeagueType">
@@ -2244,6 +2245,33 @@ const FANTASTIC_2026_STRATEGY={
 // this const only matters if the API is unreachable or on the very first boot ever
 // (which seeds the cloud with these verbatim, so AEO-Keepers' real data becomes the
 // cloud copy byte-identical to what's live today — see fetchCloudLeagues()).
+// Yahoo Public Prize hockey currently requires 12 managers. Public Free
+// leagues can still differ, so imports trust the league's reported team count.
+// Multi-position entries below were observed directly in Yahoo league 135526 on
+// Sep 26 and are used as the platform-specific fallback until Yahoo API sync is live.
+const YAHOO_NHL_PRIZE_TEAMS=12;
+const YAHOO_NHL_VERIFIED_ELIGIBILITY={
+  'leon draisaitl':'C/LW','jason robertson':'LW/RW','cole caufield':'LW/RW',
+  'matt boldy':'LW/RW','wyatt johnston':'C/RW','jack hughes':'C/LW',
+  'mikko rantanen':'LW/RW','brady tkachuk':'C/LW','cutter gauthier':'C/LW/RW',
+  'tage thompson':'C/RW','matthew tkachuk':'LW/RW','brandon hagel':'LW/RW',
+  'mitch marner':'C/LW/RW','jake guentzel':'LW/RW','dylan guenther':'LW/RW',
+  'alex debrincat':'LW/RW','william nylander':'C/RW','clayton keller':'LW/RW',
+  'juraj slafkovský':'LW/RW','tim stützle':'C/LW','mika zibanejad':'C/RW',
+  'will smith':'LW/RW','connor bedard':'C/RW','dylan holloway':'C/LW',
+  'pavel dorofeyev':'LW/RW','andrei svechnikov':'LW/RW','jesper bratt':'LW/RW',
+  'nick schmaltz':'C/RW','alex tuch':'LW/RW','drake batherson':'LW/RW',
+  'alex ovechkin':'LW/RW','morgan geekie':'C/LW/RW','travis konecny':'LW/RW',
+  'artturi lehkonen':'LW/RW','j.t. miller':'C/LW/RW','zach hyman':'LW/RW',
+  'seth jarvis':'LW/RW','rickard rakell':'C/LW/RW','luke evangelista':'LW/RW',
+  'timo meier':'LW/RW','trevor zegras':'C/LW/RW','matthew knies':'LW/RW',
+  'gabriel vilardi':'C/RW','mathew barzal':'C/RW','gabriel landeskog':'LW/RW',
+  'steven stamkos':'C/RW','jj peterka':'LW/RW','john-jason peterka':'LW/RW',
+  'anthony mantha':'LW/RW','pavel zacha':'C/LW','tyler bertuzzi':'LW/RW',
+  'brad marchand':'LW/RW','tomas hertl':'C/LW','alexis lafreniere':'LW/RW',
+  'igor chernyshov':'LW/RW'
+};
+
 const LEAGUES_DEFAULT = {
   'aeo-keepers': {
     id:'aeo-keepers', name:'AEO-Keepers',
@@ -2265,51 +2293,52 @@ const LEAGUES_DEFAULT = {
     rostersRaw: ROSTERS_RAW_AEO,
     playersCsv: PLAYERS_CSV_AEO,
   },
-  // Yahoo's default public hockey league, verified against Yahoo's own settings
-  // page: 10 teams, H2H points, 2C/2LW/2RW/4D/2G starters + 4 bench = 16 draftable,
-  // plus 2 IR that are never drafted. Opponents are strangers in a public league,
-  // so tendencies stay off and the rival model runs on value and roster need alone.
+  // Yahoo Public Prize Hockey: Yahoo's current help page and the completed
+  // 135526 league both show 12 managers. Roster/scoring remain 2C/2LW/2RW/4D/2G,
+  // 4 bench and 2 IR. Public Free leagues are a separate product and can be 10;
+  // live imports use Yahoo's reported team count rather than assuming Prize size.
   'yahoo-nhl-public': {
-    id:'yahoo-nhl-public', name:'Yahoo NHL Public — H2H Points (10-team reference)', sport:'nhl', platform:'yahoo',
-    leagueType:'redraft', draftType:'snake', superflex:false,
-    teams:10, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
+    id:'yahoo-nhl-public', name:'Yahoo Public Prize NHL — H2H Points (12-team reference)', sport:'nhl', platform:'yahoo',
+    leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,
+    referenceDataRevision:'yahoo-prize-2026-09-26-12-team-v1',
+    teams:YAHOO_NHL_PRIZE_TEAMS, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
     scoringLabel:'H2H Points', draftDateLabel:'TBD', keeperDeadlineLabel:'\u2014',
     starters:{C:2,LW:2,RW:2,D:4,G:2}, flexEligible:[],
     scoringMode:'points',
-    // Yahoo's default point values, used to score the pool and the Add Radar.
     scoring:{g:6,a:4,pm:2,ppp:2,sog:0.9,blk:1,w:5,ga:-3,sv:0.6,sho:5},
-    // Yahoo's default in-season constraints; the Add Radar budgets against these.
     maxAcquisitionsPerWeek:4, minGoalieGamesPerWeek:3,
-    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
     meOwner:'Me',
-    ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
+    ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
     poolDataRevision:'nhl-2026-09-26-platform-eligibility',
-    platformEligibility:{yahoo:{'jason robertson':'LW/RW'}},
+    platformEligibility:{yahoo:{...YAHOO_NHL_VERIFIED_ELIGIBILITY}},
     rostersRaw:'',
     playersCsv: PLAYERS_CSV_NHL,
   },
   'yahoo-nhl-public-categories': {
-    id:'yahoo-nhl-public-categories', name:'Yahoo NHL Public — H2H Categories (10-team reference)', sport:'nhl', platform:'yahoo',
-    leagueType:'redraft', draftType:'snake', superflex:false,
-    teams:10, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
+    id:'yahoo-nhl-public-categories', name:'Yahoo Public Prize NHL — H2H Categories (12-team reference)', sport:'nhl', platform:'yahoo',
+    leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,
+    referenceDataRevision:'yahoo-prize-2026-09-26-12-team-v1',
+    teams:YAHOO_NHL_PRIZE_TEAMS, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
     scoringLabel:'H2H Categories', draftDateLabel:'TBD', keeperDeadlineLabel:'—',
     starters:{C:2,LW:2,RW:2,D:4,G:2}, flexEligible:[], scoringMode:'categories',
     categoryStats:{skater:['G','A','+/-','PPP','SOG','HIT'],goalie:['W','GAA','SV%','SHO']},
     maxAcquisitionsPerWeek:4,minGoalieGamesPerWeek:3,
-    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
-    meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
-    platformEligibility:{yahoo:{'jason robertson':'LW/RW'}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
+    meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
+    platformEligibility:{yahoo:{...YAHOO_NHL_VERIFIED_ELIGIBILITY}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
   },
   'yahoo-nhl-public-roto': {
-    id:'yahoo-nhl-public-roto', name:'Yahoo NHL Public — Rotisserie (10-team reference)', sport:'nhl', platform:'yahoo',
-    leagueType:'redraft', draftType:'snake', superflex:false,
-    teams:10, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
+    id:'yahoo-nhl-public-roto', name:'Yahoo Public Prize NHL — Rotisserie (12-team reference)', sport:'nhl', platform:'yahoo',
+    leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,
+    referenceDataRevision:'yahoo-prize-2026-09-26-12-team-v1',
+    teams:YAHOO_NHL_PRIZE_TEAMS, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
     scoringLabel:'Rotisserie', draftDateLabel:'TBD', keeperDeadlineLabel:'—',
     starters:{C:2,LW:2,RW:2,D:4,G:2}, flexEligible:[], scoringMode:'roto',
     categoryStats:{skater:['G','A','+/-','PPP','SOG','BLK'],goalie:['W','GAA','SV%','SHO']}, maxGamesPlayed:82,
-    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
-    meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
-    platformEligibility:{yahoo:{'jason robertson':'LW/RW'}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
+    meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
+    platformEligibility:{yahoo:{...YAHOO_NHL_VERIFIED_ELIGIBILITY}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
   },
   'fantastic-auction': {
     id:'fantastic-auction', name:'Fantastic Keeper Auction', leagueType:'keeper',
@@ -2620,8 +2649,10 @@ LEAGUES_DEFAULT['public-points-league-1']={
   ...LEAGUES_DEFAULT['yahoo-nhl-public'],
   id:'public-points-league-1',name:'Yahoo Prize H2H-Pts 135526',teams:12,mySlot:4,
   yahooLeagueId:'135526',yahooLeagueUrl:'https://hockey.fantasysports.yahoo.com/hockey/135526',
+  officialDraft:true, draftSource:'Yahoo draft results supplied Sep 26',
+  platform:'yahoo', platformEligibility:{yahoo:{...YAHOO_NHL_VERIFIED_ELIGIBILITY}},
   draftDateLabel:'Sep 26 · complete',poolDataRevision:'public-points-1-p192',
-  liveDraftRevision:'2026-09-26-p192',
+  liveDraftRevision:'2026-09-26-p192-user-verified',
   // Barkov was absent from the Sep 17 pool; a minimal row lets the reported
   // pick occupy its real board cell without inventing a projection.
   playersCsv:PLAYERS_CSV_NHL+'\nAleksander Barkov,C,FLA,63,63,0,5'+
@@ -2832,8 +2863,10 @@ const NHL_TEAM_UPDATES={
   'John Carlson':'TBL','Frederik Andersen':'EDM','Brady Tkachuk':'FLA',
   'Darren Raddysh':'TOR','Pavel Dorofeyev':'NYR','Mason Marchment':'SJS',
   'Sergei Bobrovsky':'TOR','Luke Evangelista':'NJD','Jordan Kyrou':'WSH',
-  'Simon Nemec':'CGY','John-Jason Peterka':'BOS','Mason McTavish':'STL',
-  'Patrick Kane':'CHI',
+  'Simon Nemec':'CGY','John-Jason Peterka':'BOS','JJ Peterka':'BOS',
+  'Mason McTavish':'STL','Patrick Kane':'CHI','Quinn Hughes':'MIN',
+  'Noah Dobson':'MTL','Artemi Panarin':'LAK','Alex Tuch':'WSH',
+  'MacKenzie Weegar':'UTA','Bowen Byram':'CHI','Jacob Trouba':'SJS',
 };
 const NHL_POSITION_UPDATES={
   'Jason Robertson':'LW/RW','Cutter Gauthier':'C/LW/RW',
@@ -4631,6 +4664,7 @@ function loadLeagueIntoForm(id){
   el('lgLeagueType').value=p.leagueType||'keeper';
   updateLgKeeperFieldsVisibility();
   el('lgSuperflex').checked=!!p.superflex;
+  el('lgOfficialDraft').checked=!!p.officialDraft;
   el('lgScoring').value=p.scoringLabel||'';
   el('lgDraftDate').value=p.draftDateLabel||'';
   el('lgKeeperDeadline').value=p.keeperDeadlineLabel||'';
@@ -4780,6 +4814,7 @@ function collectLeagueForm(){
     draftType: el('lgDraftType').value,
     leagueType: el('lgLeagueType').value,
     superflex: el('lgSuperflex').checked,
+    officialDraft: el('lgOfficialDraft').checked,
     scoringLabel: el('lgScoring').value.trim()||'TBD',
     draftDateLabel: el('lgDraftDate').value.trim()||'TBD',
     keeperDeadlineLabel: el('lgKeeperDeadline').value.trim()||'TBD',
@@ -4825,7 +4860,7 @@ function newLeagueForm(){
   el('lgName').value='New League'; el('lgTeams').value=12; el('lgRounds').value=16; el('lgDraftType').value='snake';
   if(el('lgSport')) el('lgSport').value=ACTIVE_SPORT;
   el('lgLeagueType').value='keeper'; updateLgKeeperFieldsVisibility();
-  el('lgSuperflex').checked=false; el('lgScoring').value='TBD'; el('lgDraftDate').value='TBD';
+  el('lgSuperflex').checked=false; el('lgOfficialDraft').checked=false; el('lgScoring').value='TBD'; el('lgDraftDate').value='TBD';
   el('lgKeeperDeadline').value='TBD'; el('lgMaxKeepers').value=''; el('lgKeeperCostType').value='round';
   el('lgMySlot').value=''; el('lgOwners').value=''; el('lgRostersRaw').value=''; el('lgPlayersCsv').value='';
   renderStartersInputs({QB:1,RB:2,WR:2,TE:1,FLEX:1,K:1,DST:1});
@@ -5026,10 +5061,10 @@ async function compareYahooSettings(){
       ? '✓ all reference scoring modifiers match'
       : known.length?`⚠ scoring checked ${known.length}/${Object.keys(baseline.scoring).length}; differing ${mismatch.join(', ')||'none found'}; review raw values`
       : '⚠ scoring modifiers could not be mapped; review raw values';
-    el('yahooStatus').textContent=`${data.name||key} · ${data.teams||'?'} teams (reference 10) · ${data.scoringType||'?'} scoring · ${data.draftType||'?'} draft · ${positionStatus} · ${scoringStatus}.`;
-    if(data.teams===10&&positionMatch&&known.length===10&&!mismatch.length&&
+    el('yahooStatus').textContent=`${data.name||key} · ${data.teams||'?'} teams (Public Prize reference ${baseline.teams}) · ${data.scoringType||'?'} scoring · ${data.draftType||'?'} draft · ${positionStatus} · ${scoringStatus}.`;
+    if([10,12].includes(Number(data.teams))&&positionMatch&&known.length===10&&!mismatch.length&&
       String(data.scoringType||'').includes('point')&&!/auction/i.test(data.draftType||'')){
-      yahooCompared={key,name:data.name||'Yahoo NHL Public',platformEligibility:data.platformEligibility||{}};
+      yahooCompared={key,name:data.name||'Yahoo NHL Public',teams:Number(data.teams),platformEligibility:data.platformEligibility||{}};
       el('yahooImportBtn').disabled=false;
       el('yahooStatus').textContent+=' Settings match; enter your slot and create the profile.';
     }
@@ -5038,15 +5073,15 @@ async function compareYahooSettings(){
 }
 async function importMatchedYahooNhl(){
   if(!yahooCompared)return;
-  const slot=Number(el('yahooImportSlot').value);
-  if(!Number.isInteger(slot)||slot<1||slot>10){el('yahooStatus').textContent='Enter your draft slot from 1 to 10.';return;}
+  const slot=Number(el('yahooImportSlot').value), teamCount=Number(yahooCompared.teams)||LEAGUES_DEFAULT['yahoo-nhl-public'].teams;
+  if(!Number.isInteger(slot)||slot<1||slot>teamCount){el('yahooStatus').textContent='Enter your draft slot from 1 to '+teamCount+'.';return;}
   const existing=Object.values(LEAGUES).find(p=>p.yahooLeagueKey===yahooCompared.key);
   if(existing){switchLeague(existing.id);el('yahooStatus').textContent='This Yahoo league is already imported; switched to it.';return;}
-  const owners=Array.from({length:10},(_,i)=>i+1===slot?'Me':`Team ${i+1}`);
+  const owners=Array.from({length:teamCount},(_,i)=>i+1===slot?'Me':`Team ${i+1}`);
   const ownerSlot=Object.fromEntries(owners.map((owner,i)=>[owner,i+1]));
   const baseline=LEAGUES_DEFAULT['yahoo-nhl-public'];
   const body={...baseline,id:undefined,
-    name:yahooCompared.name, yahooLeagueKey:yahooCompared.key, platform:'yahoo',
+    name:yahooCompared.name, yahooLeagueKey:yahooCompared.key, platform:'yahoo', teams:teamCount, officialDraft:false,
     platformEligibility:{yahoo:{...(baseline.platformEligibility&&baseline.platformEligibility.yahoo||{}),...(yahooCompared.platformEligibility||{})}},
     mySlot:slot,owners,ownerSlot,meOwner:'Me',draftDateLabel:'Check Yahoo draft room'};
   try{
@@ -5826,8 +5861,12 @@ async function fetchCloudLeagues(){
         if(def.poolDataRevision && cur.poolDataRevision!==def.poolDataRevision){
           ['poolDataRevision','playersCsv'].forEach(f=>{ if(def[f]!==undefined)add[f]=def[f]; });
         }
+        if(def.referenceDataRevision && cur.referenceDataRevision!==def.referenceDataRevision){
+          ['referenceDataRevision','name','teams','rounds','rosterSize','irSlots','owners','meOwner','ownerSlot','officialDraft','platformEligibility','scoringLabel','scoringMode','scoring','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek']
+            .forEach(f=>{if(def[f]!==undefined)add[f]=def[f];});
+        }
         if(def.liveDraftRevision && cur.liveDraftRevision!==def.liveDraftRevision){
-          ['liveDraftRevision','initialPickNames','name','owners','meOwner','ownerSlot','draftDateLabel','yahooLeagueId','yahooLeagueUrl']
+          ['liveDraftRevision','initialPickNames','name','teams','owners','meOwner','ownerSlot','draftDateLabel','yahooLeagueId','yahooLeagueUrl','officialDraft','draftSource','platform','platformEligibility']
             .forEach(f=>{if(def[f]!==undefined)add[f]=def[f];});
         }
         if(def.auctionDataRevision && cur.auctionDataRevision!==def.auctionDataRevision){

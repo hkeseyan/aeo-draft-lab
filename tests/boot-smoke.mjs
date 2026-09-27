@@ -80,6 +80,7 @@ ok &= check('football flex intact', 'LEAGUE.flexEligible.join(",")', 'RB,WR,TE')
 ev('switchLeague("yahoo-nhl-public")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('switched to the NHL league', 'CURRENT_LEAGUE_ID', 'yahoo-nhl-public');
+ok &= check('Yahoo Public Prize points reference is 12 teams', 'LEAGUE.teams', 12);
 ok &= check('NHL sport pack active', 'SPORT.id', 'nhl');
 ok &= check('recommendations share a row with the full player list', () =>
   w.document.getElementById('nhlLiveCard').parentElement.id === 'snakeDraftGrid' &&
@@ -181,15 +182,15 @@ ok &= check('NHL portraits and team logos use NHL assets',
   'headshotImg(PLAYERS.find(p=>p.name==="Cale Makar")).includes("assets.nhle.com/mugs") && teamLogoImg(PLAYERS.find(p=>p.name==="Cale Makar")).includes("COL_dark.svg")', true);
 ok &= check('recommendation includes next turn and roster state',
   'nhlLiveRecommendations()[0].next > nhlLiveRecommendations()[0].now && nhlLiveRecommendations()[0].counts.G===0', true);
-ev('mySlot=10');
+ev('mySlot=12');
 ok &= check('turn picks use the following turn as the survival horizon',
-  'nhlLiveRecommendations()[0].now+1===11 && nhlLiveRecommendations()[0].next===30', true);
+  'nhlLiveRecommendations()[0].now===12 && nhlLiveRecommendations()[0].now+1===13 && nhlLiveRecommendations()[0].next===36', true);
 ev('mySlot=1');
 const originalRank = ev('PLAYERS.find(p=>p.name==="Cale Makar").myRank');
 ev(`(function(){
   makePick(PLAYERS.find(p=>p.name==='Igor Shesterkin').id,1);
-  makePick(PLAYERS.find(p=>p.name==='Carter Hart').id,20);
-  curPick=21; render();
+  makePick(PLAYERS.find(p=>p.name==='Carter Hart').id,24);
+  curPick=25; render();
 })()`);
 ok &= check('G3 is absent from the top six after drafting two goalies',
   'nhlLiveRecommendations().every(x=>x.player.pos!=="G")', true);
@@ -304,13 +305,13 @@ ok &= check('more games beats fewer at equal rate', () => JSON.parse(ev(`(functi
 ev('switchLeague("public-points-league-1")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('live league has 12 teams and slot 4', 'LEAGUE.teams===12 && mySlot===4', true);
-ok &= check('Yahoo league ID and team name attached',
-  'LEAGUES[CURRENT_LEAGUE_ID].yahooLeagueId==="135526" && ME_OWNER==="Individual Neutral Athletes"', true);
+ok &= check('Yahoo league ID, team name, and official status attached',
+  'LEAGUES[CURRENT_LEAGUE_ID].yahooLeagueId==="135526" && ME_OWNER==="Individual Neutral Athletes" && LEAGUES[CURRENT_LEAGUE_ID].officialDraft===true', true);
 ok &= check('all 192 draft picks resolved in unique slots',
   'picks.length===192 && new Set(picks.map(x=>x.overall)).size===192 && new Set(picks.map(x=>x.playerId)).size===192', true);
 ok &= check('draft complete', 'curPick', 193);
-ok &= check('Yahoo winger eligibility overrides stale single-position pool',
-  'playerFillsPos(findPlayer("J. Robertson"),"RW") && playerFillsPos(findPlayer("C. Gauthier"),"C")', true);
+ok &= check('Yahoo draft-result eligibility overrides stale pool positions',
+  'playerFillsPos(findPlayer("J. Robertson"),"RW") && playerFillsPos(findPlayer("C. Gauthier"),"C") && playerFillsPos(findPlayer("M. Marner"),"C") && playerFillsPos(findPlayer("J.T. Miller"),"RW")', true);
 ok &= check('accent-insensitive and initial search match the NHL pool',
   'playerMatchesSearch(findPlayer("Tim Stützle"),"T. Stutzle") && playerMatchesSearch(findPlayer("Juraj Slafkovský"),"Slafkovsky")', true);
 ok &= check('completed draft has 16 rostered players', 'myRoster().length', 16);
@@ -343,14 +344,14 @@ ok &= check('saved 77-pick board extends without replacing a manual slot',
 liveSetupOverride = null;
 ev('switchLeague("yahoo-nhl-public-categories")');
 await new Promise(r => setTimeout(r, 250));
-ok &= check('categories reference is 10 teams with hits',
-  'LEAGUE.teams===10 && LEAGUE.scoringMode==="categories" && LEAGUE.categoryStats.skater.includes("HIT")', true);
+ok &= check('Public Prize categories reference is 12 teams with hits',
+  'LEAGUE.teams===12 && LEAGUE.scoringMode==="categories" && LEAGUE.categoryStats.skater.includes("HIT")', true);
 ok &= check('categories profile computes category replacement value',
   'PLAYERS.filter(p=>Number.isFinite(p.categoryValue)&&/H2H cat z/.test(p.myRankWhy||"")).length', v => v > 300);
 ev('switchLeague("yahoo-nhl-public-roto")');
 await new Promise(r => setTimeout(r, 250));
-ok &= check('roto reference is 10 teams with blocks and 82-game cap',
-  'LEAGUE.teams===10 && LEAGUE.scoringMode==="roto" && LEAGUE.categoryStats.skater.includes("BLK") && !LEAGUE.categoryStats.skater.includes("HIT") && LEAGUE.maxGamesPlayed===82', true);
+ok &= check('Public Prize roto reference is 12 teams with blocks and 82-game cap',
+  'LEAGUE.teams===12 && LEAGUE.scoringMode==="roto" && LEAGUE.categoryStats.skater.includes("BLK") && !LEAGUE.categoryStats.skater.includes("HIT") && LEAGUE.maxGamesPlayed===82', true);
 ok &= check('roto profile computes category replacement value',
   'PLAYERS.filter(p=>Number.isFinite(p.categoryValue)&&/roto z/.test(p.myRankWhy||"")).length', v => v > 300);
 ev('switchLeague("aeo-keepers")');

@@ -480,26 +480,36 @@ function profileSlotForOverall(profile, ov) {
 }
 __name(profileSlotForOverall, "profileSlotForOverall");
 function savedRosterNames(profile, setup) {
-  if (!setup) return [];
-  if (Array.isArray(setup.myRosterNames) && setup.myRosterNames.length) {
+  if (setup && Array.isArray(setup.myRosterNames) && setup.myRosterNames.length) {
     return [...new Set(setup.myRosterNames.map(String).map((x) => x.trim()).filter(Boolean))];
   }
-  const idToName = clientPlayerIdNameMap(profile);
   const mySlot = Number(profile && profile.mySlot);
   if (!mySlot) return [];
   const names = [];
-  const overrides = setup.pickOwnerOverride || {};
-  (setup.picks || []).forEach((pk) => {
-    const ov = Number(pk.overall);
-    const owner = Number(overrides[ov] || profileSlotForOverall(profile, ov));
-    const name = idToName.get(Number(pk.playerId));
-    if (owner === mySlot && name) names.push(name);
-  });
-  (setup.auctionPicks || []).forEach((pk) => {
-    const name = idToName.get(Number(pk.playerId));
-    if (Number(pk.owner) === mySlot && name) names.push(name);
-  });
-  return [...new Set(names)];
+  if (setup) {
+    const idToName = clientPlayerIdNameMap(profile);
+    const overrides = setup.pickOwnerOverride || {};
+    (setup.picks || []).forEach((pk) => {
+      const ov = Number(pk.overall);
+      const owner = Number(overrides[ov] || profileSlotForOverall(profile, ov));
+      const name = idToName.get(Number(pk.playerId));
+      if (owner === mySlot && name) names.push(name);
+    });
+    (setup.auctionPicks || []).forEach((pk) => {
+      const name = idToName.get(Number(pk.playerId));
+      if (Number(pk.owner) === mySlot && name) names.push(name);
+    });
+  }
+  // Completed built-in/imported official drafts can carry their canonical board
+  // directly on the profile. Use it as a durable fallback so exposure does not
+  // disappear merely because a browser-specific setup record was never saved.
+  if (!names.length && profile && profile.officialDraft === true && Array.isArray(profile.initialPickNames)) {
+    profile.initialPickNames.forEach((name, idx) => {
+      const ov = idx + 1;
+      if (profileSlotForOverall(profile, ov) === mySlot && name) names.push(String(name).trim());
+    });
+  }
+  return [...new Set(names.filter(Boolean))];
 }
 __name(savedRosterNames, "savedRosterNames");
 function fantasyProsLeagueKey(value) {
@@ -1193,6 +1203,9 @@ var worker_default = {
         const leagues = [];
         for (const profile of profiles) {
           if (!profile || profile.id === lg || String(profile.sport || "nfl") !== sport) continue;
+          // Exposure is portfolio ownership, not mock-draft repetition. Only
+          // leagues explicitly marked as official drafted teams contribute.
+          if (profile.officialDraft !== true) continue;
           const setup = await kv.get(scoped(setupKey(profile.id), me), { type: "json" });
           const names = savedRosterNames(profile, setup);
           if (!names.length) continue;

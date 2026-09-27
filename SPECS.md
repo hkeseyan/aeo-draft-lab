@@ -63,9 +63,11 @@ projection-confidence discount and a small option-value bonus for extra position
 confidence, and any dated health-watch adjustment.
 
 For **H2H Categories and Rotisserie**, the same architecture uses standardized
-category value before positional replacement. The 10-team Yahoo references use
-H2H skater G/A/+/-/PPP/SOG/HIT and goalie W/GAA/SV%/SHO; Roto changes HIT to BLK
-and records the 82-game position cap. Goalie GAA is currently approximated from
+category value before positional replacement. The Yahoo **Public Prize** references
+are 12-team: H2H uses skater G/A/+/-/PPP/SOG/HIT and goalie W/GAA/SV%/SHO; Roto
+changes HIT to BLK and records the 82-game position cap. Yahoo Public Free is a
+separate product and may use a different league size, so imported leagues trust
+Yahoo's reported team count rather than inheriting the Prize size. Goalie GAA is currently approximated from
 projected GA/game because the embedded projection does not carry goalie TOI.
 
 **Live pick recommendations are separate from My Rank.** The existing NHL live
@@ -83,11 +85,15 @@ retain league `eligiblePos` values. Display, filters, roster fitting, scarcity, 
 recommendations all use the same eligibility. The old green `F` pip is removed
 because the full position string is already shown.
 
-**Yahoo references and imported leagues.** Generic Yahoo public hockey references
-remain **10-team** for H2H Points, H2H Categories, and Rotisserie. The completed
-`public-points-league-1` / Yahoo 135526 profile is separately 12-team because that
-specific prize league actually drafted with 12 teams; it must not be used as the
-generic public reference. Custom/bangers formats are imported rather than guessed.
+**Yahoo references and imported leagues.** Yahoo's current Public Prize Hockey
+settings require **12 managers**, so the H2H Points, H2H Categories, and Rotisserie
+Prize reference profiles are all 12-team. The completed
+`public-points-league-1` / **Yahoo Prize H2H-Pts 135526** is the first official
+drafted NHL league and stores all 192 picks, the exact 12 team names/slots, and
+Yahoo-observed multi-position eligibility supplied with the draft results. Public
+Free remains distinct; the Yahoo importer accepts either 10 or 12 teams when Yahoo
+reports those settings instead of forcing one size. Custom/bangers formats are
+imported rather than guessed.
 
 ## App shape
 
@@ -125,10 +131,11 @@ from C to LW when a C-only player is drafted. Roster rows show the same full
 active-platform position eligibility, portrait, and team logo as the draft list.
 
 **Exposure**: Best Available includes `Exp` such as `2/4`: the numerator is how many
-of the user's other saved leagues in the same sport roster that player; the
-denominator is how many prior same-sport leagues currently have a saved drafted
-roster. The active draft is excluded. Exposure is context only and does not silently
-alter My Rank.
+of the user's other **official drafted** leagues in the same sport roster that
+player; the denominator is the number of prior same-sport leagues explicitly marked
+"Official drafted league." The active draft, reference profiles, and practice mocks
+are excluded. Yahoo Prize H2H-Pts 135526 is currently the first and only official
+NHL league. Exposure is context only and does not silently alter My Rank.
 
 **Queue**: check "Q" next to any player in Best Available to add them to
 "My Queue" — a shortlist of upcoming targets, shown in ADP order with a
