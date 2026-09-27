@@ -29,9 +29,13 @@ var commishHistoryKey = /* @__PURE__ */ __name((lg) => `commishHistory:${lg}`, "
 var inSeasonStateKey = /* @__PURE__ */ __name((lg) => `inseason:${lg}`, "inSeasonStateKey");
 var inSeasonReportsKey = /* @__PURE__ */ __name((lg) => `inseasonReports:${lg}`, "inSeasonReportsKey");
 var inSeasonReportKey = /* @__PURE__ */ __name((lg, id) => `inseasonReport:${lg}:${id}`, "inSeasonReportKey");
+var inSeasonTicketsKey = /* @__PURE__ */ __name((lg) => `inseasonTickets:${lg}`, "inSeasonTicketsKey");
+var inSeasonTicketKey = /* @__PURE__ */ __name((lg, id) => `inseasonTicket:${lg}:${id}`, "inSeasonTicketKey");
 var leagueSourceConfigKey = /* @__PURE__ */ __name((lg) => `leagueSource:${lg}`, "leagueSourceConfigKey");
 var leagueSnapshotKey = /* @__PURE__ */ __name((lg) => `leagueSnapshot:${lg}`, "leagueSnapshotKey");
 var FAAB_CALIBRATION_VERSION = "off-with-their-heads-2025-plus-2026-09-16";
+var WAIVER_TICKET_STATUSES = /* @__PURE__ */ new Set(["draft", "approved", "submitted", "verified", "not_won", "cancelled"]);
+var WAIVER_TICKET_ACTIONS = /* @__PURE__ */ new Set(["add", "drop", "hold", "wait"]);
 function slugify(s) {
   return String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-+|-+$)/g, "").slice(0, 40) || "league";
 }
@@ -646,6 +650,85 @@ async function saveInSeasonReport(kv, lg, report, me = null) {
   return report;
 }
 __name(saveInSeasonReport, "saveInSeasonReport");
+function waiverTicketSummary(ticket) {
+  return {
+    id: ticket.id,
+    createdAt: ticket.createdAt,
+    updatedAt: ticket.updatedAt,
+    status: ticket.status,
+    action: ticket.action,
+    player: ticket.player,
+    pos: ticket.pos,
+    team: ticket.team,
+    suggestedDrop: ticket.suggestedDrop,
+    recommendedBid: ticket.recommendedBid,
+    projectedWinningBid: ticket.projectedWinningBid,
+    stretchBid: ticket.stretchBid,
+    waiverMethod: ticket.waiverMethod,
+    deadline: ticket.deadline,
+    teamDirection: ticket.teamDirection,
+    draftOrderRule: ticket.draftOrderRule,
+    trigger: ticket.trigger,
+    rationale: ticket.rationale,
+    reportId: ticket.reportId,
+    snapshotAt: ticket.snapshotAt,
+    submittedAt: ticket.submittedAt,
+    verifiedAt: ticket.verifiedAt,
+    closedAt: ticket.closedAt
+  };
+}
+__name(waiverTicketSummary, "waiverTicketSummary");
+function ticketText(value, max = 500) {
+  return String(value == null ? "" : value).trim().slice(0, max);
+}
+__name(ticketText, "ticketText");
+function normalizeWaiverTicket(body = {}, previous = null) {
+  const now = Date.now();
+  const requestedStatus = String(body.status || previous && previous.status || "draft").toLowerCase();
+  const requestedAction = String(body.action || previous && previous.action || "add").toLowerCase();
+  const status = WAIVER_TICKET_STATUSES.has(requestedStatus) ? requestedStatus : "draft";
+  const action = WAIVER_TICKET_ACTIONS.has(requestedAction) ? requestedAction : "add";
+  const ticket = {
+    ...(previous || {}),
+    id: previous && previous.id || `${now.toString(36)}-${crypto.randomUUID().slice(0, 8)}`,
+    createdAt: previous && previous.createdAt || now,
+    updatedAt: now,
+    status,
+    action,
+    player: ticketText(body.player == null ? previous && previous.player : body.player, 120),
+    pos: ticketText(body.pos == null ? previous && previous.pos : body.pos, 24).toUpperCase(),
+    team: ticketText(body.team == null ? previous && previous.team : body.team, 24).toUpperCase(),
+    suggestedDrop: ticketText(body.suggestedDrop == null ? previous && previous.suggestedDrop : body.suggestedDrop, 120),
+    recommendedBid: Math.max(0, n(body.recommendedBid == null ? previous && previous.recommendedBid : body.recommendedBid, 0)),
+    projectedWinningBid: Math.max(0, n(body.projectedWinningBid == null ? previous && previous.projectedWinningBid : body.projectedWinningBid, 0)),
+    stretchBid: Math.max(0, n(body.stretchBid == null ? previous && previous.stretchBid : body.stretchBid, 0)),
+    waiverMethod: ticketText(body.waiverMethod == null ? previous && previous.waiverMethod : body.waiverMethod, 40) || "unknown",
+    deadline: ticketText(body.deadline == null ? previous && previous.deadline : body.deadline, 80),
+    teamDirection: ticketText(body.teamDirection == null ? previous && previous.teamDirection : body.teamDirection, 40) || "unspecified",
+    draftOrderRule: ticketText(body.draftOrderRule == null ? previous && previous.draftOrderRule : body.draftOrderRule, 160),
+    trigger: ticketText(body.trigger == null ? previous && previous.trigger : body.trigger, 500),
+    rationale: ticketText(body.rationale == null ? previous && previous.rationale : body.rationale, 2e3),
+    executionNote: ticketText(body.executionNote == null ? previous && previous.executionNote : body.executionNote, 1e3),
+    reportId: ticketText(body.reportId == null ? previous && previous.reportId : body.reportId, 80),
+    snapshotAt: Math.max(0, n(body.snapshotAt == null ? previous && previous.snapshotAt : body.snapshotAt, 0)) || null
+  };
+  if (!ticket.player && action !== "hold" && action !== "wait") throw new Error("A player is required for an add or drop ticket.");
+  if (status === "submitted" && !ticket.submittedAt) ticket.submittedAt = now;
+  if (status === "verified" && !ticket.verifiedAt) ticket.verifiedAt = now;
+  if ((status === "not_won" || status === "cancelled") && !ticket.closedAt) ticket.closedAt = now;
+  return ticket;
+}
+__name(normalizeWaiverTicket, "normalizeWaiverTicket");
+async function saveWaiverTicket(kv, lg, ticket, me) {
+  const ticketKey = scoped(inSeasonTicketKey(lg, ticket.id), me);
+  const ticketsKey = scoped(inSeasonTicketsKey(lg), me);
+  await kv.put(ticketKey, JSON.stringify(ticket));
+  const current = await kv.get(ticketsKey, { type: "json" }) || [];
+  const index = [waiverTicketSummary(ticket), ...current.filter((x) => x.id !== ticket.id)].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 100);
+  await kv.put(ticketsKey, JSON.stringify(index));
+  return ticket;
+}
+__name(saveWaiverTicket, "saveWaiverTicket");
 function reportEmailHtml(report) {
   const h = /* @__PURE__ */ __name((v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]), "h");
   const rows = report.recommendations.slice(0, 20).map((p) => `<tr><td>${h(p.name)}</td><td>${h(p.pos)}</td><td>$${p.recommendedBid}</td><td>$${p.projectedWinningBid}</td><td>$${p.stretchBid}</td><td>${h(p.reasons.join("; "))}</td></tr>`).join("");
@@ -1534,6 +1617,48 @@ var worker_default = {
         const id = decodeURIComponent(path.split("/").pop());
         const report = await kv.get(scoped(inSeasonReportKey(lg, id), me), { type: "json" });
         return report ? J(report) : J({ error: "report not found" }, 404);
+      }
+      if (path === "/api/inseason/tickets") {
+        const ticketsKey = scoped(inSeasonTicketsKey(lg), me);
+        if (request.method === "GET") return J(await kv.get(ticketsKey, { type: "json" }) || []);
+        if (request.method === "POST") {
+          let b;
+          try {
+            b = await request.json();
+          } catch {
+            return J({ error: "bad json" }, 400);
+          }
+          try {
+            return J(await saveWaiverTicket(kv, lg, normalizeWaiverTicket(b), me), 201);
+          } catch (e) {
+            return J({ error: e.message }, 400);
+          }
+        }
+        return J({ error: "method" }, 405);
+      }
+      if (/^\/api\/inseason\/tickets\/[^/]+$/.test(path)) {
+        const id = decodeURIComponent(path.split("/").pop());
+        const ticketKey = scoped(inSeasonTicketKey(lg, id), me);
+        if (request.method === "GET") {
+          const ticket = await kv.get(ticketKey, { type: "json" });
+          return ticket ? J(ticket) : J({ error: "ticket not found" }, 404);
+        }
+        if (request.method === "PUT") {
+          let b;
+          try {
+            b = await request.json();
+          } catch {
+            return J({ error: "bad json" }, 400);
+          }
+          const current = await kv.get(ticketKey, { type: "json" });
+          if (!current) return J({ error: "ticket not found" }, 404);
+          try {
+            return J(await saveWaiverTicket(kv, lg, normalizeWaiverTicket(b, current), me));
+          } catch (e) {
+            return J({ error: e.message }, 400);
+          }
+        }
+        return J({ error: "method" }, 405);
       }
       if (path === "/api/inseason/email") {
         if (request.method !== "POST") return J({ error: "method" }, 405);

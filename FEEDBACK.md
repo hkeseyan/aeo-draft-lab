@@ -14,6 +14,8 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- ✅ 2026-09-26 — **Started the in-season Waiver Operating System with the requested two-pilot workflow.** The existing FAAB Lab is now **Waiver Lab**, preserving the guillotine bid engine while adding saved decision context and per-user/per-league waiver tickets. A recommendation can become a ticket carrying the candidate/drop, bid range or waiver route, deadline, team direction, draft-order rule, trigger, rationale, originating report, and snapshot timestamp. Tickets move `draft → approved → submitted → verified`, or to `not_won`/`cancelled`; the app deliberately requires manual host-platform submission and a fresh source readback before verification. No private FantasyPros keys or live roster data are committed. The first pilots are **Off With Their Heads** — the original Yahoo 18-team guillotine, currently 16 alive, with Josh Allen and De'Von Achane — and **GSB Fantasy Football**, the Sleeper dynasty league; dynasty direction and waiver rules default to unknown rather than being assumed. Next league-intake priority remains **AEO Keepers**, then **AEOK Auction**.
+
 - 🆕 2026-09-27 — **Resolved: skip the FAAB Lab's downloadable `.ics`, go
   straight for agent-placed Calendar events naming the actual weekly bids.**
   User: *"I don't care about downloading a new ics. I have calendar events
