@@ -125,7 +125,7 @@ ok &= check('scoring values carried onto LEAGUE', 'LEAGUE.scoring.sog', 0.9);
 ok &= check('weekly acquisition cap carried', 'LEAGUE.maxAcquisitionsPerWeek', 4);
 ok &= check('sport bar shows both sports', () => w.document.getElementById('sportBar').children.length, 2);
 ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','),
-  'yahoo-nhl-public,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1,yahoo-nhl-prize-categories,yahoo-nhl-prize-roto');
+  'yahoo-nhl-public,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1');
 ok &= check('position filter is hockey', () => [...w.document.getElementById('posFilter').options].map(o => o.value).join(','), 'ALL,C,LW,RW,D,G');
 ok &= check('tendency columns are hockey', () => [...w.document.getElementById('tendHead').children].map(x => x.textContent).join(','), 'Use,Owner,C,LW,RW,D,G');
 
@@ -315,16 +315,6 @@ await ev('loadSetup()');
 ok &= check('saved 77-pick board extends without replacing a manual slot',
   'picks.length===192 && PLAYERS.find(p=>p.id===pickTakenAt(80).playerId).name==="Boone Jenner" && curPick===193', true);
 liveSetupOverride = null;
-ev('switchLeague("yahoo-nhl-prize-categories")');
-await new Promise(r => setTimeout(r, 250));
-ok &= check('categories profile has published Yahoo prize stats and no points advice',
-  'LEAGUE.teams===12 && LEAGUE.scoringMode==="categories" && LEAGUE.statCategories.skaters.includes("HIT") && nhlLiveRecommendations().length===0 && !radarVisible()', true);
-ok &= check('categories pool clearly awaits its own model',
-  () => w.document.querySelector('#poolTable tbody').textContent.includes('Category-specific rankings'), true);
-ev('switchLeague("yahoo-nhl-prize-roto")');
-await new Promise(r => setTimeout(r, 250));
-ok &= check('roto profile uses blocks, not hits, with 82 game limit',
-  'LEAGUE.scoringMode==="roto" && LEAGUE.statCategories.skaters.includes("BLK") && !LEAGUE.statCategories.skaters.includes("HIT") && LEAGUE.modelPending', true);
 ev('switchLeague("yahoo-nhl-public-categories")');
 await new Promise(r => setTimeout(r, 250));
 ok &= check('categories reference is 10 teams with hits',
