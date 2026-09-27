@@ -2612,24 +2612,29 @@ const LEAGUES_DEFAULT = {
 };
 // Mutable runtime registry — starts as a copy of the defaults, replaced by the cloud
 // copy in boot()/fetchCloudLeagues() once fetched, and kept in sync by the Leagues tab.
-// Live Yahoo draft snapshot supplied at pick 58 on Sep 26. The room is 12 teams;
-// scoring/roster values inherit the public points reference until Yahoo access
-// can verify this league's actual settings. Picks are seeded only for a new
-// setup and never replace a user's saved progress.
+// Completed Yahoo Prize H2H-Points draft from Sep 26. The 12-team league is a
+// specific imported prize league, not the generic 10-team Yahoo public reference.
+// All 192 final picks are seeded with versioned migration so saved manual progress
+// is extended without replacing slots the user already entered.
 LEAGUES_DEFAULT['public-points-league-1']={
   ...LEAGUES_DEFAULT['yahoo-nhl-public'],
-  id:'public-points-league-1',name:'Public Points League 1',teams:12,mySlot:4,
-  draftDateLabel:'Sep 26 · live',poolDataRevision:'public-points-1-p77',
-  liveDraftRevision:'2026-09-26-p77',
+  id:'public-points-league-1',name:'Yahoo Prize H2H-Pts 135526',teams:12,mySlot:4,
+  yahooLeagueId:'135526',yahooLeagueUrl:'https://hockey.fantasysports.yahoo.com/hockey/135526',
+  draftDateLabel:'Sep 26 · complete',poolDataRevision:'public-points-1-p192',
+  liveDraftRevision:'2026-09-26-p192',
   // Barkov was absent from the Sep 17 pool; a minimal row lets the reported
   // pick occupy its real board cell without inventing a projection.
-  playersCsv:PLAYERS_CSV_NHL+'\nAleksander Barkov,C,FLA,63,63,0,5',
-  owners:['MF LD2 12/50',"Rick's Rad Team",'Fiddy Fighters','Me',"Brian's First-Rate Team",
+  playersCsv:PLAYERS_CSV_NHL+'\nAleksander Barkov,C,FLA,63,63,0,5'+
+    '\nGavin McKenna,LW,TOR,,,,'+
+    '\nQuinton Byfield,C,LAK,,,,'+
+    '\nGabriel Landeskog,LW/RW,COL,,,,'+
+    '\nIvar Stenberg,LW,SJS,,,,',
+  owners:['MF LD2 12/50','Vegas Golden Knights ⚔️🏒','Fiddy Fighters','Individual Neutral Athletes',"Brian's First-Rate Team",
     'Mtnside Indians','IceeeMO','Blades of Steel',"Etienne's Excellent Team",
-    "Mark's Impressive Team",'Captain Mel',"scott's Agreeable Team"],
-  meOwner:'Me',ownerSlot:{'MF LD2 12/50':1,"Rick's Rad Team":2,'Fiddy Fighters':3,Me:4,
+    "Mark's Impressive Team",'Captain Mel','SUZFIELD'],
+  meOwner:'Individual Neutral Athletes',ownerSlot:{'MF LD2 12/50':1,'Vegas Golden Knights ⚔️🏒':2,'Fiddy Fighters':3,'Individual Neutral Athletes':4,
     "Brian's First-Rate Team":5,'Mtnside Indians':6,IceeeMO:7,'Blades of Steel':8,
-    "Etienne's Excellent Team":9,"Mark's Impressive Team":10,'Captain Mel':11,"scott's Agreeable Team":12},
+    "Etienne's Excellent Team":9,"Mark's Impressive Team":10,'Captain Mel':11,SUZFIELD:12},
   initialPickNames:[
     'Nathan MacKinnon','Connor McDavid','Macklin Celebrini','Nikita Kucherov','David Pastrnak','Leon Draisaitl',
     'Cale Makar','Evan Bouchard','Kirill Kaprizov','Jason Robertson','Zach Werenski','Nick Suzuki',
@@ -2644,7 +2649,26 @@ LEAGUES_DEFAULT['public-points-league-1']={
     'Miro Heiskanen','Brayden Point','Josh Morrissey','Roope Hintz','Aleksander Barkov','Noah Dobson',
     'Artemi Panarin','Will Smith','Jackson LaCombe','Brock Faber','Filip Forsberg','John Carlson',
     'Roman Josi','Connor Bedard','Dylan Holloway','Lukas Dostal','Charlie McAvoy','Erik Karlsson',
-    'Mikhail Sergachev'
+    'Mikhail Sergachev',
+    'Brandon Bussi','Pavel Dorofeyev','Sidney Crosby','Sebastian Aho','Kirill Marchenko','Andrei Svechnikov','Jacob Markstrom',
+    'Porter Martone','Dan Vladar','Robert Thomas','Shayne Gostisbehere','Jesper Bratt','Victor Hedman',
+    'Lucas Raymond','Nick Schmaltz','Alex Tuch','Jakub Dobes','Rasmus Andersson','Brandt Clarke',
+    'Bowen Byram','Drake Batherson','Alex Ovechkin','Shea Theodore','Beckett Sennecke','Sergei Bobrovsky',
+    'Morgan Geekie','Jet Greaves','Cole Hutson','Dougie Hamilton','Travis Konecny','Artturi Lehkonen',
+    'Morgan Rielly','Juuse Saros','Thomas Harley','Yaroslav Askarov','J.T. Miller','Mackenzie Blackwood',
+    'Ivan Demidov','Carter Hart','Mark Stone','Zach Hyman','Nikolaj Ehlers','Spencer Knight',
+    'Seth Jarvis','Tom Wilson','Bryan Rust','John Gibson','Dylan Larkin','Nico Hischier',
+    'MacKenzie Weegar','Rickard Rakell','Luke Evangelista','Gavin McKenna','Timo Meier','Bo Horvat',
+    'Trevor Zegras','Devon Toews','Seth Jones','Travis Sanheim','Joel Eriksson Ek','Logan Cooley',
+    'Ukko-Pekka Luukkonen','Mattias Samuelsson','Mattias Ekholm','Joel Hofer','Adam Fantilli','Matthew Knies',
+    'Kevin Lankinen','Quinton Byfield','Mike Matheson','Josh Doan','Sergei Murashov','Brandon Montour',
+    'Sam Malinski','Vince Dunn','Jordan Kyrou','Aaron Ekblad','Gabriel Vilardi','Philip Broberg',
+    'Mathew Barzal','Luke Hughes','Brock Nelson','Linus Ullmark','Dylan Strome','Gabriel Landeskog',
+    'Thomas Chabot','Simon Nemec','Steven Stamkos','JJ Peterka','Simon Edvinsson','John Tavares',
+    'Jimmy Snuggerud','Anthony Mantha','Ivan Provorov','Darcy Kuemper','Pavel Zacha','Ivar Stenberg',
+    'Tyler Bertuzzi','Jake Allen','Kevin Fiala','Brad Marchand','Anthony Cirelli','Brent Burns',
+    'Chris Kreider','Mason McTavish','Kris Letang','Tomas Hertl','Alexis Lafreniere','Joey Daccord',
+    'Michael Misa','Patrick Kane','Filip Gustavsson','Igor Chernyshov','Jacob Trouba','Jake McCabe'
   ]
 };
 let LEAGUES = {...LEAGUES_DEFAULT};
@@ -3194,6 +3218,7 @@ function seedPool(){
 const NAME_ALIASES = {
   'jonathan brooks':'Jonathon Brooks',
   'jaocry croskeymerritt':'Jacory Croskey-Merritt',
+  'jj peterka':'John-Jason Peterka',
 };
 // Team defenses are entered by nickname on rosters but carry the full name in
 // the player pool. The explicit table is authoritative; the DEF/DST suffix rule
@@ -5783,7 +5808,8 @@ async function fetchCloudLeagues(){
           ['poolDataRevision','playersCsv'].forEach(f=>{ if(def[f]!==undefined)add[f]=def[f]; });
         }
         if(def.liveDraftRevision && cur.liveDraftRevision!==def.liveDraftRevision){
-          ['liveDraftRevision','initialPickNames'].forEach(f=>{if(def[f]!==undefined)add[f]=def[f];});
+          ['liveDraftRevision','initialPickNames','name','owners','meOwner','ownerSlot','draftDateLabel','yahooLeagueId','yahooLeagueUrl']
+            .forEach(f=>{if(def[f]!==undefined)add[f]=def[f];});
         }
         if(def.auctionDataRevision && cur.auctionDataRevision!==def.auctionDataRevision){
           ['auctionDataRevision','playersCsv','draftDateLabel'].forEach(f=>{ if(def[f]!==undefined)add[f]=def[f]; });
