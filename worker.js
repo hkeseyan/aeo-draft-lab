@@ -1182,6 +1182,28 @@ var worker_default = {
           return J({ error: "Sleeper import failed: " + e.message }, 502);
         }
       }
+      if (path === "/api/exposure") {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const current = await kv.get(leagueProfileKey(lg), { type: "json" });
+        if (!current) return J({ denominator: 0, counts: {}, leagues: [] });
+        const sport = String(current.sport || "nfl");
+        const listed = await kv.list({ prefix: "league:" });
+        const profiles = (await Promise.all(listed.keys.map((k) => kv.get(k.name, { type: "json" })))).filter(Boolean);
+        const counts = {};
+        const leagues = [];
+        for (const profile of profiles) {
+          if (!profile || profile.id === lg || String(profile.sport || "nfl") !== sport) continue;
+          const setup = await kv.get(scoped(setupKey(profile.id), me), { type: "json" });
+          const names = savedRosterNames(profile, setup);
+          if (!names.length) continue;
+          leagues.push({ id: profile.id, name: profile.name || profile.id, rostered: names.length });
+          names.forEach((name) => {
+            const key = String(name).trim().toLowerCase();
+            if (key) counts[key] = (counts[key] || 0) + 1;
+          });
+        }
+        return J({ denominator: leagues.length, counts, leagues });
+      }
       if (path.startsWith("/api/import/fantrax/")) {
         const denied = requireAdmin();
         if (denied) return denied;
