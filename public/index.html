@@ -3671,7 +3671,7 @@ function nhlLiveRecommendations(limit=6){
   // At the end of a snake round we own two consecutive picks. The scarcity
   // horizon is the pick AFTER that pair, not the second pick one second away.
   const next=(paired?upcoming[2]:upcoming[1])||Math.min(totalPicks+1,now+LEAGUE.teams*2);
-  const round=Math.ceil(now/LEAGUE.teams), roster=myRoster();
+  const round=Math.ceil(now/LEAGUE.teams), progress=Math.min(1,Math.max(0,(now-1)/Math.max(1,totalPicks))), roster=myRoster();
   const counts={F:roster.filter(p=>p.pos!=='D'&&p.pos!=='G').length,
     D:roster.filter(p=>p.pos==='D').length,G:roster.filter(p=>p.pos==='G').length,
     C:roster.filter(p=>eligiblePositions(p).length===1&&p.pos==='C').length};
@@ -3706,7 +3706,8 @@ function nhlLiveRecommendations(limit=6){
     && (p.pos!=='G'||activeG>0)):[];
   const candidates=[...new Map(ranked.slice(0,85).concat(stashCandidates).map(p=>[p.id,p])).values()];
   const assessed=candidates.map(p=>{
-    const type=group(p), survive=survival(p), reasons=[];
+    const type=group(p), survive=survival(p), reasons=[], elig=eligiblePositions(p);
+    const streamConf=elig.length?Math.max(...elig.map(pos=>STREAM_CONFIDENCE[pos]||0)):0;
     const alternatives=ranked.filter(q=>q.id!==p.id&&group(q)===type);
     const nextEquivalent=alternatives.find(q=>survival(q)>=0.42);
     const gap=nextEquivalent?Math.max(0,Math.min(24,(nextEquivalent.myRank||999)-(p.myRank||999))):24;
@@ -3715,7 +3716,7 @@ function nhlLiveRecommendations(limit=6){
     // pass on a genuinely superior top-five player at 1.01.
     if(round===1&&p.myRank<=5)score+=(6-p.myRank)*3;
     const newStarter=startersFilled(roster.concat(p))>filled;
-    if(newStarter){score+=Math.min(9,3+round/2); reasons.push('fills a starting slot');}
+    if(newStarter){const urgency=(4+10*progress)*(1-0.55*streamConf);score+=urgency; reasons.push('fills a starting slot'+(streamConf>=0.6?' · streamability lowers urgency':''));}
     let need=0;
     if(type==='D'){
       if(counts.D===0)need=round<=3?13:9;
@@ -3759,6 +3760,7 @@ function nhlLiveRecommendations(limit=6){
         reasons.unshift(`${catalyst.tags[0]} opportunity to verify`);
       }
     }
+    if(!newStarter&&streamConf>0){need-=streamConf*6;if(streamConf>=0.6)reasons.push('position is streamable');}
     score+=need;
     const vona=Math.min(11,gap*0.38)*(1-survive);
     score+=vona;
@@ -3788,7 +3790,20 @@ function nhlLiveRecommendations(limit=6){
   return assessed.sort((a,b)=>b.score-a.score).slice(0,limit).map((x,i)=>({...x,label:i===0&&x.label!=='WAIT'&&x.label!=='IR STASH'?'TAKE NOW':x.label,
     now,next,paired,round,counts,activeG}));
 }
-function renderNhlLivePicks(){
+function renderNhlStreamControls(){
+  const box=el('nhlStreamControls');if(!box)return;
+  if(SPORT.id!=='nhl'){box.innerHTML='';return;}
+  box.innerHTML=['C','LW','RW','D','G'].map(pos=>{
+    const v=Math.round((STREAM_CONFIDENCE[pos]||0)*100);
+    return '<label>'+pos+' stream <b data-stream-value="'+pos+'">'+v+'%</b> <input type="range" min="0" max="100" step="5" value="'+v+'" data-stream="'+pos+'" style="width:82px"></label>';
+  }).join('');
+  box.querySelectorAll('[data-stream]').forEach(inp=>inp.oninput=()=>{
+    STREAM_CONFIDENCE[inp.dataset.stream]=(+inp.value||0)/100;
+    const v=box.querySelector('[data-stream-value="'+inp.dataset.stream+'"]');if(v)v.textContent=inp.value+'%';
+    renderNhlLivePicks(false);saveSetup();
+  });
+}
+function renderNhlLivePicks(drawControls=true){
   const card=el('nhlLiveCard');if(!card)return;
   card.style.display=SPORT.id==='nhl'&&LEAGUE.draftType!=='auction'?'':'none';
   el('snakeDraftGrid').classList.toggle('nhl-layout',card.style.display!=='none');
@@ -3796,6 +3811,7 @@ function renderNhlLivePicks(){
   el('draftSlotInput').max=LEAGUE.teams;
   if(document.activeElement!==el('draftSlotInput'))el('draftSlotInput').value=mySlot||'';
   if(card.style.display==='none')return;
+  if(drawControls)renderNhlStreamControls();
   const list=nhlLiveRecommendations(), box=el('nhlLivePicks');
   if(!list.length){box.textContent='Draft complete or no players available.';return;}
   const {now,next,paired,round,counts,activeG}=list[0];
