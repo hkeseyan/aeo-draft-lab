@@ -9,9 +9,9 @@ const env = { MOCKS: kv };
 function stubFantrax(responses) {
   globalThis.fetch = async (url) => {
     const u = String(url);
-    const key = u.includes('getLeagueInfo') ? 'info' : u.includes('getTeamRosters') ? 'rosters' : null;
+    const key = u.includes('getLeagueInfo') ? 'info' : u.includes('getTeamRosters') ? 'rosters' : u.includes('getPlayerIds') ? 'ids' : null;
     assert.ok(key, 'unexpected outbound request: ' + u);
-    return { ok: true, status: 200, json: async () => responses[key] };
+    return { ok: true, status: 200, json: async () => responses[key] || {} };
   };
 }
 const call = (id) => worker.fetch(new Request(`https://x.test/api/import/fantrax/${id}`), env, {});
@@ -24,9 +24,10 @@ stubFantrax({
     rosterInfo: { maxTotalPlayers: 20 },
     teamInfo: { t1: { name: 'Ice Cold', id: 't1' }, t2: { name: 'Blue Line', id: 't2' } },
     playerInfo: {
-      p1: { name: 'Connor McDavid' },
-      p2: { firstName: 'Cale', lastName: 'Makar' },
-      p3: { fullName: 'Igor Shesterkin' },
+      p1: { name: 'Connor McDavid', eligiblePos: 'C/LW' },
+      p2: { firstName: 'Cale', lastName: 'Makar', eligiblePos: 'D' },
+      p3: { fullName: 'Igor Shesterkin', eligiblePos: 'G' },
+      p4: { eligiblePos: 'LW/RW' },
     },
   },
   rosters: {
@@ -49,6 +50,8 @@ assert.equal(body.rosterSize, 20);
 assert.equal(body.rostersRaw,
   'Ice Cold|Connor McDavid|FA|NONE\nIce Cold|Cale Makar|FA|NONE\nBlue Line|Igor Shesterkin|FA|NONE',
   'all three name spellings should resolve');
+assert.equal(body.platform, 'fantrax');
+assert.equal(body.platformEligibility.fantrax['connor mcdavid'], 'C/LW');
 
 // ---- Fantrax reports failure in the body, with HTTP 200 -------------------
 stubFantrax({
