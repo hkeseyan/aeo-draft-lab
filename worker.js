@@ -1639,11 +1639,23 @@ var worker_default = {
           const league = raw.fantasy_content && raw.fantasy_content.league || [];
           const meta = Array.isArray(league) ? league[0] || {} : league;
           const settings = Array.isArray(league) ? league[1] && league[1].settings && league[1].settings[0] || {} : {};
+          const platformEligibility = {};
+          try {
+            const players = await yahooLeagueEligibility(token, key, 500);
+            players.forEach((p) => {
+              if (p && p.name && p.pos) platformEligibility[String(p.name).trim().toLowerCase()] = p.pos;
+            });
+          } catch (eligErr) {
+            // Settings comparison can still proceed if the optional full player
+            // sweep is temporarily unavailable. The reference eligibility remains
+            // the explicit fallback until a later refresh succeeds.
+          }
           return J({ key, name: meta.name || "", teams: Number(meta.num_teams)||null,
             draftType: settings.draft_type || null, scoringType: settings.scoring_type || null,
             rosterPositions: settings.roster_positions || null,
             statCategories: settings.stat_categories || null,
             statModifiers: settings.stat_modifiers || null,
+            platformEligibility,
             settings, raw });
         } catch (e) {
           return J({ error: "Yahoo settings request failed: " + e.message }, 502);
