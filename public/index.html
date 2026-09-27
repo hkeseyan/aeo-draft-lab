@@ -2239,6 +2239,12 @@ const FANTASTIC_2026_STRATEGY={
   defense:{preferred:'Ravens',target:1,max:1,rule:'Bid $1 only for Baltimore; otherwise take a remaining $1 defense.'}
 };
 
+// ---------- LEAGUE PROFILES ----------
+// Hardcoded defaults — the offline/first-run fallback. Once /api/leagues has data,
+// the cloud copy (fetched + mutated at runtime into `LEAGUES` below) is authoritative;
+// this const only matters if the API is unreachable or on the very first boot ever
+// (which seeds the cloud with these verbatim, so AEO-Keepers' real data becomes the
+// cloud copy byte-identical to what's live today — see fetchCloudLeagues()).
 // Yahoo Public Prize hockey currently requires 12 managers. Public Free
 // leagues can still differ, so imports trust the league's reported team count.
 // Multi-position entries below were observed directly in Yahoo league 135526 on
@@ -2266,12 +2272,6 @@ const YAHOO_NHL_VERIFIED_ELIGIBILITY={
   'igor chernyshov':'LW/RW'
 };
 
-// ---------- LEAGUE PROFILES ----------
-// Hardcoded defaults — the offline/first-run fallback. Once /api/leagues has data,
-// the cloud copy (fetched + mutated at runtime into `LEAGUES` below) is authoritative;
-// this const only matters if the API is unreachable or on the very first boot ever
-// (which seeds the cloud with these verbatim, so AEO-Keepers' real data becomes the
-// cloud copy byte-identical to what's live today — see fetchCloudLeagues()).
 const LEAGUES_DEFAULT = {
   'aeo-keepers': {
     id:'aeo-keepers', name:'AEO-Keepers',
