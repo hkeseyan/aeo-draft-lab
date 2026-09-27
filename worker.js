@@ -1193,6 +1193,9 @@ var worker_default = {
         const leagues = [];
         for (const profile of profiles) {
           if (!profile || profile.id === lg || String(profile.sport || "nfl") !== sport) continue;
+          // Exposure is portfolio ownership, not mock-draft repetition. Only
+          // leagues explicitly marked as official drafted teams contribute.
+          if (profile.officialDraft !== true) continue;
           const setup = await kv.get(scoped(setupKey(profile.id), me), { type: "json" });
           const names = savedRosterNames(profile, setup);
           if (!names.length) continue;
