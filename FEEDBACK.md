@@ -14,6 +14,63 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- ✅ 2026-09-26 — **Started the in-season Waiver Operating System with the requested two-pilot workflow.** The existing FAAB Lab is now **Waiver Lab**, preserving the guillotine bid engine while adding saved decision context and per-user/per-league waiver tickets. A recommendation can become a ticket carrying the candidate/drop, bid range or waiver route, deadline, team direction, draft-order rule, trigger, rationale, originating report, and snapshot timestamp. Tickets move `draft → approved → submitted → verified`, or to `not_won`/`cancelled`; the app deliberately requires manual host-platform submission and a fresh source readback before verification. No private FantasyPros keys or live roster data are committed. The first pilots are **Off With Their Heads** — the original Yahoo 18-team guillotine, currently 16 alive, with Josh Allen and De'Von Achane — and **GSB Fantasy Football**, the Sleeper dynasty league; dynasty direction and waiver rules default to unknown rather than being assumed. Next league-intake priority remains **AEO Keepers**, then **AEOK Auction**.
+
+- 🆕 2026-09-27 — **Resolved: skip the FAAB Lab's downloadable `.ics`, go
+  straight for agent-placed Calendar events naming the actual weekly bids.**
+  User: *"I don't care about downloading a new ics. I have calendar events
+  now, agents also have access to my Google calendar, we can setup those
+  calendar events and reminders from the FAAB Lab results each week. as in,
+  the agents will place on my Google Calendar the players I plan to bid on
+  and how much to bid on them."* Concretely: instead of (or before) a code
+  path that generates a static `.ics`, a session with Calendar access reads
+  that week's FAAB Lab recommendations and creates/updates the relevant
+  event(s) directly — via `mcp__Google_Calendar__create_event`/
+  `update_event`, the same tool used for the 5 generic reminders above —
+  with the specific players + bid amounts in the title/description, not just
+  "waivers due." **Explicit fallback if that proves too ambitious**, in the
+  user's own words: *"we will just keep the repeating generic reminders on
+  the calendar, and I will log into the app to check the waiver suggestions
+  and just enter them manually until we get it more automated later."* So
+  the 5 existing generic recurring events (see the entry below) are the
+  floor, not a placeholder to be torn out — they stay working exactly as-is
+  regardless of how far the automation gets. **Not built yet** — this is the
+  direction, not an implementation. Whoever picks this up next needs: (1) a
+  read path into that week's FAAB Lab output (recommended bids per league),
+  (2) a decision on whether to update the existing 5 generic events in place
+  (adding specifics into the description) or create separate per-league
+  "your claims" events alongside them, and (3) confirmation this runs
+  automatically on some schedule (a Routine/cron) rather than requiring a
+  human to manually trigger a session each week — which is the actual point,
+  since manual-trigger-required isn't meaningfully more automated than
+  logging into the app.
+- ✅ 2026-09-18 — **5 live Google Calendar waiver-deadline reminders, created
+  directly via the Calendar MCP tool (not stored in this app).** Once the user
+  connected a Google Calendar connector, real recurring events were created on
+  their **Fantasy** calendar (`nhi222bkao6k4lkpqe051rv5c4@group.calendar.google.com`),
+  each with a 1-hour-before popup: **"Waivers due — Yahoo ×4, ESPN, Die-Nasty,
+  Peak D (Wed run)"** (Tue 10–11:59pm PT — covers Corrupt Commish, Degenerates
+  Anonymous, Fantastic Keeper Auction, AEOK Auction, SCG IRS/ESPN, Die-Nasty's
+  weekly clear, and Peak D23/24/27/28's Wednesday unlock), **"⚠ GSB waivers due
+  (1 day earlier than the rest!)"** (Mon 10–11:59pm PT), **"NCAA (MFL) waivers
+  due"** (Wed 4–5pm PT), **"Peak D waivers due (Thu→Fri run)"** (Thu
+  10–11:59pm PT), and **"Peak D waivers due (Sat→Sun run)"** (Sat
+  10–11:59pm PT) — Peak's three-times-a-week 1-day-hold cycle needed all three.
+  Exact times came from screenshots of each platform's real waiver settings
+  (Yahoo's own help docs confirm "Game Time - Tuesday" = claims clear
+  11:59pm PT Tuesday; Sleeper/MFL/ESPN times were user-supplied from the
+  actual settings screens). **These live outside this repo entirely** — no
+  code, no KV, nothing `git log` or a KV dump will ever show — so a future
+  session has no way to discover them except this note. **Known overlap risk:**
+  a *separate*, later-built feature also touches this ground — the in-season
+  FAAB Lab's Tuesday reports (✅ 2026-09-16 entry below) offer a **downloadable
+  recurring `.ics`** for the same guillotine-league Tuesday timing. As of this
+  writing the user hasn't imported that file (checked: only the 5 events above
+  exist on the Fantasy calendar), but if they ever do, that guillotine slice
+  would double up with the "Waivers due — Yahoo ×4..." event above. Worth
+  reconciling into one system before both are actually in use — either fold
+  the FAAB Lab's leagues into these live events, or have the live events step
+  aside for whatever the FAAB Lab produces.
 - 🆕 2026-09-26 — **Yahoo "List my leagues" still 403s after Yahoo approved API access.** User got Yahoo's approval email, signed and returned the agreement several days ago, but the Leagues tab's Yahoo league listing still fails with a 403. Diagnosis (no code change yet): the stored grant in KV (`yahooAuth:default`) is almost certainly from *before* Fantasy access was granted. `getYahooAccessToken` only refreshes that grant, and a refresh keeps the original consent's scopes, so it never gains Fantasy permission. Fix is user-side: Disconnect in the app → revoke the app under Yahoo Account Security → Connect Yahoo account again (fresh consent) → List leagues. If it still 403s, check the Yahoo Developer console that the app now shows Fantasy Sports → Read and that its Client ID matches the one "Status" reports. If Yahoo says the agreement is still pending, it's a Yahoo-side wait. A 403 saying `admin only` / "Only the admin can connect" is the app's own admin check instead. **Update, same day:** user did the full re-consent (revoked at Yahoo, Disconnect, Connect). Yahoo's consent page listed Fantasy Sports Read, and Status shows a grant made today, but NHL league listing still 403s with `"This application is not authorized to perform this action."` So the token's scope is now fine, and the denial is on Yahoo's side for the app (client ID) itself. Either Yahoo hasn't turned on Fantasy API access for this app after the signed agreement, or the approval covers a different app/client ID than the one deployed as `YAHOO_CLIENT_ID`. Nothing to fix in Draft Lab code; next step is with Yahoo. **Yahoo's approval email (pasted by user)** lists three steps before provisioning: (1) sign the DocuSign agreement, (2) confirm Fantasy Sports permissions on the app in the Yahoo Developer page, (3) submit the *Developer Application Confirmation Form* with name, email and **client ID**, and any other emails used, in its notes field. Access is provisioned only after both the agreement and the form are received. The user mentioned only signing, so the form is the likely missing step. The client ID on the form must be the one the Worker uses (compare with the Status hint). User submitted the confirmation form on 2026-09-26 (unsure whether they had before). Now waiting on Yahoo to provision; test by clicking **List my leagues**, no reconnect needed. Yahoo auto-replied the same day: "application received… review typically takes 1-2 weeks." Expect access around 2026-10-03 to 10-10.
 - ✅ 2026-09-18 — **NHL ranking metrics don't cohere, and My Rank should encode roster construction.** User reports ECR / My Rank / proj varying wildly from Yahoo ADP, with concrete cases: players projected ~400 sitting next to ~600 at the same position; a case of <200 next to 400+; and Hellebuyck vs Oettinger adjacent in ADP (G2/G3, both ~24) while ECR/My Rank put Hellebuyck at 24/23 and Oettinger at 42/41 despite Hellebuyck projecting >10% more points. Wants the algorithm explained, not just patched. Also gave detailed roster-construction strategy for Yahoo default points: **C-only is the least valuable forward** (only 2 C start per night, and C is the most streamable position because offence flows through centres) — prefer 1-2 strong C-only and stream the rest, strongly favour C+W dual eligibility; elite players (McDavid/MacKinnon) transcend the rule, so it should bite from roughly picks 6-10 onward, not at 1.01. **G**: streaming-friendly; 1st premium starter very valuable, 2nd is value-based, a 3rd must be an unpassable value. **D**: not streaming-friendly by preference (forwards win a contested slot) but may be streamed when forwards are gone; wants 4-5 solid D, 2 of them mid-level-forward equivalent, and a premium D or two early without reaching. Asks: use My Rank to build on ADP/ECR/proj with positional inflation; show **all** eligible positions in the draft list; possibly display multi-forward-eligible players as F rather than C. *Answered and built.* **Diagnosis, all verified against the data:** (1) **My Rank was literally ECR order** — `computeMyRanks()` only knew football adjustments (elite QB/TE bump, rookie fade), both no-ops in hockey, so it passed ECR straight through. That is the whole Hellebuyck/Oettinger puzzle. (2) **ECR is 2 experts scoring ROTO**, a different game — exactly the Tkachuk/banger effect the user already intuited, and the reason it is now weight 0 in My Rank while staying a visible column. (3) The **board sorts by market ADP**, so same-position neighbours reflect the market, not projections. (4) The big proj gaps are our projection being weak on low-sample players — Hagens 54, Cole Hutson 150, Yakemchuk 74 are prospects; M. Tkachuk 320 is an injury season. (5) On the specific goalie case: **Oettinger actually projects ~10% ABOVE Hellebuyck**, not below — Hellebuyck posted .895 with 0 shutouts and 23 wins in 2025-26 (verified against the raw NHL feed, not a data bug), so our projection is right about last year and the market is right that he bounces back. Our model has no mean reversion; recorded as a known gap. **Built:** hockey-specific `computeMyRanksNhl` — ADP/proj blend with the projection trusted in proportion to sample (`gp`), then PROPORTIONAL positional adjustments (flat rank offsets were badly wrong: 8 spots is the whole elite tier at pick 5 and nothing at pick 200). Centre-only marked down with the penalty phasing in past the elite tier (replaceability, not slot count, is the real argument); dual/triple forward eligibility marked up; elite tier exempt from BOTH so a C/LW can't leapfrog McDavid; goalie premium for volume starters and a markdown past `teams x G slots`; small bump for elite D. Result: top 5 is pure merit, C-only averages -10 spots vs ADP and C+wing +9. Every player carries a plain-language `myRankWhy` tooltip. **Display:** Best Available now shows all eligible positions (`C/LW`) with an **F** chip for multi-forward eligibility, and the position filter matches eligibility so LW surfaces C/LW too.
 
