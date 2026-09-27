@@ -2819,6 +2819,13 @@ function computeMyRanks(){
   };
   PLAYERS.slice().sort((a,b)=>adjScore(a)-adjScore(b)).forEach((p,i)=>{p.myRank=i+1;});
 }
+const NHL_HEALTH_WATCH={
+  'Connor Hellebuyck':{kind:'suspended',label:'Suspended · no return date',note:'Trade dispute; do not count as an active G or an IR stash.',url:'https://www.nhl.com/news/connor-hellebuyck-does-not-report-to-camp-suspended-by-winnipeg-jets',asOf:'Sep 17'},
+  'Brad Marchand':{kind:'stash',label:'Out through October',note:'Best skater stash candidate if Yahoo grants IR eligibility.',url:'https://www.nhl.com/panthers/news/maurice-provides-injury-updates-on-marchand-and-gadjovich',asOf:'Sep 17'},
+  'Filip Gustavsson':{kind:'stash',label:'Hip surgery · misses opener',note:'Wallstedt/Pickard start the year; risky second unavailable G alongside Hellebuyck.',url:'https://www.nhl.com/wild/news/wild-training-camp-preview-091726',asOf:'Sep 17'},
+  'Kevin Fiala':{kind:'stash',label:'Leg recovery · Nov 1 hope',note:'Kings target Nov 1 as a best case; light October schedule. Verify Yahoo IR designation.',url:'https://www.nhl.com/kings/news/insider-day-1-training-camp-notes-ken-holland-injuries-fiala-dumoulin-zuccarello',asOf:'Sep 18'},
+  'Frederik Andersen':{kind:'stash',label:'Out for opener',note:'EDM plans a three-goalie rotation on return; weaker stash for this roster.',url:'https://www.nhl.com/news/edmonton-oilers-season-preview-2026-27',asOf:'Sep 17'},
+};
 // Team labels observed in the Sep 26 Yahoo draft; the Sep 17 source pool still
 // carries several pre-transaction clubs. Keep this separate from projections.
 const NHL_TEAM_UPDATES={
