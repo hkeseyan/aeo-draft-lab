@@ -4052,18 +4052,34 @@ function renderDraftAnalysis(){
 // if the league has one) so empty slots are visible, not just a flat player list.
 // Whatever's left after starters is the bench.
 function slotRosterPlayers(roster,starters){
-  // Best ECR first, so e.g. a keeper with a worse ECR than someone drafted
-  // later gets pushed to FLEX/bench instead of camping the exact-position slot.
-  const remaining=roster.slice().sort((a,b)=>(a.ecr||9999)-(b.ecr||9999));
-  const take=(pred)=>{ const i=remaining.findIndex(pred); return i===-1?null:remaining.splice(i,1)[0]; };
   const slots=[];
-  SPORT.positions.forEach(pos=>{
-    for(let i=0;i<(starters[pos]||0);i++) slots.push({label:pos, player:take(x=>playerFillsPos(x,pos))});
-  });
-  const flexOk=(x)=>eligiblePositions(x).some(q=>LEAGUE.flexEligible.includes(q));
-  for(let i=0;i<(starters.FLEX||0);i++) slots.push({label:'FLEX', player:take(flexOk)});
-  for(let i=0;i<(starters.SUPERFLEX||0);i++) slots.push({label:'SFLEX', player:take(x=>playerFillsPos(x,'QB')||flexOk(x))});
-  return {starterSlots:slots, bench:remaining};
+  SPORT.positions.forEach(pos=>{for(let i=0;i<(starters[pos]||0);i++)slots.push({label:pos});});
+  for(let i=0;i<(starters.FLEX||0);i++)slots.push({label:'FLEX'});
+  for(let i=0;i<(starters.SUPERFLEX||0);i++)slots.push({label:'SFLEX'});
+  const canFill=(p,label)=>{
+    if(label==='FLEX')return eligiblePositions(p).some(q=>LEAGUE.flexEligible.includes(q));
+    if(label==='SFLEX')return playerFillsPos(p,'QB')||eligiblePositions(p).some(q=>LEAGUE.flexEligible.includes(q));
+    return playerFillsPos(p,label);
+  };
+  const slotOwner=new Array(slots.length).fill(null);
+  const candidates=roster.slice().sort((x,y)=>(y.myRank||y.ecr||y.adp||9999)-(x.myRank||x.ecr||x.adp||9999));
+  const assign=(p,seen)=>{
+    const choices=slots.map((sl,i)=>({sl,i})).filter(x=>canFill(p,x.sl.label));
+    choices.sort((x,y)=>(slotOwner[x.i]?1:0)-(slotOwner[y.i]?1:0));
+    for(const x of choices){
+      if(seen.has(x.i))continue;seen.add(x.i);
+      if(!slotOwner[x.i]||assign(slotOwner[x.i],seen)){slotOwner[x.i]=p;return true;}
+    }
+    return false;
+  };
+  candidates.forEach(p=>assign(p,new Set()));
+  const matched=new Set(slotOwner.filter(Boolean).map(p=>p.id));
+  const starterSlots=slots.map((sl,i)=>({label:sl.label,player:slotOwner[i]}));
+  const bench=roster.filter(p=>!matched.has(p.id)).sort((x,y)=>(x.myRank||x.ecr||x.adp||9999)-(y.myRank||y.ecr||y.adp||9999));
+  const rosterSize=LEAGUE.rosterSize||LEAGUE.rounds||starterSlots.length;
+  const benchCapacity=Math.max(0,rosterSize-starterSlots.length);
+  const benchSlots=Array.from({length:Math.max(benchCapacity,bench.length)},(_,i)=>({label:'BN',player:bench[i]||null}));
+  return {starterSlots,bench,benchSlots};
 }
 function fillRosterOwnerSelect(){
   const sel=el('rosterOwnerSelect'); if(!sel)return;
@@ -4071,19 +4087,21 @@ function fillRosterOwnerSelect(){
   sel.innerHTML=slots.map(s=>`<option value="${s}">${(SLOT_OWNER&&SLOT_OWNER[s])||('T'+s)}${s===mySlot?' (me)':''}</option>`).join('');
   if(mySlot!=null)sel.value=mySlot;
 }
+function rosterPlayerHtml(p){
+  return headshotImg(p)+posCell(p)+' <span style="margin-left:5px">'+p.name+teamLogoImg(p)+'</span>';
+}
 function renderRoster(){
   const sel=el('rosterOwnerSelect'); if(!sel)return;
   const slot=+sel.value||mySlot;
-  const roster=rosterOf(slot);
-  const {starterSlots,bench}=slotRosterPlayers(roster, LEAGUE.starters||{});
-  const rows=starterSlots.map(s=>s.player
-    ? `<div class="mypick-row"><span class="muted small" style="min-width:52px;display:inline-block">${s.label}</span><span><span class="pos ${s.player.pos}">${s.player.pos}</span> ${s.player.name}</span></div>`
-    : `<div class="mypick-row"><span class="muted small" style="min-width:52px;display:inline-block">${s.label}</span><span class="muted small">— empty —</span></div>`
-  ).join('');
-  const benchRows=bench.length
-    ? `<div class="small muted" style="margin-top:8px;margin-bottom:2px">Bench (${bench.length})</div>`+bench.map(p=>`<div class="mypick-row"><span><span class="pos ${p.pos}">${p.pos}</span> ${p.name}</span></div>`).join('')
+  const fitted=slotRosterPlayers(rosterOf(slot), LEAGUE.starters||{});
+  const row=(sl)=>sl.player
+    ? '<div class="mypick-row"><span class="muted small" style="min-width:52px;display:inline-block">'+sl.label+'</span><span>'+rosterPlayerHtml(sl.player)+'</span></div>'
+    : '<div class="mypick-row"><span class="muted small" style="min-width:52px;display:inline-block">'+sl.label+'</span><span class="muted small">— empty —</span></div>';
+  const startersHtml=fitted.starterSlots.map(row).join('');
+  const benchHtml=fitted.benchSlots.length
+    ? '<div class="small muted" style="margin-top:8px;margin-bottom:2px">Bench</div>'+fitted.benchSlots.map(row).join('')
     : '';
-  el('rosterView').innerHTML = (rows+benchRows) || '—';
+  el('rosterView').innerHTML=(startersHtml+benchHtml)||'—';
 }
 function renderKeeperList(){
   const wrap=el('keeperList'); if(!wrap)return;
