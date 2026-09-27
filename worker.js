@@ -432,7 +432,7 @@ function yahooPlayerRows(raw) {
   const seen = new Set();
   return collectYahooEntities(raw, "player").filter((p) => p.player_key && !seen.has(p.player_key) && seen.add(p.player_key)).map((p) => ({
     name: p.name || "Unknown",
-    pos: p.display_position || p.position || "",
+    pos: String(p.display_position || p.position || "").replace(/\s*,\s*/g, "/"),
     team: p.editorial_team_abbr || "",
     status: p.status || "",
     bye_week: p.bye_week || "",
@@ -440,6 +440,68 @@ function yahooPlayerRows(raw) {
   }));
 }
 __name(yahooPlayerRows, "yahooPlayerRows");
+async function yahooLeagueEligibility(token, leagueKey, limit = 500) {
+  const rows = [], seen = new Set(), batch = 25;
+  for (let start = 0; start < limit; start += batch) {
+    const raw = await yahooJson(token, `league/${leagueKey}/players;start=${start};count=${batch}`);
+    const got = yahooPlayerRows(raw).filter((p) => {
+      const key = String(p.name || "").trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    rows.push(...got);
+    if (got.length < batch) break;
+  }
+  return rows;
+}
+__name(yahooLeagueEligibility, "yahooLeagueEligibility");
+function clientPlayerIdNameMap(profile) {
+  const rows = csvMatrix(profile && profile.playersCsv || "");
+  const out = new Map();
+  if (!rows.length) return out;
+  const header = rows[0].map((h) => String(h).toLowerCase().trim());
+  const hasHeader = header.includes("name");
+  const nameIdx = hasHeader ? header.indexOf("name") : 0;
+  const start = hasHeader ? 1 : 0;
+  for (let i = start; i < rows.length; i++) {
+    const name = String(rows[i] && rows[i][nameIdx] || "").trim();
+    if (name) out.set(i, name);
+  }
+  return out;
+}
+__name(clientPlayerIdNameMap, "clientPlayerIdNameMap");
+function profileSlotForOverall(profile, ov) {
+  const teams = Number(profile && profile.teams) || 12;
+  const round = Math.ceil(ov / teams);
+  const idx = ov - (round - 1) * teams;
+  if (String(profile && profile.draftType || "snake") === "linear") return idx;
+  return round % 2 === 1 ? idx : teams - idx + 1;
+}
+__name(profileSlotForOverall, "profileSlotForOverall");
+function savedRosterNames(profile, setup) {
+  if (!setup) return [];
+  if (Array.isArray(setup.myRosterNames) && setup.myRosterNames.length) {
+    return [...new Set(setup.myRosterNames.map(String).map((x) => x.trim()).filter(Boolean))];
+  }
+  const idToName = clientPlayerIdNameMap(profile);
+  const mySlot = Number(profile && profile.mySlot);
+  if (!mySlot) return [];
+  const names = [];
+  const overrides = setup.pickOwnerOverride || {};
+  (setup.picks || []).forEach((pk) => {
+    const ov = Number(pk.overall);
+    const owner = Number(overrides[ov] || profileSlotForOverall(profile, ov));
+    const name = idToName.get(Number(pk.playerId));
+    if (owner === mySlot && name) names.push(name);
+  });
+  (setup.auctionPicks || []).forEach((pk) => {
+    const name = idToName.get(Number(pk.playerId));
+    if (Number(pk.owner) === mySlot && name) names.push(name);
+  });
+  return [...new Set(names)];
+}
+__name(savedRosterNames, "savedRosterNames");
 function fantasyProsLeagueKey(value) {
   const raw = String(value || "").trim();
   let candidate = raw;
