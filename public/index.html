@@ -3403,8 +3403,41 @@ function needScore(counts,pos){
 }
 // A hockey player can be C and LW at once, so need is the BEST of the slots they
 // can actually fill — otherwise a C/LW would look unwanted whenever centre is full.
-function eligiblePositions(p){ return (p&&p.posEligible&&p.posEligible.length)?p.posEligible:[p&&p.pos]; }
+function eligiblePositions(p,platform){
+  if(!p)return [];
+  const key=platform||LEAGUE.platform||'fallback';
+  const specific=p.eligibility&&p.eligibility[key];
+  if(specific&&specific.length)return specific;
+  const fallback=p.eligibility&&p.eligibility.fallback;
+  return (fallback&&fallback.length)?fallback:((p.posEligible&&p.posEligible.length)?p.posEligible:[p.pos].filter(Boolean));
+}
+function applyPlatformEligibility(profile){
+  const maps=profile&&profile.platformEligibility||{};
+  Object.entries(maps).forEach(([platform,byName])=>{
+    Object.entries(byName||{}).forEach(([name,raw])=>{
+      const p=PLAYERS.find(x=>String(x.name).toLowerCase()===String(name).toLowerCase());
+      if(!p)return;
+      const alias=SPORT.posAlias||{};
+      const vals=(Array.isArray(raw)?raw:String(raw||'').split(/[\\/|+,]/))
+        .map(x=>String(x).trim().toUpperCase()).filter(Boolean).map(x=>alias[x]||x);
+      if(vals.length){p.eligibility=p.eligibility||{};p.eligibility[platform]=[...new Set(vals)];}
+    });
+  });
+}
 function playerFillsPos(p,pos){ return eligiblePositions(p).includes(pos); }
+function exposureText(p){
+  const d=EXPOSURE&&EXPOSURE.denominator||0;
+  const n=EXPOSURE&&EXPOSURE.counts&&EXPOSURE.counts[String(p.name||'').toLowerCase()]||0;
+  return n+'/'+d;
+}
+async function loadExposure(){
+  EXPOSURE={denominator:0,counts:{}};
+  try{
+    const r=await fetch('/api/exposure?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});
+    if(r.ok)EXPOSURE=await r.json();
+  }catch(e){}
+  if(el('poolTable'))renderPool();
+}
 function needScoreFor(counts,p){
   return Math.max(...eligiblePositions(p).map(pos=>needScore(counts,pos)));
 }
@@ -4405,7 +4438,11 @@ function parsePlayers(txt){
     const pos=elig[0]||'';
     const gp=num(at(c,'gp'));
     const projNum=num(at(c,'proj',5))||0;
-    arr.push({id:i, name:playerName, pos, posEligible:elig.length?elig:[pos], team:SPORT.id==='nhl'?(NHL_TEAM_UPDATES[playerName]||at(c,'team',2)||''):(at(c,'team',2)||''),
+    const splitPos=(raw)=>String(raw||'').toUpperCase().split(/[\\/|+]/).map(x=>x.trim()).filter(Boolean).map(x=>alias[x]||x);
+    const yahooElig=splitPos(at(c,'yahoo_pos')), fantraxElig=splitPos(at(c,'fantrax_pos'));
+    arr.push({id:i, name:playerName, pos, posEligible:elig.length?elig:[pos],
+      eligibility:{fallback:elig.length?elig:[pos],yahoo:yahooElig,fantrax:fantraxElig},
+      team:SPORT.id==='nhl'?(NHL_TEAM_UPDATES[playerName]||at(c,'team',2)||''):(at(c,'team',2)||''),
       adp, ecr:num(at(c,'ecr',4))||adp, proj:num(at(c,'proj',5))||0, tier:num(at(c,'tier',6))||0,
       yahooDefault:num(at(c,'yahoo_default')), yahooAvgSalary:num(at(c,'yahoo_avg_salary')),
       fpValue:num(at(c,'fp_value')), dsMarket:num(at(c,'ds_market')), dsValue:num(at(c,'ds_value')),
@@ -4450,9 +4487,7 @@ function teamLogoImg(p){
 // fill more than one forward spot, which is the tiebreak worth seeing at a glance.
 function posCell(p){
   const elig=eligiblePositions(p);
-  const fwd=elig.filter(x=>x==='C'||x==='LW'||x==='RW');
-  const flex=fwd.length>=2?'<span class="fchip" title="Eligible at '+fwd.join('/')+'">F</span>':'';
-  return `<span class="pos ${p.pos}">${elig.join('/')}</span>${flex}`;
+  return '<span class="pos '+p.pos+'">'+elig.join('/')+'</span>';
 }
 function rookieBadge(p){ return p.rookie ? '<span class="rkchip" title="Rookie">RK</span>' : ''; }
 function loadPlayersData(txt){const arr=parsePlayers(txt); if(arr.length){PLAYERS=arr; const w=el('seedWarn'); if(w)w.style.display='none';} return arr.length;}
@@ -4460,7 +4495,7 @@ function loadPlayersCSV(txt){
   if(loadPlayersData(txt)){ applyKeepers(); resetDraft(); setStatus('Loaded '+PLAYERS.length+' players.'); }
 }
 function exportText(txt,name){const b=new Blob([txt],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();}
-function poolToCSV(){return 'name,pos,team,adp,ecr,proj,tier,yahoo_default,yahoo_avg_salary,fp_value,ds_market,ds_value,rotowire_value,custom_value,age,trajectory,sleeper_id,rookie\n'+PLAYERS.map(p=>[p.name,p.pos,p.team,p.adp,p.ecr,p.proj,p.tier||'',p.yahooDefault||'',p.yahooAvgSalary||'',p.fpValue||'',p.dsMarket||'',p.dsValue||'',p.rotowireValue||'',p.customValue||'',p.age||'',p.trajectory||'',p.sleeperId||'',p.rookie?1:''].join(',')).join('\n');}
+function poolToCSV(){return 'name,pos,team,adp,ecr,proj,tier,yahoo_default,yahoo_avg_salary,fp_value,ds_market,ds_value,rotowire_value,custom_value,age,trajectory,sleeper_id,rookie,nhl_id,yahoo_pos,fantrax_pos\n'+PLAYERS.map(p=>[p.name,p.pos,p.team,p.adp,p.ecr,p.proj,p.tier||'',p.yahooDefault||'',p.yahooAvgSalary||'',p.fpValue||'',p.dsMarket||'',p.dsValue||'',p.rotowireValue||'',p.customValue||'',p.age||'',p.trajectory||'',p.sleeperId||'',p.rookie?1:'',p.nhlId||'',(p.eligibility&&p.eligibility.yahoo||[]).join('/'),(p.eligibility&&p.eligibility.fantrax||[]).join('/')].join(',')).join('\n');}
 function loadKeepersCSV(txt){
   const lines=txt.trim().split(/\r?\n/).filter(l=>l.trim());
   lines.forEach(l=>{const c=l.split(',').map(x=>x.trim()); if(c.length>=3){
@@ -4516,6 +4551,7 @@ async function saveCsvToLeague(){
 // ---------- LEAGUES (cloud: /api/leagues) ----------
 const LEAGUE_POSITIONS=['QB','RB','WR','TE','FLEX','SUPERFLEX','K','DST'];
 let editingLeagueId=null;
+let PENDING_LEAGUE_META={};
 function renderLeaguesTab(){
   const sel=el('leaguesList'); if(!sel)return;
   sel.innerHTML=Object.values(LEAGUES).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
@@ -4674,6 +4710,7 @@ function collectLeagueForm(){
   const existing=LEAGUES[editingLeagueId]||{};
   return {
     ...existing,
+    ...PENDING_LEAGUE_META,
     name: el('lgName').value.trim()||'New League',
     teams: +el('lgTeams').value||12,
     rounds: +el('lgRounds').value||existing.rounds||16,
@@ -4722,7 +4759,7 @@ async function saveLeagueForm(){
   }catch(e){ el('leaguesStatus').textContent='⚠ Save failed: '+e.message; }
 }
 function newLeagueForm(){
-  editingLeagueId=null;
+  editingLeagueId=null; PENDING_LEAGUE_META={};
   el('lgName').value='New League'; el('lgTeams').value=12; el('lgRounds').value=16; el('lgDraftType').value='snake';
   if(el('lgSport')) el('lgSport').value=ACTIVE_SPORT;
   el('lgLeagueType').value='keeper'; updateLgKeeperFieldsVisibility();
@@ -4767,6 +4804,7 @@ async function importFromSleeper(){
     const r=await fetch('/api/import/sleeper/'+encodeURIComponent(sid));
     const data=await r.json();
     if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
+    ['platform','sport','platformEligibility','scoringMode','scoring','categoryStats','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'].forEach(k=>{if(data[k]!==undefined)PENDING_LEAGUE_META[k]=data[k];});
     el('lgName').value=data.name||'';
     el('lgTeams').value=data.teams||12;
     el('lgOwners').value=(data.owners||[]).join(', ');
@@ -4779,7 +4817,7 @@ async function importFromFantrax(){
   const fid=el('fantraxLeagueId').value.trim(); if(!fid)return;
   // Same rule as the Sleeper importer: an import always creates a NEW league, so
   // clicking Save afterwards can never overwrite whichever league the form had open.
-  editingLeagueId=null;
+  editingLeagueId=null; PENDING_LEAGUE_META={};
   el('fantraxImportStatus').textContent='Importing\u2026';
   try{
     const r=await fetch('/api/import/fantrax/'+encodeURIComponent(fid));
