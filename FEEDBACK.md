@@ -14,6 +14,34 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- 🆕 2026-09-27 — **Resolved: skip the FAAB Lab's downloadable `.ics`, go
+  straight for agent-placed Calendar events naming the actual weekly bids.**
+  User: *"I don't care about downloading a new ics. I have calendar events
+  now, agents also have access to my Google calendar, we can setup those
+  calendar events and reminders from the FAAB Lab results each week. as in,
+  the agents will place on my Google Calendar the players I plan to bid on
+  and how much to bid on them."* Concretely: instead of (or before) a code
+  path that generates a static `.ics`, a session with Calendar access reads
+  that week's FAAB Lab recommendations and creates/updates the relevant
+  event(s) directly — via `mcp__Google_Calendar__create_event`/
+  `update_event`, the same tool used for the 5 generic reminders above —
+  with the specific players + bid amounts in the title/description, not just
+  "waivers due." **Explicit fallback if that proves too ambitious**, in the
+  user's own words: *"we will just keep the repeating generic reminders on
+  the calendar, and I will log into the app to check the waiver suggestions
+  and just enter them manually until we get it more automated later."* So
+  the 5 existing generic recurring events (see the entry below) are the
+  floor, not a placeholder to be torn out — they stay working exactly as-is
+  regardless of how far the automation gets. **Not built yet** — this is the
+  direction, not an implementation. Whoever picks this up next needs: (1) a
+  read path into that week's FAAB Lab output (recommended bids per league),
+  (2) a decision on whether to update the existing 5 generic events in place
+  (adding specifics into the description) or create separate per-league
+  "your claims" events alongside them, and (3) confirmation this runs
+  automatically on some schedule (a Routine/cron) rather than requiring a
+  human to manually trigger a session each week — which is the actual point,
+  since manual-trigger-required isn't meaningfully more automated than
+  logging into the app.
 - ✅ 2026-09-18 — **5 live Google Calendar waiver-deadline reminders, created
   directly via the Calendar MCP tool (not stored in this app).** Once the user
   connected a Google Calendar connector, real recurring events were created on
