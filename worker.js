@@ -148,6 +148,10 @@ __name(yahooTokenRequest, "yahooTokenRequest");
 async function getYahooAccessToken(env, kv, url) {
   const auth = await kv.get(YAHOO_AUTH_KEY, { type: "json" });
   if (!auth) return null;
+  if (auth.client_id && env.YAHOO_CLIENT_ID && auth.client_id !== env.YAHOO_CLIENT_ID) {
+    await kv.delete(YAHOO_AUTH_KEY);
+    return null;
+  }
   if (Date.now() < auth.expires_at - 6e4) return auth.access_token;
   const tok = await yahooTokenRequest(env, {
     grant_type: "refresh_token",
@@ -158,8 +162,8 @@ async function getYahooAccessToken(env, kv, url) {
     access_token: tok.access_token,
     refresh_token: tok.refresh_token || auth.refresh_token,
     expires_at: Date.now() + tok.expires_in * 1e3,
-    connected_at: auth.connected_at || null
-    // survives refreshes; see the callback
+    connected_at: auth.connected_at || null,
+    client_id: env.YAHOO_CLIENT_ID || auth.client_id || null
   };
   await kv.put(YAHOO_AUTH_KEY, JSON.stringify(updated));
   return updated.access_token;
@@ -726,11 +730,13 @@ var worker_default = {
       if (!env.YAHOO_CLIENT_ID) return new Response("Yahoo OAuth isn't configured (missing YAHOO_CLIENT_ID secret).", { status: 500 });
       const yme = env.MOCKS ? await currentUser(request, env, env.MOCKS) : null;
       if (!yme || !yme.admin) return new Response("Only the admin can connect a Yahoo account.", { status: 403 });
+      if (url.searchParams.get("force") === "1" && env.MOCKS) await env.MOCKS.delete(YAHOO_AUTH_KEY);
       const authUrl = "https://api.login.yahoo.com/oauth2/request_auth?" + new URLSearchParams({
         client_id: env.YAHOO_CLIENT_ID,
         redirect_uri: yahooRedirectUri(url),
         response_type: "code",
-        language: "en-us"
+        language: "en-us",
+        prompt: "consent"
       }).toString();
       return Response.redirect(authUrl, 302);
     }
@@ -753,7 +759,8 @@ var worker_default = {
           // made before the Yahoo app had Fantasy Sports permission stays
           // permission-less no matter how many times it is refreshed. This
           // timestamp is what tells us to stop refreshing and re-consent.
-          connected_at: Date.now()
+          connected_at: Date.now(),
+          client_id: env.YAHOO_CLIENT_ID || null
         }));
         return new Response("Yahoo account connected. You can close this tab and go back to the app's Leagues tab.", { headers: { "Content-Type": "text/plain" } });
       } catch (e) {
@@ -1440,11 +1447,15 @@ var worker_default = {
         if (request.method !== "GET") return J({ error: "method" }, 405);
         const auth = await kv.get(YAHOO_AUTH_KEY, { type: "json" });
         const cid = env.YAHOO_CLIENT_ID || "";
+        const clientMatch = !!auth && (!auth.client_id || !cid || auth.client_id === cid);
+        const hint = (x) => x ? `${x.slice(0, 12)}…${x.slice(-8)} (${x.length} chars)` : null;
         return J({
-          connected: !!auth,
+          connected: !!auth && clientMatch,
+          stale_grant: !!auth && !clientMatch,
           connected_at: auth ? auth.connected_at || null : null,
           expires_at: auth ? auth.expires_at || null : null,
-          client_id_hint: cid ? `${cid.slice(0, 12)}\u2026${cid.slice(-8)} (${cid.length} chars)` : null
+          grant_client_id_hint: auth ? hint(auth.client_id || "") : null,
+          client_id_hint: hint(cid)
         });
       }
       if (path === "/api/yahoo/disconnect") {
