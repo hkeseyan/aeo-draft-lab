@@ -224,6 +224,12 @@ The deterministic engine accounts for optimal-lineup improvement, the current pl
 
 Inputs live at `GET/PUT /api/inseason/state`; reports are created/listed/read through `/api/inseason/reports` and retain the latest 30 index entries per user/league. Source configuration and manual refresh use `/api/data-sources` and `/api/data-sources/sync`; the normalized read model is `GET /api/league-data`. Provider credentials/keys are stored in separate KV records and are not echoed back to the client. Cloudflare cron refreshes configured league sources every four hours, and also runs at both UTC hours that may correspond to Tuesday 1:00am Pacific. The FAAB path performs a timezone and idempotency check so exactly one report runs across PDT/PST. The UI generates an 18-week recurring `.ics` reminder. `/api/inseason/email` and scheduled delivery use Resend only when `RESEND_API_KEY` and `FAAB_REPORT_FROM` are configured.
 
+### Waiver ticket workflow
+
+The Waiver Lab turns a report recommendation into a user-owned, per-league ticket with the following lifecycle: `draft → approved → submitted → verified`, with `not_won` and `cancelled` terminal outcomes. Tickets are created/listed at `GET/POST /api/inseason/tickets` and read/updated at `GET/PUT /api/inseason/tickets/:id`; the latest 100 are indexed per user and league in KV.
+
+Each ticket retains the candidate, optional suggested drop, bid levels, waiver method, deadline, team direction, draft-order rule, trigger, rationale, originating report, and snapshot timestamp. This makes an in-session recommendation reviewable after the fact rather than turning a one-off chat answer into an untraceable action. The app never submits a transaction to Yahoo, Sleeper, or FantasyPros: the manager performs the actual claim manually, refreshes the host/FantasyPros snapshot, then records `verified` only after that readback. For non-guillotine leagues, team direction and waiver method intentionally default to `unspecified`/`unknown` so dynasty strategy and platform rules are entered explicitly rather than inferred.
+
 The current FantasyPros direct feed covers the user's roster/matchup and decision context but not the complete free-agent pool. Therefore the normalized snapshot tracks coverage per field (`roster`, `available`, `projections`) and never presents a partial provider as complete. Yahoo or the last saved/manual pool remains the availability authority until a supported complete FantasyPros availability feed is added.
 
 ### Strategy Lab
