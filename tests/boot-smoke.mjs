@@ -123,7 +123,8 @@ ok &= check('no K/DST lateness rule in hockey', 'SPORT.lateRoundPositions.length
 ok &= check('scoring values carried onto LEAGUE', 'LEAGUE.scoring.sog', 0.9);
 ok &= check('weekly acquisition cap carried', 'LEAGUE.maxAcquisitionsPerWeek', 4);
 ok &= check('sport bar shows both sports', () => w.document.getElementById('sportBar').children.length, 2);
-ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','), 'yahoo-nhl-public,public-points-league-1');
+ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','),
+  'yahoo-nhl-public,public-points-league-1,yahoo-nhl-prize-categories,yahoo-nhl-prize-roto');
 ok &= check('position filter is hockey', () => [...w.document.getElementById('posFilter').options].map(o => o.value).join(','), 'ALL,C,LW,RW,D,G');
 ok &= check('tendency columns are hockey', () => [...w.document.getElementById('tendHead').children].map(x => x.textContent).join(','), 'Use,Owner,C,LW,RW,D,G');
 
@@ -296,24 +297,22 @@ ok &= check('more games beats fewer at equal rate', () => JSON.parse(ev(`(functi
 ev('switchLeague("public-points-league-1")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('live league has 12 teams and slot 4', 'LEAGUE.teams===12 && mySlot===4', true);
-ok &= check('all 77 reported picks resolved', 'picks.length', 77);
-ok &= check('next unfilled overall pick', 'curPick', 78);
+ok &= check('Yahoo league ID and team name attached',
+  'LEAGUES[CURRENT_LEAGUE_ID].yahooLeagueId==="135526" && ME_OWNER==="Individual Neutral Athletes"', true);
+ok &= check('all 192 draft picks resolved in unique slots',
+  'picks.length===192 && new Set(picks.map(x=>x.overall)).size===192 && new Set(picks.map(x=>x.playerId)).size===192', true);
+ok &= check('draft complete', 'curPick', 193);
 ok &= check('Yahoo winger eligibility overrides stale single-position pool',
   'playerFillsPos(findPlayer("J. Robertson"),"RW") && playerFillsPos(findPlayer("C. Gauthier"),"C")', true);
 ok &= check('accent-insensitive and initial search match the NHL pool',
   'playerMatchesSearch(findPlayer("Tim Stützle"),"T. Stutzle") && playerMatchesSearch(findPlayer("Juraj Slafkovský"),"Slafkovsky")', true);
-ok &= check('suspension removes Hellebuyck from active goalie count',
-  'nhlLiveRecommendations()[0].counts.G===1 && nhlLiveRecommendations()[0].activeG===0', true);
+ok &= check('completed draft has 16 rostered players', 'myRoster().length', 16);
 ok &= check('no separate IR watch panel clutters recommendations',
   () => !w.document.getElementById('nhlHealthWatch'), true);
-ok &= check('stash does not crowd the mid-draft top six',
-  'nhlLiveRecommendations().every(x=>x.label!=="IR STASH")', true);
-ev('curPick=169');
-ok &= check('one late stash appears with Yahoo status caveat',
-  'nhlLiveRecommendations().filter(x=>x.label==="IR STASH" && /Yahoo IR eligibility pending/.test(x.reason)).length', 1);
-ok &= check('Hellebuyck-only roster favors a skater stash',
-  'nhlLiveRecommendations().find(x=>x.label==="IR STASH").player.pos!=="G"', true);
-ev('curPick=78');
+ok &= check('round 15 IR stashes resolved at real slots',
+  'PLAYERS.find(p=>p.id===picks.find(x=>x.overall===177).playerId).name==="Kevin Fiala" && PLAYERS.find(p=>p.id===picks.find(x=>x.overall===178).playerId).name==="Brad Marchand"', true);
+ok &= check('round 16 final selection recorded',
+  'PLAYERS.find(p=>p.id===picks.find(x=>x.overall===189).playerId).name', 'Filip Gustavsson');
 const search=w.document.getElementById('search'); search.value='B. Marchand'; ev('renderPool()');
 ok &= check('deep stash candidate searchable by initial',
   () => w.document.querySelector('#poolTable tbody').textContent.includes('Brad Marchand'), true);
@@ -321,14 +320,30 @@ search.value='J. Robertson'; ev('renderPool()');
 ok &= check('already drafted search explains absence',
   () => w.document.querySelector('#poolTable tbody').textContent.includes('already drafted'), true);
 search.value=''; ev('renderPool()');
-ok &= check('user seven selections at the reported picks',
+ok &= check('user sixteen selections at the reported picks',
   'JSON.stringify(picks.filter(p=>ownerOf(p.overall)===mySlot).map(p=>[p.overall,PLAYERS.find(x=>x.id===p.playerId).name]))',
-  '[[4,"Nikita Kucherov"],[21,"Auston Matthews"],[28,"Cutter Gauthier"],[45,"Moritz Seider"],[52,"Connor Hellebuyck"],[69,"Filip Forsberg"],[76,"Erik Karlsson"]]');
+  '[[4,"Nikita Kucherov"],[21,"Auston Matthews"],[28,"Cutter Gauthier"],[45,"Moritz Seider"],[52,"Connor Hellebuyck"],[69,"Filip Forsberg"],[76,"Erik Karlsson"],[93,"Alex Tuch"],[100,"Shea Theodore"],[117,"Mark Stone"],[124,"John Gibson"],[141,"Mattias Ekholm"],[148,"Josh Doan"],[165,"Steven Stamkos"],[172,"Darcy Kuemper"],[189,"Filip Gustavsson"]]');
 liveSetupOverride = {picks:JSON.parse(ev('JSON.stringify(picks.slice(0,58))')),curPick:59,seededLiveSnapshot:true};
 await ev('loadSetup()');
-ok &= check('saved 58-pick board extends without replacing existing picks',
-  'picks.length===77 && picks[0].overall===1 && picks.some(p=>p.overall===76&&PLAYERS.find(x=>x.id===p.playerId).name==="Erik Karlsson")', true);
+ok &= check('saved 58-pick board extends to complete draft',
+  'picks.length===192 && picks[0].overall===1 && picks.some(p=>p.overall===189&&PLAYERS.find(x=>x.id===p.playerId).name==="Filip Gustavsson")', true);
+liveSetupOverride = {picks:JSON.parse(ev('JSON.stringify(picks.slice().filter(x=>x.overall<=77))'))
+  .concat([{overall:80,round:7,slot:8,playerId:ev('findPlayer("Boone Jenner").id'),keeper:false}]),
+  curPick:78,seededLiveSnapshot:true,appliedLiveSnapshotCount:77};
+await ev('loadSetup()');
+ok &= check('saved 77-pick board extends without replacing a manual slot',
+  'picks.length===192 && PLAYERS.find(p=>p.id===pickTakenAt(80).playerId).name==="Boone Jenner" && curPick===193', true);
 liveSetupOverride = null;
+ev('switchLeague("yahoo-nhl-prize-categories")');
+await new Promise(r => setTimeout(r, 250));
+ok &= check('categories profile has published Yahoo prize stats and no points advice',
+  'LEAGUE.teams===12 && LEAGUE.scoringMode==="categories" && LEAGUE.statCategories.skaters.includes("HIT") && nhlLiveRecommendations().length===0 && !radarVisible()', true);
+ok &= check('categories pool clearly awaits its own model',
+  () => w.document.querySelector('#poolTable tbody').textContent.includes('Category-specific rankings'), true);
+ev('switchLeague("yahoo-nhl-prize-roto")');
+await new Promise(r => setTimeout(r, 250));
+ok &= check('roto profile uses blocks, not hits, with 82 game limit',
+  'LEAGUE.scoringMode==="roto" && LEAGUE.statCategories.skaters.includes("BLK") && !LEAGUE.statCategories.skaters.includes("HIT") && LEAGUE.modelPending', true);
 ev('switchLeague("aeo-keepers")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('football unaffected after switching back', () => ev('SPORT.id') + ' ' + slots(), 'nfl QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');
