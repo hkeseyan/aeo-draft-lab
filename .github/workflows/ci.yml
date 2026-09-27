@@ -19,3 +19,20 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Run test suite
         run: npm test
+      - name: Verify production auto-deploy
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          for attempt in $(seq 1 24); do
+            html="$(curl -fsS --max-time 15 https://aeo-draft-lab.hkeseyan.workers.dev/ || true)"
+            if printf '%s' "$html" | grep -q 'Exposure across your other drafted leagues in this sport' \
+              && printf '%s' "$html" | grep -q "yahoo-nhl-public-categories" \
+              && ! printf '%s' "$html" | grep -q "yahoo-nhl-prize-categories" \
+              && ! printf '%s' "$html" | grep -q '\.fchip'; then
+              echo "Production Worker matches the final NHL release markers."
+              exit 0
+            fi
+            echo "Waiting for Cloudflare Workers Build auto-deploy (attempt $attempt/24)..."
+            sleep 5
+          done
+          echo "Production Worker did not converge to the merged main build in time."
+          exit 1
