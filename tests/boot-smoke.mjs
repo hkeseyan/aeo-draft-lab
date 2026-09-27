@@ -124,12 +124,13 @@ ok &= check('no K/DST lateness rule in hockey', 'SPORT.lateRoundPositions.length
 ok &= check('scoring values carried onto LEAGUE', 'LEAGUE.scoring.sog', 0.9);
 ok &= check('weekly acquisition cap carried', 'LEAGUE.maxAcquisitionsPerWeek', 4);
 ok &= check('sport bar shows both sports', () => w.document.getElementById('sportBar').children.length, 2);
-ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','), 'yahoo-nhl-public,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1');
+ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','),
+  'yahoo-nhl-public,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1');
 ok &= check('position filter is hockey', () => [...w.document.getElementById('posFilter').options].map(o => o.value).join(','), 'ALL,C,LW,RW,D,G');
 ok &= check('tendency columns are hockey', () => [...w.document.getElementById('tendHead').children].map(x => x.textContent).join(','), 'Use,Owner,C,LW,RW,D,G');
 
 // --- My Rank: stable intrinsic league value; ADP is market context only ---
-ok &= check('points My Rank uses active-league scoring and replacement value',
+ok &= check('points My Rank uses league scoring and replacement value',
   'PLAYERS.filter(p=>p.leagueProj>0 && /replacement/.test(p.myRankWhy||"")).length', v => v > 300);
 ok &= check('My Rank is independent of ADP changes', () => ev(`(function(){
   const original=PLAYERS.map(p=>p.adp), before=PLAYERS.map(p=>p.myRank).join(',');
@@ -138,12 +139,10 @@ ok &= check('My Rank is independent of ADP changes', () => ev(`(function(){
   PLAYERS.forEach((p,i)=>p.adp=original[i]); computeMyRanks();
   return before===after;
 })()`), true);
-ok &= check('platform-aware Yahoo eligibility corrects Jason Robertson',
+ok &= check('Yahoo reference eligibility gives Jason Robertson both wings',
   'JSON.stringify(eligiblePositions(PLAYERS.find(p=>p.name==="Jason Robertson")))', '["LW","RW"]');
-ok &= check('every ranked NHL player carries an explanation',
-  'PLAYERS.filter(p=>p.myRankWhy!=null).length', 400);
-ok &= check('football My Rank model is untouched',
-  () => ev('SPORTS.nfl.myRankModel') + '/' + ev('SPORTS.nhl.myRankModel'), 'nfl/nhl');
+ok &= check('every ranked player carries an explanation', 'PLAYERS.filter(p=>p.myRankWhy!=null).length', 400);
+ok &= check('football My Rank model is untouched', () => ev('SPORTS.nfl.myRankModel') + '/' + ev('SPORTS.nhl.myRankModel'), 'nfl/nhl');
 
 const oldFetch = w.fetch;
 w.fetch = async url => String(url).includes('/api/yahoo/league-settings')
@@ -174,8 +173,10 @@ ok &= check('NHL live pick panel has six available candidates',
   'nhlLiveRecommendations().length', 6);
 ok &= check('NHL live panel rendered separately from the rank table',
   () => w.document.querySelectorAll('#nhlLivePicks .live-pick').length, 6);
-ok &= check('projection sits beside ADP, ECR and My Rank',
-  () => [...w.document.querySelectorAll('#poolTable th')].slice(1,5).map(x=>x.textContent).join(','), 'ADP,ECR,My,Proj');
+ok &= check('projection and exposure sit beside ADP, ECR and My Rank',
+  () => [...w.document.querySelectorAll('#poolTable th')].slice(1,6).map(x=>x.textContent).join(','), 'ADP,ECR,My,Proj,Exp');
+ok &= check('exposure shows prior-league fraction',
+  'exposureText(PLAYERS.find(p=>p.name==="Jason Robertson"))', '2/4');
 ok &= check('NHL portraits and team logos use NHL assets',
   'headshotImg(PLAYERS.find(p=>p.name==="Cale Makar")).includes("assets.nhle.com/mugs") && teamLogoImg(PLAYERS.find(p=>p.name==="Cale Makar")).includes("COL_dark.svg")', true);
 ok &= check('recommendation includes next turn and roster state',
@@ -198,8 +199,8 @@ ok &= check('My Rank stays intrinsic when the roster changes',
   'PLAYERS.find(p=>p.name==="Cale Makar").myRank', originalRank);
 ev('resetDraft()');
 
-// --- eligibility, exposure and flexible roster slots ---
-ok &= check('the board shows all eligible positions without the old F pip', () => {
+// --- eligibility and roster fitting ---
+ok &= check('board shows full eligibility without the old F pip', () => {
   const cell = ev('posCell(PLAYERS.find(p=>p.name==="Jason Robertson"))');
   return /LW\/RW/.test(cell) && !/fchip/.test(cell) ? true : cell;
 }, true);
@@ -207,13 +208,9 @@ ok &= check('fallback multi-position eligibility still works', () => ev(`(functi
   const d=PLAYERS.find(p=>p.name==='Leon Draisaitl');
   return playerFillsPos(d,'LW') && playerFillsPos(d,'C') && !playerFillsPos(d,'RW');
 })()`), true);
-ok &= check('exposure renders as prior-league fraction',
-  'exposureText(PLAYERS.find(p=>p.name==="Jason Robertson"))', '2/4');
-ok &= check('draft table keeps Proj and Exposure beside rankings',
-  () => [...w.document.querySelectorAll('#poolTable th')].slice(1,6).map(x=>x.textContent).join(','), 'ADP,ECR,My,Proj,Exp');
-ok &= check('reserved bench rows match the four-slot Yahoo bench',
+ok &= check('reserved bench rows match Yahoo four-slot bench',
   'slotRosterPlayers([],LEAGUE.starters).benchSlots.length', 4);
-ok &= check('multi-position roster matching reroutes players to keep starters filled', () => ev(`(function(){
+ok &= check('multi-position matching reroutes flexible player', () => ev(`(function(){
   const flex=PLAYERS.find(p=>p.name==='Leon Draisaitl'), c=PLAYERS.find(p=>p.name==='Connor McDavid');
   const fit=slotRosterPlayers([flex,c],{C:1,LW:1});
   return fit.starterSlots.every(x=>x.player)&&fit.starterSlots.find(x=>x.label==='LW').player.name==='Leon Draisaitl';
@@ -278,38 +275,25 @@ ok &= check('more games beats fewer at equal rate', () => JSON.parse(ev(`(functi
   return JSON.stringify(score(10,'EDM') > score(10,'TOR'));
 })()`)), true);
 
-ev('switchLeague("yahoo-nhl-public-categories")');
-await new Promise(r => setTimeout(r, 200));
-ok &= check('Yahoo H2H categories reference is 10 teams', 'LEAGUE.teams', 10);
-ok &= check('H2H categories uses category intrinsic value',
-  'PLAYERS.filter(p=>Number.isFinite(p.categoryValue)&&/H2H cat z/.test(p.myRankWhy||"")).length', v => v > 300);
-ev('switchLeague("yahoo-nhl-public-roto")');
-await new Promise(r => setTimeout(r, 200));
-ok &= check('Yahoo roto reference is 10 teams', 'LEAGUE.teams', 10);
-ok &= check('roto template uses blocks rather than hits',
-  'LEAGUE.categoryStats.skater.join(",")', 'G,A,+/-,PPP,SOG,BLK');
-
 ev('switchLeague("public-points-league-1")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('live league has 12 teams and slot 4', 'LEAGUE.teams===12 && mySlot===4', true);
-ok &= check('all 77 reported picks resolved', 'picks.length', 77);
-ok &= check('next unfilled overall pick', 'curPick', 78);
+ok &= check('Yahoo league ID and team name attached',
+  'LEAGUES[CURRENT_LEAGUE_ID].yahooLeagueId==="135526" && ME_OWNER==="Individual Neutral Athletes"', true);
+ok &= check('all 192 draft picks resolved in unique slots',
+  'picks.length===192 && new Set(picks.map(x=>x.overall)).size===192 && new Set(picks.map(x=>x.playerId)).size===192', true);
+ok &= check('draft complete', 'curPick', 193);
 ok &= check('Yahoo winger eligibility overrides stale single-position pool',
   'playerFillsPos(findPlayer("J. Robertson"),"RW") && playerFillsPos(findPlayer("C. Gauthier"),"C")', true);
 ok &= check('accent-insensitive and initial search match the NHL pool',
   'playerMatchesSearch(findPlayer("Tim Stützle"),"T. Stutzle") && playerMatchesSearch(findPlayer("Juraj Slafkovský"),"Slafkovsky")', true);
-ok &= check('suspension removes Hellebuyck from active goalie count',
-  'nhlLiveRecommendations()[0].counts.G===1 && nhlLiveRecommendations()[0].activeG===0', true);
+ok &= check('completed draft has 16 rostered players', 'myRoster().length', 16);
 ok &= check('no separate IR watch panel clutters recommendations',
   () => !w.document.getElementById('nhlHealthWatch'), true);
-ok &= check('stash does not crowd the mid-draft top six',
-  'nhlLiveRecommendations().every(x=>x.label!=="IR STASH")', true);
-ev('curPick=169');
-ok &= check('one late stash appears with Yahoo status caveat',
-  'nhlLiveRecommendations().filter(x=>x.label==="IR STASH" && /Yahoo IR eligibility pending/.test(x.reason)).length', 1);
-ok &= check('Hellebuyck-only roster favors a skater stash',
-  'nhlLiveRecommendations().find(x=>x.label==="IR STASH").player.pos!=="G"', true);
-ev('curPick=78');
+ok &= check('round 15 IR stashes resolved at real slots',
+  'PLAYERS.find(p=>p.id===picks.find(x=>x.overall===177).playerId).name==="Kevin Fiala" && PLAYERS.find(p=>p.id===picks.find(x=>x.overall===178).playerId).name==="Brad Marchand"', true);
+ok &= check('round 16 final selection recorded',
+  'PLAYERS.find(p=>p.id===picks.find(x=>x.overall===189).playerId).name', 'Filip Gustavsson');
 const search=w.document.getElementById('search'); search.value='B. Marchand'; ev('renderPool()');
 ok &= check('deep stash candidate searchable by initial',
   () => w.document.querySelector('#poolTable tbody').textContent.includes('Brad Marchand'), true);
@@ -317,14 +301,32 @@ search.value='J. Robertson'; ev('renderPool()');
 ok &= check('already drafted search explains absence',
   () => w.document.querySelector('#poolTable tbody').textContent.includes('already drafted'), true);
 search.value=''; ev('renderPool()');
-ok &= check('user seven selections at the reported picks',
+ok &= check('user sixteen selections at the reported picks',
   'JSON.stringify(picks.filter(p=>ownerOf(p.overall)===mySlot).map(p=>[p.overall,PLAYERS.find(x=>x.id===p.playerId).name]))',
-  '[[4,"Nikita Kucherov"],[21,"Auston Matthews"],[28,"Cutter Gauthier"],[45,"Moritz Seider"],[52,"Connor Hellebuyck"],[69,"Filip Forsberg"],[76,"Erik Karlsson"]]');
+  '[[4,"Nikita Kucherov"],[21,"Auston Matthews"],[28,"Cutter Gauthier"],[45,"Moritz Seider"],[52,"Connor Hellebuyck"],[69,"Filip Forsberg"],[76,"Erik Karlsson"],[93,"Alex Tuch"],[100,"Shea Theodore"],[117,"Mark Stone"],[124,"John Gibson"],[141,"Mattias Ekholm"],[148,"Josh Doan"],[165,"Steven Stamkos"],[172,"Darcy Kuemper"],[189,"Filip Gustavsson"]]');
 liveSetupOverride = {picks:JSON.parse(ev('JSON.stringify(picks.slice(0,58))')),curPick:59,seededLiveSnapshot:true};
 await ev('loadSetup()');
-ok &= check('saved 58-pick board extends without replacing existing picks',
-  'picks.length===77 && picks[0].overall===1 && picks.some(p=>p.overall===76&&PLAYERS.find(x=>x.id===p.playerId).name==="Erik Karlsson")', true);
+ok &= check('saved 58-pick board extends to complete draft',
+  'picks.length===192 && picks[0].overall===1 && picks.some(p=>p.overall===189&&PLAYERS.find(x=>x.id===p.playerId).name==="Filip Gustavsson")', true);
+liveSetupOverride = {picks:JSON.parse(ev('JSON.stringify(picks.slice().filter(x=>x.overall<=77))'))
+  .concat([{overall:80,round:7,slot:8,playerId:ev('findPlayer("Boone Jenner").id'),keeper:false}]),
+  curPick:78,seededLiveSnapshot:true,appliedLiveSnapshotCount:77};
+await ev('loadSetup()');
+ok &= check('saved 77-pick board extends without replacing a manual slot',
+  'picks.length===192 && PLAYERS.find(p=>p.id===pickTakenAt(80).playerId).name==="Boone Jenner" && curPick===193', true);
 liveSetupOverride = null;
+ev('switchLeague("yahoo-nhl-public-categories")');
+await new Promise(r => setTimeout(r, 250));
+ok &= check('categories reference is 10 teams with hits',
+  'LEAGUE.teams===10 && LEAGUE.scoringMode==="categories" && LEAGUE.categoryStats.skater.includes("HIT")', true);
+ok &= check('categories profile computes category replacement value',
+  'PLAYERS.filter(p=>Number.isFinite(p.categoryValue)&&/H2H cat z/.test(p.myRankWhy||"")).length', v => v > 300);
+ev('switchLeague("yahoo-nhl-public-roto")');
+await new Promise(r => setTimeout(r, 250));
+ok &= check('roto reference is 10 teams with blocks and 82-game cap',
+  'LEAGUE.teams===10 && LEAGUE.scoringMode==="roto" && LEAGUE.categoryStats.skater.includes("BLK") && !LEAGUE.categoryStats.skater.includes("HIT") && LEAGUE.maxGamesPlayed===82', true);
+ok &= check('roto profile computes category replacement value',
+  'PLAYERS.filter(p=>Number.isFinite(p.categoryValue)&&/roto z/.test(p.myRankWhy||"")).length', v => v > 300);
 ev('switchLeague("aeo-keepers")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('football unaffected after switching back', () => ev('SPORT.id') + ' ' + slots(), 'nfl QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');
