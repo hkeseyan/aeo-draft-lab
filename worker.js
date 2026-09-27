@@ -1212,12 +1212,11 @@ var worker_default = {
         if (!fxId) return J({ error: "Missing Fantrax league ID" }, 400);
         try {
           const base = "https://www.fantrax.com/fxea/general";
-          const [info, rosterResp] = await Promise.all([
+          const [info, rosterResp, playerIdsResp] = await Promise.all([
             fetch(`${base}/getLeagueInfo?leagueId=${encodeURIComponent(fxId)}`).then((r) => r.json()),
-            fetch(`${base}/getTeamRosters?leagueId=${encodeURIComponent(fxId)}`).then((r) => r.json())
+            fetch(`${base}/getTeamRosters?leagueId=${encodeURIComponent(fxId)}`).then((r) => r.json()),
+            fetch(`${base}/getPlayerIds?sport=NHL`).then((r) => r.ok ? r.json() : ({})).catch(() => ({}))
           ]);
-          // Fantrax answers 200 with an error object rather than an HTTP status,
-          // so the body is the only signal that the league id was wrong.
           const errOf = /* @__PURE__ */ __name((x) => x && x.error && (x.error.message || x.error.code), "errOf");
           if (errOf(info)) return J({ error: "Fantrax: " + errOf(info) }, 404);
           const rostersRaw = rosterResp && rosterResp.rosters || {};
@@ -1225,44 +1224,71 @@ var worker_default = {
             return J({ error: "Fantrax: " + errOf(rosterResp) }, 404);
           }
           const playerInfo = info && info.playerInfo || {};
-          // playerInfo's per-player shape isn't contractually documented, so try the
-          // plausible spellings and fall back to the raw id rather than dropping a
-          // roster spot silently.
+          const rawIds = playerIdsResp && (playerIdsResp.players || playerIdsResp.playerInfo || playerIdsResp) || {};
+          const idMeta = {};
+          if (Array.isArray(rawIds)) {
+            rawIds.forEach((m) => {
+              const id = m && (m.fantraxId || m.id || m.playerId);
+              if (id) idMeta[String(id)] = m;
+            });
+          } else if (rawIds && typeof rawIds === "object") {
+            Object.entries(rawIds).forEach(([key, m]) => {
+              if (!m || typeof m !== "object") return;
+              const id = m.fantraxId || m.id || m.playerId || key;
+              idMeta[String(id)] = m;
+            });
+          }
           const nameOf = /* @__PURE__ */ __name((pid) => {
-            const m = playerInfo[pid] || playerInfo[String(pid)];
-            if (!m) return String(pid);
-            return m.name || m.playerName || m.fullName || [m.firstName, m.lastName].filter(Boolean).join(" ").trim() || String(pid);
+            const m = idMeta[String(pid)] || {};
+            const legacy = playerInfo[pid] || playerInfo[String(pid)] || {};
+            return m.name || m.playerName || m.fullName || legacy.name || legacy.playerName || legacy.fullName ||
+              [m.firstName, m.lastName].filter(Boolean).join(" ").trim() ||
+              [legacy.firstName, legacy.lastName].filter(Boolean).join(" ").trim() || String(pid);
           }, "nameOf");
+          const posOf = /* @__PURE__ */ __name((pid, rosterItem) => {
+            const m = playerInfo[pid] || playerInfo[String(pid)] || {};
+            const global = idMeta[String(pid)] || {};
+            const raw = m.eligiblePos || m.eligiblePositions || m.positions || m.positionEligibility || m.position ||
+              rosterItem && (rosterItem.eligiblePos || rosterItem.eligiblePositions || rosterItem.positions || rosterItem.position) ||
+              global.positions || global.position || "";
+            const vals = Array.isArray(raw) ? raw : String(raw).split(/[,/|+]/);
+            return [...new Set(vals.map((x) => String(x && (x.position || x) || "").trim().toUpperCase()).filter(Boolean))].join("/");
+          }, "posOf");
           const teamInfo = info && info.teamInfo || {};
           const teamIds = Object.keys(rostersRaw).length ? Object.keys(rostersRaw) : Object.keys(teamInfo);
           const owners = [];
           const ownerSlot = {};
           const rosterLines = [];
+          const platformEligibility = {};
+          Object.keys(playerInfo).forEach((pid) => {
+            const nm = nameOf(pid), pos = posOf(pid, null);
+            if (nm && nm !== String(pid) && pos) platformEligibility[String(nm).toLowerCase()] = pos;
+          });
           let unresolved = 0;
           teamIds.forEach((tid, i) => {
             const entry = rostersRaw[tid] || {};
             const meta = teamInfo[tid] || {};
             let owner = entry.teamName || meta.name || `Team ${i + 1}`;
-            // Two franchises may share a display name; the app keys rosters by owner
-            // name, so a collision would merge two rosters into one.
-            let uniq = owner, n = 2;
-            while (owners.includes(uniq)) uniq = `${owner} (${n++})`;
+            let uniq = owner, suffix = 2;
+            while (owners.includes(uniq)) uniq = `${owner} (${suffix++})`;
             owner = uniq;
             owners.push(owner);
             ownerSlot[owner] = i + 1;
             (entry.rosterItems || []).forEach((it) => {
-              const nm = nameOf(it && it.id);
-              if (nm === String(it && it.id)) unresolved++;
+              const pid = it && it.id;
+              const nm = nameOf(pid), pos = posOf(pid, it);
+              if (nm === String(pid)) unresolved++;
+              if (nm && nm !== String(pid) && pos) platformEligibility[String(nm).toLowerCase()] = pos;
               rosterLines.push(`${owner}|${nm}|FA|NONE`);
             });
           });
           const fxDraft = String(info && (info.draftType || info.draftSettings && info.draftSettings.draftType) || "").toUpperCase();
           const draftType = fxDraft.includes("AUCTION") ? "auction" : fxDraft.includes("SNAKE") ? "snake" : fxDraft.includes("LINEAR") || fxDraft.includes("STRAIGHT") ? "linear" : "";
           const rosterSize = info && info.rosterInfo && info.rosterInfo.maxTotalPlayers || null;
-          const notes = ["Structure only \u2014 review scoring, keeper rules and dates before saving."];
+          const notes = ["Structure only — review scoring, keeper rules and dates before saving."];
           if (draftType) notes.push(`Fantrax reports a ${draftType} draft.`);
-          if (unresolved) notes.push(`${unresolved} roster entries kept their Fantrax player id because the league's player dictionary didn't name them \u2014 fix those names before saving.`);
-          notes.push("Fantrax's roster endpoint carries no drafted round or keeper flag, so every player is marked FA/NONE; set keepers on Teams & Keepers after saving.");
+          if (unresolved) notes.push(`${unresolved} roster entries kept their Fantrax player id because the player dictionary did not name them.`);
+          notes.push("Fantrax roster data carries no drafted round or keeper flag, so players are marked FA/NONE.");
           return J({
             name: info && info.leagueName || "Imported Fantrax League",
             teams: teamIds.length || 12,
@@ -1271,6 +1297,9 @@ var worker_default = {
             rostersRaw: rosterLines.join("\n"),
             draftType,
             rosterSize,
+            sport: "nhl",
+            platform: "fantrax",
+            platformEligibility: { fantrax: platformEligibility },
             _source: "fantrax",
             _fantraxLeagueId: fxId,
             _note: notes.join(" ")
