@@ -10,7 +10,9 @@
     --muted:#93a1bd; --accent:#4f8cff; --accent2:#22c55e; --warn:#f59e0b; --bad:#ef4444;
     --qb:#f97066; --rb:#34d399; --wr:#60a5fa; --te:#fbbf24; --k:#c084fc; --dst:#94a3b8;
     /* Hockey. Same palette roles as football so the board reads identically. */
-    --posc:#f97066; --poslw:#34d399; --posrw:#60a5fa; --posd:#fbbf24; --posg:#c084fc;
+    /* Hockey. Same five shades as before, reassigned: G red, C blue, LW green,
+       RW purple, D yellow. */
+    --posc:#60a5fa; --poslw:#34d399; --posrw:#c084fc; --posd:#fbbf24; --posg:#f97066;
     --me:#3b2f6b;
   }
   *{box-sizing:border-box}
@@ -192,7 +194,7 @@
     </div>
       <div class="draft-pool">
         <div class="card">
-          <h2>Best available <span class="muted" id="poolCount"></span></h2>
+          <h2>Best available <span class="muted" id="poolCount"></span><span class="muted small" id="posSrc" style="margin-left:8px;font-weight:400;text-transform:none;letter-spacing:0"></span></h2>
           <div class="row" style="margin-bottom:8px">
             <select id="posFilter">
               <option value="ALL">All positions</option>
@@ -3957,6 +3959,7 @@ function renderPool(){
   if(pos!=='ALL')rows=rows.filter(p=>playerFillsPos(p,pos));
   if(q)rows=rows.filter(p=>playerMatchesSearch(p,q));
   el('poolCount').textContent=`(${available().length} left${q?` · ${rows.length} match${rows.length===1?'':'es'}`:''})`;
+  const psrc=el('posSrc'); if(psrc)psrc.textContent=eligibilitySourceNote();
   const tb=el('poolTable').querySelector('tbody'); tb.innerHTML='';
   if(q&&!rows.length){
     const drafted=PLAYERS.filter(p=>p.drafted&&playerMatchesSearch(p,q));
@@ -4532,6 +4535,17 @@ function teamLogoImg(p){
 // league the gap between a C and a C/LW is whether you have somewhere to put him
 // on a night when eight of your forwards play. The F chip marks anyone who can
 // fill more than one forward spot, which is the tiebreak worth seeing at a glance.
+// Which source the position column is actually showing. Eligibility differs by
+// platform — Fantrax may list a forward C/LW where Yahoo lists him C/LW/RW — so a
+// generic third-party guess must never be mistaken for the league's own truth.
+function eligibilitySourceNote(){
+  const plat=LEAGUE.platform;
+  if(!plat||!PLAYERS.length)return '';
+  const have=PLAYERS.filter(p=>p.eligibility&&p.eligibility[plat]&&p.eligibility[plat].length).length;
+  if(!have)return `\u26a0 positions are FantasyPros' \u2014 no ${plat} eligibility loaded`;
+  if(have<PLAYERS.length)return `${have}/${PLAYERS.length} positions confirmed from ${plat}`;
+  return `positions confirmed from ${plat}`;
+}
 function posCell(p){
   const elig=eligiblePositions(p);
   return '<span class="pos '+p.pos+'">'+elig.join('/')+'</span>';

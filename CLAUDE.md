@@ -159,6 +159,15 @@ A **Fantrax import** (`GET /api/import/fantrax/:leagueId`) is the recommended
 integration path over Yahoo: league-ID keyed, no OAuth, no approval queue. Note
 Fantrax returns HTTP 200 with an `error` body on a bad id.
 
+**Fantrax public feeds, verified 2026-09-27** (no auth, no league ID needed):
+`getPlayerIds?sport=NHL` returns 9045 players as `{fantraxId,name,team,position}`
+and `getAdp?sport=NHL` returns 926 rows of real Fantrax ADP. Both carry **exactly one
+position per player — zero multi-position entries**, so neither can supply Fantrax
+*eligibility*; populating `fantrax_pos` from them would wrongly narrow players who
+are genuinely multi-eligible there. Per-league eligibility would have to come from
+`getLeagueInfo`'s `playerInfo` for a real league ID. Fantrax ADP is, however, the
+right market anchor for a Fantrax league (we only have Yahoo ADP today).
+
 **My Rank (hockey)** is the roster-construction layer — see `SPECS.md` → "My Rank
 (hockey)". It blends market ADP with our projection *weighted by sample confidence*
 (`gp`), then applies proportional positional adjustments: centre-only marked down
