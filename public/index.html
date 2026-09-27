@@ -2669,22 +2669,6 @@ LEAGUES_DEFAULT['public-points-league-1']={
     'Michael Misa','Patrick Kane','Filip Gustavsson','Igor Chernyshov','Jacob Trouba','Jake McCabe'
   ]
 };
-// Reference profiles for future Yahoo Public Prize drafts. The Yahoo category
-// rules are captured here; category-based ranks and recommendations come later.
-LEAGUES_DEFAULT['yahoo-nhl-prize-categories']={
-  ...LEAGUES_DEFAULT['yahoo-nhl-public'],
-  id:'yahoo-nhl-prize-categories',name:'Yahoo Public Prize H2H Categories',
-  teams:12,scoringLabel:'H2H Categories · model pending',scoringMode:'categories',
-  scoring:null,statCategories:{skaters:['G','A','PM','PPP','SOG','HIT'],goalies:['W','GAA','SV%','SHO']},
-  draftDateLabel:'TBD',modelPending:true,
-};
-LEAGUES_DEFAULT['yahoo-nhl-prize-roto']={
-  ...LEAGUES_DEFAULT['yahoo-nhl-public'],
-  id:'yahoo-nhl-prize-roto',name:'Yahoo Public Prize Rotisserie',
-  teams:12,scoringLabel:'Rotisserie · model pending',scoringMode:'roto',
-  scoring:null,statCategories:{skaters:['G','A','PM','PPP','SOG','BLK'],goalies:['W','GAA','SV%','SHO']},
-  draftDateLabel:'TBD',modelPending:true,maxGamesPlayed:82,maxAcquisitionsPerWeek:null,minGoalieGamesPerWeek:null,
-};
 let LEAGUES = {...LEAGUES_DEFAULT};
 </script>
 <script>
@@ -3750,7 +3734,7 @@ function myUpcomingPicks(){
 // All modifiers are in approximate draft-pick units, not fantasy points. Never
 // turn a low-sample prior-season projection into a purported current role fact.
 function nhlLiveRecommendations(limit=6){
-  if(SPORT.id!=='nhl' || LEAGUE.draftType==='auction'||LEAGUE.modelPending)return [];
+  if(SPORT.id!=='nhl' || LEAGUE.draftType==='auction')return [];
   const upcoming=myUpcomingPicks();
   if(!upcoming.length)return [];
   const now=upcoming[0], paired=upcoming[1]===now+1;
@@ -3891,7 +3875,7 @@ function renderNhlStreamControls(){
 }
 function renderNhlLivePicks(drawControls=true){
   const card=el('nhlLiveCard');if(!card)return;
-  card.style.display=SPORT.id==='nhl'&&LEAGUE.draftType!=='auction'&&!LEAGUE.modelPending?'':'none';
+  card.style.display=SPORT.id==='nhl'&&LEAGUE.draftType!=='auction'?'':'none';
   el('snakeDraftGrid').classList.toggle('nhl-layout',card.style.display!=='none');
   el('draftSlotControl').style.display=SPORT.id==='nhl'&&LEAGUE.draftType!=='auction'?'':'none';
   el('draftSlotInput').max=LEAGUE.teams;
@@ -3953,11 +3937,6 @@ function renderCues(){
 function valClass(d){return d>=8?'val-good':(d<=-8?'val-bad':'');}
 function renderPool(){
   if(LEAGUE.draftType==='auction')return; // placeholder shown by render(); search/filter inputs shouldn't clobber it
-  if(LEAGUE.modelPending){
-    el('poolCount').textContent='(category model pending)';
-    el('poolTable').querySelector('tbody').innerHTML='<tr><td colspan="10" class="muted small">League settings are saved. Category-specific rankings, projections and pick advice will be built before drafting.</td></tr>';
-    return;
-  }
   const pos=el('posFilter').value, q=el('search').value.trim().toLowerCase();
   const ov=nextOpenPick(curPick); const {slot}=ov<=totalPicks?slotForOverall(ov):{slot:0};
   let rows=available();
@@ -5371,7 +5350,7 @@ async function delMock(id){ if(!confirm('Delete this mock?'))return; try{ await 
 // matter — you only get a few of these, so they should be the right few.
 let RADAR_SCHED=null;
 const RADAR_LIGHT_BONUS=0.35;
-function radarVisible(){ return !!(SPORT.dailyLineups) && !roomOnly() && !LEAGUE.modelPending; }
+function radarVisible(){ return !!(SPORT.dailyLineups) && !roomOnly(); }
 function applyRadarVisibility(){
   const btn=document.querySelector('nav button[data-view="radar"]');
   if(btn) btn.style.display=radarVisible()?'':'none';
@@ -5719,7 +5698,6 @@ function applyLeagueProfile(id){
     auctionBudget:profile.auctionBudget||200,rosterSize:profile.rosterSize||profile.rounds||16,irSlots:profile.irSlots||0,minBid:profile.minBid||1,
     scoringLabel:profile.scoringLabel||'TBD', draftDateLabel:profile.draftDateLabel||'TBD', keeperDeadlineLabel:profile.keeperDeadlineLabel||'TBD',
     sport:SPORT.id, platform:profile.platform||null, scoringMode:profile.scoringMode||'points', scoring:profile.scoring||null,
-    modelPending:!!profile.modelPending, statCategories:profile.statCategories||null,
     categoryStats:profile.categoryStats||null, maxGamesPlayed:profile.maxGamesPlayed||null,
     maxAcquisitionsPerWeek:profile.maxAcquisitionsPerWeek||null, minGoalieGamesPerWeek:profile.minGoalieGamesPerWeek||null,
   };
