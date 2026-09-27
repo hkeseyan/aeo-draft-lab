@@ -3639,7 +3639,7 @@ function renderAuctionRoom(){
 function _unusedAuctionPlaceholderLegacy(){
   const msg='Auction drafting is active.';
   const onClock=el('onClock'); if(onClock) onClock.textContent=msg;
-  const pool=el('poolTable'); if(pool){const tb=pool.querySelector('tbody'); if(tb) tb.innerHTML=`<tr><td colspan="10" class="muted small">${msg}</td></tr>`;}
+  const pool=el('poolTable'); if(pool){const tb=pool.querySelector('tbody'); if(tb) tb.innerHTML=`<tr><td colspan="11" class="muted small">${msg}</td></tr>`;}
   const poolCount=el('poolCount'); if(poolCount) poolCount.textContent='';
   const board=el('boardGrid'); if(board) board.innerHTML=`<div class="muted small">${msg}</div>`;
   const myPicks=el('myPicks'); if(myPicks) myPicks.innerHTML=`<div class="muted small">${msg}</div>`;
@@ -3875,7 +3875,7 @@ function renderPool(){
   if(q&&!rows.length){
     const drafted=PLAYERS.filter(p=>p.drafted&&playerMatchesSearch(p,q));
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td colspan="10" class="small muted">${drafted.length?`${drafted.map(p=>p.name).join(', ')} already drafted. Clear the search to see available players.`:'No matching player in this pool. Try the full surname or check the spelling.'}</td>`;
+    tr.innerHTML=`<td colspan="11" class="small muted">${drafted.length?`${drafted.map(p=>p.name).join(', ')} already drafted. Clear the search to see available players.`:'No matching player in this pool. Try the full surname or check the spelling.'}</td>`;
     tb.appendChild(tr);
   }
   // Tier counts are computed over the *filtered* rows on purpose: with the
@@ -3892,13 +3892,13 @@ function renderPool(){
       shownTier=p.tier;
       const n=tierLeft[p.tier];
       const trT=document.createElement('tr'); trT.className='tierrow';
-      trT.innerHTML=`<td colspan="10">Tier ${p.tier}<span class="${n<=3?'val-bad':'muted'}"> · ${n} left${pos!=='ALL'?' at '+pos:''}</span></td>`;
+      trT.innerHTML=`<td colspan="11">Tier ${p.tier}<span class="${n<=3?'val-bad':'muted'}"> · ${n} left${pos!=='ALL'?' at '+pos:''}</span></td>`;
       tb.appendChild(trT);
     }
     const d=Math.round((p.adp-p.ecr)*10)/10; // + = falls later than ranked = value
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><input type="checkbox" class="qcheck" data-q="${p.name.replace(/"/g,'&quot;')}" ${queued.has(p.name)?'checked':''}></td>
-      <td>${p.adp}</td><td>${p.ecr}</td><td${p.myRankWhy?` title="${String(p.myRankWhy).replace(/"/g,'&quot;')}"`:''}>${p.myRank!=null?p.myRank:'—'}</td><td class="small">${p.proj?p.proj.toFixed(1):''}</td><td>${posCell(p)}</td>
+      <td>${p.adp}</td><td>${p.ecr}</td><td${p.myRankWhy?` title="${String(p.myRankWhy).replace(/"/g,'&quot;')}"`:''}>${p.myRank!=null?p.myRank:'—'}</td><td class="small">${(p.leagueProj!=null?p.leagueProj:p.proj)?Number(p.leagueProj!=null?p.leagueProj:p.proj).toFixed(1):''}</td><td class="small" title="Exposure across your other drafted ${SPORT.label} leagues">${exposureText(p)}</td><td>${posCell(p)}</td>
       <td>${headshotImg(p)}${p.name}${teamLogoImg(p)}${p.keeper?`<span class="kchip">K</span>`:''}${rookieBadge(p)}${NHL_HEALTH_WATCH[p.name]?` <a class="small" title="${NHL_HEALTH_WATCH[p.name].note}" href="${NHL_HEALTH_WATCH[p.name].url}" target="_blank" rel="noopener">${NHL_HEALTH_WATCH[p.name].label}</a>`:''}</td><td class="muted small">${p.pos}${p.posRank||''}</td>
       <td class="dcol ${valClass(d)}">${d>0?'+':''}${d}</td>
       <td><button class="pick-btn" data-pk="${p.id}">draft →</button></td>`;
@@ -4485,12 +4485,13 @@ function setStatus(s){el('saveStatus').textContent=s; setTimeout(()=>el('saveSta
 // Full backup, independent of the cloud KV store — includes keepers/trades/picks
 // so "Export config JSON" is a real point-in-time snapshot you can keep as a file.
 function getConfig(){return {league:CURRENT_LEAGUE_ID,PLAYERS,KEEPERS,picks,auctionPicks,curPick,
-  assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],seed:el('seedWarn').style.display};}
+  assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],streamConfidence:STREAM_CONFIDENCE,seed:el('seedWarn').style.display};}
 function applyConfig(cfg){PLAYERS=cfg.PLAYERS;KEEPERS=cfg.KEEPERS;picks=cfg.picks||[];auctionPicks=cfg.auctionPicks||[];curPick=cfg.curPick;
   if(Array.isArray(cfg.assigned))assigned=new Set(cfg.assigned);
   if(Array.isArray(cfg.cutPlayers))cutPlayers=new Set(cfg.cutPlayers);
   if(Array.isArray(cfg.queued))queued=new Set(cfg.queued);
   pickOwnerOverride=cfg.pickOwnerOverride||{}; playerTrades=cfg.playerTrades||{};
+  if(cfg.streamConfidence)STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE,...cfg.streamConfidence};
   if(cfg.tendencies)OWNERS.forEach(o=>{const t=cfg.tendencies[o]; if(t)TENDENCIES[o]={enabled:!!t.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},t.bias||{})};});
   if(cfg.seed==='none')el('seedWarn').style.display='none';
   render(); if(el('teamsWrap')){renderTeams();renderTendencies();} renderTrades(); saveSetup();}
@@ -4838,7 +4839,7 @@ async function importFromMfl(){
 // Yahoo OAuth powers league diagnostics and the FAAB Lab's best-effort Tuesday
 // roster/waiver sync. Manual CSV remains available whenever Yahoo is late or its
 // response does not yet expose the newly eliminated roster.
-function connectYahoo(){ window.open('/auth/yahoo/start','_blank'); el('yahooStatus').textContent='Opened Yahoo sign-in in a new tab — come back here once you approve access.'; }
+function connectYahoo(){ window.open('/auth/yahoo/start?force=1','_blank'); el('yahooStatus').textContent='Opened a fresh Yahoo consent flow in a new tab — come back here once you approve Fantasy Sports access.'; }
 // Diagnostics for the "permission is on but Yahoo still says no" case: which
 // credential this deploy actually holds, and how old the grant behind the
 // stored token is (a grant older than the permission change can never work,
@@ -5500,12 +5501,13 @@ async function loadCommish(){
 let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
-function saveSetup(){if(!canSave())return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick,seededLiveSnapshot:!!LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames,appliedLiveSnapshotCount:LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames?.length||0});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
+function saveSetup(){if(!canSave())return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick,myRosterNames:myRoster().map(p=>p.name),streamConfidence:STREAM_CONFIDENCE,seededLiveSnapshot:!!LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames,appliedLiveSnapshotCount:LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames?.length||0});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
 function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign(blankBias(),v.bias||{})};}); }
 async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||s.seededLiveSnapshot||(Array.isArray(s.picks)&&s.picks.length)||(Array.isArray(s.auctionPicks)&&s.auctionPicks.length))){
   if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
   if(Array.isArray(s.cutPlayers))cutPlayers=new Set(s.cutPlayers);
   if(Array.isArray(s.queued))queued=new Set(s.queued);
+  if(s.streamConfidence)STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE,...s.streamConfidence};
   auctionPicks=Array.isArray(s.auctionPicks)?s.auctionPicks.slice():[];
   pickOwnerOverride=s.pickOwnerOverride||{}; playerTrades=s.playerTrades||{};
   applyTendencies(s.tendencies);
