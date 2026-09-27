@@ -2795,6 +2795,46 @@ function computeMyRanks(){
   };
   PLAYERS.slice().sort((a,b)=>adjScore(a)-adjScore(b)).forEach((p,i)=>{p.myRank=i+1;});
 }
+// Team labels observed in the Sep 26 Yahoo draft; the Sep 17 source pool still
+// carries several pre-transaction clubs. Keep this separate from projections.
+const NHL_TEAM_UPDATES={
+  'John Carlson':'TBL','Frederik Andersen':'EDM','Brady Tkachuk':'FLA',
+  'Darren Raddysh':'TOR','Pavel Dorofeyev':'NYR','Mason Marchment':'SJS',
+  'Sergei Bobrovsky':'TOR','Luke Evangelista':'NJD','Jordan Kyrou':'WSH',
+  'Simon Nemec':'CGY','John-Jason Peterka':'BOS','Mason McTavish':'STL',
+  'Patrick Kane':'CHI',
+};
+const NHL_POSITION_UPDATES={
+  'Jason Robertson':'LW/RW','Cutter Gauthier':'C/LW/RW',
+  'Tim Stützle':'C/LW','Juraj Slafkovský':'LW/RW',
+  'Mika Zibanejad':'C/RW','Matthew Knies':'LW/RW',
+  'Alex DeBrincat':'LW/RW','Brady Tkachuk':'C/LW',
+  'Wyatt Johnston':'C/RW','Tage Thompson':'C/RW',
+  'Matthew Tkachuk':'LW/RW','Mitch Marner':'C/LW/RW',
+  'William Nylander':'C/RW','Roope Hintz':'C',
+  'Martin Necas':'RW','Sam Reinhart':'RW',
+  'Brad Marchand':'LW/RW','Alex Tuch':'LW/RW','Morgan Geekie':'C/LW/RW',
+  'J.T. Miller':'C/LW/RW','Rickard Rakell':'C/LW/RW','Trevor Zegras':'C/LW/RW',
+  'Mathew Barzal':'C/RW','Steven Stamkos':'C/RW','JJ Peterka':'LW/RW',
+  'John-Jason Peterka':'LW/RW','Gabriel Landeskog':'LW/RW',
+  'Luke Evangelista':'LW/RW','Josh Doan':'RW','Quinton Byfield':'C',
+};
+const NHL_DRAFT_CATALYSTS={
+  'Porter Martone':{tags:['YOUNG_BREAKOUT','TOP6_PATH'],confidence:0.65},
+  'Adam Fantilli':{tags:['YOUNG_BREAKOUT'],confidence:0.75},
+  'Jimmy Snuggerud':{tags:['YOUNG_BREAKOUT','TOP6_PATH'],confidence:0.65},
+  'Logan Stankoven':{tags:['YOUNG_BREAKOUT'],confidence:0.65},
+  'Josh Doan':{tags:['ROLE_GROWTH'],confidence:0.55},
+  'Quinton Byfield':{tags:['YOUNG_BREAKOUT'],confidence:0.6},
+  'Gavin McKenna':{tags:['YOUNG_BREAKOUT','TOP6_PATH'],confidence:0.55},
+  'Zayne Parekh':{tags:['YOUNG_BREAKOUT','PPQB_PATH'],confidence:0.55},
+  'Filip Hronek':{tags:['PPQB_PATH'],confidence:0.5},
+  'Rasmus Andersson':{tags:['PPQB_PATH'],confidence:0.5},
+};
+function nhlDraftCatalyst(p){
+  if(p.upsideTags&&p.upsideTags.length)return {tags:p.upsideTags,confidence:p.upsideConfidence||0.5};
+  return NHL_DRAFT_CATALYSTS[p.name]||null;
+}
 // NHL My Rank is intrinsic league value, not market timing. ADP belongs in the
 // live recommendation layer. Points leagues are rescored from projected stat
 // components through the active league, then compared with positional replacement.
