@@ -15,8 +15,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-        continue-on-error: true
       - name: Install test dependency
         run: npm install --no-audit --no-fund
       - name: Run test suite
