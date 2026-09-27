@@ -4538,7 +4538,7 @@ function renderLeaguesTab(){
 }
 function loadLeagueIntoForm(id){
   const p=LEAGUES[id]; if(!p)return;
-  editingLeagueId=id;
+  editingLeagueId=id; PENDING_LEAGUE_META={};
   el('lgName').value=p.name||'';
   el('lgTeams').value=p.teams||12;
   el('lgRounds').value=p.rounds||16;
@@ -4776,13 +4776,12 @@ async function importFromSleeper(){
   // AEO-Keepers' profile got clobbered by a Sleeper import because the form was
   // still "editing" it). Set this before the fetch so even a failed import can't
   // leave editingLeagueId pointed at an existing league by accident.
-  editingLeagueId=null;
+  editingLeagueId=null; PENDING_LEAGUE_META={};
   el('sleeperImportStatus').textContent='Importing…';
   try{
     const r=await fetch('/api/import/sleeper/'+encodeURIComponent(sid));
     const data=await r.json();
     if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
-    ['platform','sport','platformEligibility','scoringMode','scoring','categoryStats','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'].forEach(k=>{if(data[k]!==undefined)PENDING_LEAGUE_META[k]=data[k];});
     el('lgName').value=data.name||'';
     el('lgTeams').value=data.teams||12;
     el('lgOwners').value=(data.owners||[]).join(', ');
@@ -4801,6 +4800,7 @@ async function importFromFantrax(){
     const r=await fetch('/api/import/fantrax/'+encodeURIComponent(fid));
     const data=await r.json();
     if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
+    ['platform','sport','platformEligibility','scoringMode','scoring','categoryStats','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'].forEach(k=>{if(data[k]!==undefined)PENDING_LEAGUE_META[k]=data[k];});
     el('lgName').value=data.name||'';
     el('lgTeams').value=data.teams||12;
     el('lgOwners').value=(data.owners||[]).join(', ');
@@ -4868,7 +4868,9 @@ async function yahooStatusCheck(){
     const when=d.connected_at?new Date(d.connected_at).toLocaleString():'unknown (connected before this was tracked)';
     el('yahooStatus').textContent=d.connected
       ? `Connected · grant made ${when} · this Worker's client id: ${d.client_id_hint||'not configured'}`
-      : `Not connected · this Worker's client id: ${d.client_id_hint||'not configured'}`;
+      : d.stale_grant
+        ? `Old Yahoo grant belongs to a different client ID. Click Connect Yahoo account for a fresh consent. Current Worker client: ${d.client_id_hint||'not configured'}`
+        : `Not connected · this Worker's client id: ${d.client_id_hint||'not configured'}`;
   }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
 }
 async function yahooDisconnect(){
@@ -4943,7 +4945,7 @@ async function compareYahooSettings(){
     el('yahooStatus').textContent=`${data.name||key} · ${data.teams||'?'} teams (reference 10) · ${data.scoringType||'?'} scoring · ${data.draftType||'?'} draft · ${positionStatus} · ${scoringStatus}.`;
     if(data.teams===10&&positionMatch&&known.length===10&&!mismatch.length&&
       String(data.scoringType||'').includes('point')&&!/auction/i.test(data.draftType||'')){
-      yahooCompared={key,name:data.name||'Yahoo NHL Public'};
+      yahooCompared={key,name:data.name||'Yahoo NHL Public',platformEligibility:data.platformEligibility||{}};
       el('yahooImportBtn').disabled=false;
       el('yahooStatus').textContent+=' Settings match; enter your slot and create the profile.';
     }
@@ -4958,8 +4960,10 @@ async function importMatchedYahooNhl(){
   if(existing){switchLeague(existing.id);el('yahooStatus').textContent='This Yahoo league is already imported; switched to it.';return;}
   const owners=Array.from({length:10},(_,i)=>i+1===slot?'Me':`Team ${i+1}`);
   const ownerSlot=Object.fromEntries(owners.map((owner,i)=>[owner,i+1]));
-  const body={...LEAGUES_DEFAULT['yahoo-nhl-public'],id:undefined,
-    name:yahooCompared.name, yahooLeagueKey:yahooCompared.key,
+  const baseline=LEAGUES_DEFAULT['yahoo-nhl-public'];
+  const body={...baseline,id:undefined,
+    name:yahooCompared.name, yahooLeagueKey:yahooCompared.key, platform:'yahoo',
+    platformEligibility:{yahoo:{...(baseline.platformEligibility&&baseline.platformEligibility.yahoo||{}),...(yahooCompared.platformEligibility||{})}},
     mySlot:slot,owners,ownerSlot,meOwner:'Me',draftDateLabel:'Check Yahoo draft room'};
   try{
     el('yahooStatus').textContent='Creating matched NHL profile…';
