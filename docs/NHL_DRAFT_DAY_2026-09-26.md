@@ -4,7 +4,7 @@ As of September 26, 2026. This is a manual snapshot, not a live injury or Yahoo 
 
 ## Board and roster
 
-Twelve teams, fourth slot. Picks 1–77 are seeded. Our seven picks are Kucherov (4), Matthews (21), Gauthier (28), Seider (45), Hellebuyck (52), Forsberg (69), and Erik Karlsson (76). Next overall pick: 78. The room took premium D and G aggressively, so a forward-heavy response is rational if replacement D is streamable; the four-D starting lineup still creates a weekly coverage cost. The recommender should compare marginal starter value against the next turn, not enforce 2F/2D by round four.
+Yahoo Prize H2H-Pts 135526 is twelve teams, fourth slot. All 192 final picks are seeded. Our completed roster, in pick order: Kucherov, Matthews, Gauthier, Seider, Hellebuyck, Forsberg, Erik Karlsson, Alex Tuch, Shea Theodore, Mark Stone, John Gibson, Mattias Ekholm, Josh Doan, Steven Stamkos, Darcy Kuemper, Filip Gustavsson. The room took premium D and G aggressively. The actual draft shifted from a forward-heavy early response to four D and four G, including an injured late goalie stash.
 
 Hellebuyck was suspended for failing to report to camp after requesting a trade. No return date is known. Count him as a rostered upside option, not an active goalie and not an IR stash. An active goalie is a priority at the next viable value point. Do not stack an injured goalie as the only other G without a working starter.
 
@@ -23,7 +23,11 @@ DFO's [player news](https://www.dailyfaceoff.com/hockey-player-news) and [injury
 
 ## Pool audit and model changes
 
-All 77 reported picks resolve in the league pool. Barkov had been missing from the September 17 NHL pool and was added as a minimal league-specific row in the previous update; its observed pick number is **not Yahoo ADP**, and the zero projection is a missing datum rather than a forecast. The underlying 400-row rankings also bury Marchand (255), Fiala (259), and Gustavsson (151), and the default table displays only 220 rows. Search now handles initials and accents, searches the entire pool, and explains when a player was already drafted.
+All 192 reported picks resolve in the league pool. Barkov had been missing from the September 17 NHL pool and was added as a minimal league-specific row in the previous update; its observed pick number is **not Yahoo ADP**, and the zero projection is a missing datum rather than a forecast. Gavin McKenna, Quinton Byfield, Gabriel Landeskog, and Ivar Stenberg also needed board-only placeholder rows; JJ Peterka maps to the pool's John-Jason Peterka. These placeholders have no modeled projection or authentic ADP. The underlying 400-row rankings bury Marchand (255), Fiala (259), and Gustavsson (151), and the default table displays only 220 rows. Search handles initials and accents, searches the entire pool, and explains when a player was already drafted.
+
+The existing profile retains its internal ID `public-points-league-1` so saved setups continue to load, and now records Yahoo league ID 135526 and the final team names. A versioned snapshot merges picks 78–192 into a saved 77-pick board without replacing any slot the user had entered.
+
+Two separate 12-team Yahoo Public Prize reference profiles now capture the published default categories and Roto settings. H2H Categories uses skater G/A/+/-/PPP/SOG/HIT and goalie W/GAA/SV%/SHO. Roto changes HIT to BLK and uses the 82-game position cap. Both retain 2C/2LW/2RW/4D/2G, four bench, and two IR slots. Their category rankings, projections, Add Radar, and live recommendations are intentionally pending a format-specific model, so the points model is not presented as advice in those profiles.
 
 Yahoo draft board positions and clubs differed from the source pool for several early players. A dated override maps observed eligibility and seven team changes; this is not a wholesale refresh. Live recommendations count Hellebuyck as unavailable for starting-G coverage, and My Rank discounts the five dated health-watch players. These weights are a heuristic for missed time; no current Yahoo ADP or current-season statistical projection has been imported. A later Yahoo API grant should replace the stale market field and verify roster/IR statuses directly. A successful OAuth grant currently still returns 403 for the Fantasy resource, so the manual draft board remains authoritative.
 
