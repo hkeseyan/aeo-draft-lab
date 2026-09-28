@@ -176,9 +176,10 @@ on **name**, and two different Elias Petterssons play for Vancouver — the defe
 inherited the forward's market rank and his C eligibility, producing an impossible
 `D/C`. On any future pool refresh: **dedupe by `nhl_id`, and require position
 compatibility before accepting a name match.** `tests/boot-smoke.mjs` now asserts no
-duplicate id, no D-plus-forward eligibility, and no multi-eligible goalie. Note
-`findPlayer()` is still name-keyed app-wide, so the two Petterssons remain
-indistinguishable to keeper/trade/queue lookups.
+duplicate id, no D-plus-forward eligibility, and no multi-eligible goalie. `findPlayer(name, pos)` now takes an optional position to tell same-name
+players apart, and also accepts the qualifier inside the name
+(`Elias Pettersson (D)`); a bare ambiguous name resolves to the better-ranked
+player deterministically.
 
 **Fantrax public feeds, verified 2026-09-27** (no auth, no league ID needed):
 `getPlayerIds?sport=NHL` returns 9045 players as `{fantraxId,name,team,position}`
