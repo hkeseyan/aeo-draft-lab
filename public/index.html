@@ -11,10 +11,11 @@
     --qb:#f97066; --rb:#34d399; --wr:#60a5fa; --te:#fbbf24; --k:#c084fc; --dst:#94a3b8;
     /* Hockey. Same palette roles as football so the board reads identically. */
     /* Hockey. Same five shades as before, reassigned: G red, C blue, LW green,
-       RW purple, D yellow. F is the single combined forward slot some platforms
-       use instead of C/LW/RW (Fantrax); it shares LW's blue because the two can
-       never appear in the same league. */
+       RW purple, D yellow. */
     --posc:#34d399; --poslw:#60a5fa; --posrw:#c084fc; --posd:#fbbf24; --posg:#f97066;
+    /* F is the single combined forward slot some platforms roster instead of
+       C/LW/RW (Fantrax Classic). It shares LW's blue because a league uses one
+       scheme or the other and never both at once. */
     --posf:#60a5fa;
     --me:#3b2f6b;
   }
@@ -141,6 +142,11 @@
   .faab-metric{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px;text-align:center}
   .faab-metric b{display:block;font-size:18px;color:var(--accent)}
   .faab-good{color:var(--good);font-weight:700}.faab-pass{color:var(--warn);font-weight:700}
+  .ticket-status{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 7px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+  .ticket-status.approved,.ticket-status.submitted{border-color:var(--accent);color:var(--accent)}
+  .ticket-status.verified{border-color:var(--good);color:var(--good)}
+  .ticket-status.not_won,.ticket-status.cancelled{border-color:var(--muted);color:var(--muted)}
+  .ticket-actions{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
 </style>
 </head>
 <body>
@@ -153,7 +159,7 @@
   <span class="seedwarn" id="seedWarn">⚠ Baseline ranking (SEED) — replace with FantasyPros/Yahoo ADP in the Data tab</span>
   <nav>
     <button data-view="room" class="active">Draft Room</button>
-    <button data-view="inseason">FAAB Lab</button>
+    <button data-view="inseason">Waiver Lab</button>
     <button data-view="teams">Teams & Keepers</button>
     <button data-view="trades">Trades</button>
     <button data-view="mocks">Mocks</button>
@@ -210,7 +216,7 @@
           </div>
           <div class="scroll">
             <table id="poolTable">
-              <thead><tr><th title="Queue">Q</th><th class="sortcol active" data-sort="adp" title="Click to sort by ADP">ADP</th><th class="sortcol" data-sort="ecr" title="Click to sort by ECR">ECR</th><th class="sortcol" data-sort="myRank" title="Click to sort by intrinsic league value, lower=better">My</th><th>Proj</th><th title="Exposure across your other drafted leagues in this sport">Exp</th><th>Pos</th><th>Player</th><th>P.Rk</th><th class="dcol">Δ</th><th></th></tr></thead>
+              <thead><tr><th title="Queue">Q</th><th class="sortcol active" data-sort="adp" title="Click to sort by platform ADP">ADP</th><th class="sortcol" data-sort="ecr" title="Click to sort by ECR">ECR</th><th class="sortcol" data-sort="myRank" title="Click to sort by intrinsic league value, lower=better">My</th><th id="projHeader">Proj</th><th title="Exposure across your other drafted leagues in this sport">Exp</th><th>Pos</th><th>Player</th><th>P.Rk</th><th class="dcol">Δ</th><th></th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -362,13 +368,13 @@
   <!-- IN-SEASON / FAAB -->
   <section class="view" id="view-inseason">
     <div class="card">
-      <h2>In-season FAAB Lab</h2>
-      <p class="small muted">Built for the Tuesday guillotine run after Monday Night Football. It separates the bid that fits your roster, the amount the market is projected to require, and your absolute stretch ceiling. The model uses the preserved 2025 history plus the 2026 bid results; opponent remaining budgets are the next calibration layer.</p>
+      <h2>In-season Waiver Lab</h2>
+      <p class="small muted">Turn a refreshed league snapshot into a reviewable waiver ticket. FAAB bids remain calibrated for guillotine leagues; dynasty and keeper leagues use the same record, decision context, and manual verification workflow without pretending every claim is a FAAB decision.</p>
       <div class="row">
         <label class="small">Week <input id="faabWeek" type="number" min="1" max="18" value="2" style="width:60px"></label>
         <label class="small">Starting FAAB $<input id="faabStartingBudget" type="number" min="1" value="1000" style="width:80px"></label>
         <label class="small">Remaining $<input id="faabRemainingBudget" type="number" min="0" value="1000" style="width:80px"></label>
-        <label class="small">Teams alive <input id="faabTeamsAlive" type="number" min="2" max="32" value="18" style="width:65px"></label>
+        <label class="small">Teams alive <input id="faabTeamsAlive" type="number" min="2" max="32" value="18" style="width:65px" title="Used by the guillotine bid model; leave at full league size for non-guillotine leagues."></label>
         <label class="small">Discipline <select id="faabAggression"><option value="0.65">Conservative</option><option value="0.8" selected>Balanced</option><option value="0.95">Aggressive</option></select></label>
       </div>
       <div class="row" style="margin-top:8px">
@@ -377,6 +383,19 @@
         <button class="btn ghost" id="faabSave">Save inputs</button>
         <button class="btn ghost" id="faabCalendar">Add Tuesday calendar reminder</button>
         <span class="small muted" id="faabStatus"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Decision context</h2>
+      <p class="small muted">This is the layer FantasyPros does not know: what this team is trying to do, how this league awards draft position, and which waiver route applies. It is saved with every ticket so our Waiver Lab sessions become reusable history.</p>
+      <div class="row">
+        <label class="small">Team direction <select id="waiverTeamDirection"><option value="unspecified">Unspecified</option><option value="survive">Survive / guillotine</option><option value="contend">Contend</option><option value="retool">Retool</option><option value="rebuild">Rebuild</option><option value="tank">Deliberate tank</option></select></label>
+        <label class="small">Waiver route <select id="waiverMethod"><option value="unknown">Confirm later</option><option value="faab">FAAB</option><option value="waiver_priority">Waiver priority</option><option value="free_agency">Free agency</option></select></label>
+        <label class="small">Decision deadline <input id="waiverDeadline" type="datetime-local"></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input id="waiverDraftOrderRule" placeholder="Draft-order rule, e.g. max points-for or consolation bracket" style="flex:1;min-width:260px">
+        <input id="waiverTrigger" placeholder="What changed? Injury, role, trending add, roster need…" style="flex:2;min-width:300px">
       </div>
     </div>
     <div class="card">
@@ -413,9 +432,14 @@
         <button class="btn ghost" id="faabEmailNow">Email this report</button>
       </div>
       <div class="scroll" style="margin-top:8px">
-        <table><thead><tr><th>Player</th><th>Roster impact</th><th>Bid levels</th><th>Reasoning</th></tr></thead><tbody id="faabResults"><tr><td colspan="4" class="muted">Run the analysis after the waiver pool updates.</td></tr></tbody></table>
+        <table><thead><tr><th>Player</th><th>Roster impact</th><th>Bid levels</th><th>Reasoning</th><th></th></tr></thead><tbody id="faabResults"><tr><td colspan="5" class="muted">Run the analysis after the waiver pool updates.</td></tr></tbody></table>
       </div>
       <details style="margin-top:10px"><summary class="small muted">Prior Tuesday reports</summary><div class="scroll"><table><thead><tr><th>When</th><th>Week</th><th>Top recommendations</th><th></th></tr></thead><tbody id="faabHistory"></tbody></table></div></details>
+    </div>
+    <div class="card">
+      <div class="row"><h2 style="margin:0">Waiver ticket list</h2><span class="small muted" id="waiverTicketStatus" style="margin-left:auto"></span></div>
+      <p class="small muted">Create a ticket from a recommendation, then move it through approval, manual submission, and verified readback. Mark “verified” only after the host/FantasyPros roster has been refreshed.</p>
+      <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Status</th><th>Action</th><th>Bid / route</th><th>Context</th><th>Next step</th></tr></thead><tbody id="waiverTickets"><tr><td colspan="5" class="muted">No tickets yet.</td></tr></tbody></table></div>
     </div>
   </section>
 
@@ -590,7 +614,7 @@
         <button class="btn ghost" id="yahooListBtn">List my leagues</button>
         <select id="yahooLeagueSelect" aria-label="Yahoo league to inspect" style="min-width:170px"><option value="">List leagues first</option></select>
         <button class="btn ghost" id="yahooSettingsBtn">Compare settings</button>
-        <label class="small">My draft slot <input type="number" id="yahooImportSlot" min="1" max="10" value="4" style="width:58px"></label>
+        <label class="small">My draft slot <input type="number" id="yahooImportSlot" min="1" max="20" value="4" style="width:58px"></label>
         <button class="btn ghost" id="yahooImportBtn" disabled>Create matched NHL profile</button>
         <button class="btn ghost" id="yahooStatusBtn">Check status</button>
         <button class="btn ghost" id="yahooDisconnectBtn">Disconnect</button>
@@ -607,6 +631,7 @@
         <label class="small">Sport <select id="lgSport"><option value="nfl">🏈 NFL</option><option value="nhl">🏒 NHL</option></select></label>
         <label class="small">Draft type <select id="lgDraftType"><option value="snake">Snake</option><option value="linear">Linear (no snake)</option><option value="auction">Auction</option></select></label>
         <label class="small"><input type="checkbox" id="lgSuperflex"> Superflex</label>
+        <label class="small" title="Only official drafted leagues count toward cross-league player exposure. Mocks and reference profiles do not."><input type="checkbox" id="lgOfficialDraft"> Official drafted league</label>
       </div>
       <div class="row" style="margin-top:8px">
         <label class="small">League type <select id="lgLeagueType">
@@ -2245,6 +2270,33 @@ const FANTASTIC_2026_STRATEGY={
 // this const only matters if the API is unreachable or on the very first boot ever
 // (which seeds the cloud with these verbatim, so AEO-Keepers' real data becomes the
 // cloud copy byte-identical to what's live today — see fetchCloudLeagues()).
+// Yahoo Public Prize hockey currently requires 12 managers. Public Free
+// leagues can still differ, so imports trust the league's reported team count.
+// Multi-position entries below were observed directly in Yahoo league 135526 on
+// Sep 26 and are used as the platform-specific fallback until Yahoo API sync is live.
+const YAHOO_NHL_PRIZE_TEAMS=12;
+const YAHOO_NHL_VERIFIED_ELIGIBILITY={
+  'leon draisaitl':'C/LW','jason robertson':'LW/RW','cole caufield':'LW/RW',
+  'matt boldy':'LW/RW','wyatt johnston':'C/RW','jack hughes':'C/LW',
+  'mikko rantanen':'LW/RW','brady tkachuk':'C/LW','cutter gauthier':'C/LW/RW',
+  'tage thompson':'C/RW','matthew tkachuk':'LW/RW','brandon hagel':'LW/RW',
+  'mitch marner':'C/LW/RW','jake guentzel':'LW/RW','dylan guenther':'LW/RW',
+  'alex debrincat':'LW/RW','william nylander':'C/RW','clayton keller':'LW/RW',
+  'juraj slafkovský':'LW/RW','tim stützle':'C/LW','mika zibanejad':'C/RW',
+  'will smith':'LW/RW','connor bedard':'C/RW','dylan holloway':'C/LW',
+  'pavel dorofeyev':'LW/RW','andrei svechnikov':'LW/RW','jesper bratt':'LW/RW',
+  'nick schmaltz':'C/RW','alex tuch':'LW/RW','drake batherson':'LW/RW',
+  'alex ovechkin':'LW/RW','morgan geekie':'C/LW/RW','travis konecny':'LW/RW',
+  'artturi lehkonen':'LW/RW','j.t. miller':'C/LW/RW','zach hyman':'LW/RW',
+  'seth jarvis':'LW/RW','rickard rakell':'C/LW/RW','luke evangelista':'LW/RW',
+  'timo meier':'LW/RW','trevor zegras':'C/LW/RW','matthew knies':'LW/RW',
+  'gabriel vilardi':'C/RW','mathew barzal':'C/RW','gabriel landeskog':'LW/RW',
+  'steven stamkos':'C/RW','jj peterka':'LW/RW','john-jason peterka':'LW/RW',
+  'anthony mantha':'LW/RW','pavel zacha':'C/LW','tyler bertuzzi':'LW/RW',
+  'brad marchand':'LW/RW','tomas hertl':'C/LW','alexis lafreniere':'LW/RW',
+  'igor chernyshov':'LW/RW'
+};
+
 const LEAGUES_DEFAULT = {
   'aeo-keepers': {
     id:'aeo-keepers', name:'AEO-Keepers',
@@ -2266,55 +2318,88 @@ const LEAGUES_DEFAULT = {
     rostersRaw: ROSTERS_RAW_AEO,
     playersCsv: PLAYERS_CSV_AEO,
   },
-  // Yahoo's default public hockey league, verified against Yahoo's own settings
-  // page: 10 teams, H2H points, 2C/2LW/2RW/4D/2G starters + 4 bench = 16 draftable,
-  // plus 2 IR that are never drafted. Opponents are strangers in a public league,
-  // so tendencies stay off and the rival model runs on value and roster need alone.
+  // Yahoo Public Prize Hockey: Yahoo's current help page and the completed
+  // 135526 league both show 12 managers. Roster/scoring remain 2C/2LW/2RW/4D/2G,
+  // 4 bench and 2 IR. Public Free leagues are a separate product and can be 10;
+  // live imports use Yahoo's reported team count rather than assuming Prize size.
   'yahoo-nhl-public': {
-    id:'yahoo-nhl-public', name:'Yahoo NHL Public — H2H Points (10-team reference)', sport:'nhl', platform:'yahoo',
-    leagueType:'redraft', draftType:'snake', superflex:false,
-    teams:10, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
+    id:'yahoo-nhl-public', name:'Yahoo Public Prize NHL — H2H Points (12-team reference)', sport:'nhl', platform:'yahoo',
+    leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,
+    referenceDataRevision:'yahoo-prize-2026-09-26-12-team-v1',
+    teams:YAHOO_NHL_PRIZE_TEAMS, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
     scoringLabel:'H2H Points', draftDateLabel:'TBD', keeperDeadlineLabel:'\u2014',
     starters:{C:2,LW:2,RW:2,D:4,G:2}, flexEligible:[],
     scoringMode:'points',
-    // Yahoo's default point values, used to score the pool and the Add Radar.
     scoring:{g:6,a:4,pm:2,ppp:2,sog:0.9,blk:1,w:5,ga:-3,sv:0.6,sho:5},
-    // Yahoo's default in-season constraints; the Add Radar budgets against these.
     maxAcquisitionsPerWeek:4, minGoalieGamesPerWeek:3,
-    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
     meOwner:'Me',
-    ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
+    ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
     poolDataRevision:'nhl-2026-09-28-dedupe-and-position-repair',
-    platformEligibility:{yahoo:{'jason robertson':'LW/RW'}},
+    platformEligibility:{yahoo:{...YAHOO_NHL_VERIFIED_ELIGIBILITY}},
     rostersRaw:'',
     playersCsv: PLAYERS_CSV_NHL,
   },
+  'fantrax-nhl-weekly-points': {
+    id:'fantrax-nhl-weekly-points', name:'Fantrax Classic NHL — Weekly H2H Points (12-team mock)', sport:'nhl', platform:'fantrax',
+    leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,
+    referenceDataRevision:'fantrax-classic-weekly-2026-09-27-v1',
+    teams:12, rounds:16, rosterSize:16, irSlots:0, mySlot:1,
+    scoringLabel:'Weekly H2H Points · Fantrax Classic', draftDateLabel:'TBD', keeperDeadlineLabel:'—',
+    // Classic Draft uses generic forwards: five F, three D and two G active,
+    // plus six reserves. The UI still displays the underlying C/LW/RW eligibility
+    // because the live league may differ; roster construction treats all three as F.
+    rosterPositions:['F','D','G'], starters:{F:5,D:3,G:2}, flexEligible:[],
+    scoringMode:'points', lineupPeriod:'weekly', marketAdpSource:'fantrax',
+    scoring:{g:4,a:3,pm:1,ppp:1,sog:0.5,hit:0.25,w:5,ga:-1,sv:0.25,sho:5},
+    maxAcquisitionsPerWeek:null, minGoalieGamesPerWeek:null,
+    defaultStreamConfidence:{C:0.15,LW:0.15,RW:0.15,D:0.15,G:0.20},
+    assumptions:[
+      'Fantrax Classic Draft reference: 5 F / 3 D / 2 G, six reserves, no IR and weekly lineups.',
+      'Scoring reference: G 4, A 3, +/- 1, PPP 1, SOG 0.5, HIT 0.25; W 5, GA -1, SV 0.25, SHO 5.',
+      'Confirm the exact live league rules, lineup lock, eligibility and transaction limits after joining.'
+    ],
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
+    meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
+    rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
+    // Shares PLAYERS_CSV_NHL, so it needs its own revision or a corrected
+    // pool never reaches this profile's already-seeded cloud copy.
+    poolDataRevision:'nhl-2026-09-28-dedupe-and-position-repair',
+  },
   'yahoo-nhl-public-categories': {
-    id:'yahoo-nhl-public-categories', name:'Yahoo NHL Public — H2H Categories (10-team reference)', sport:'nhl', platform:'yahoo',
-    leagueType:'redraft', draftType:'snake', superflex:false,
-    teams:10, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
+    id:'yahoo-nhl-public-categories', name:'Yahoo Public Prize NHL — H2H Categories (12-team reference)', sport:'nhl', platform:'yahoo',
+    leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,
+    referenceDataRevision:'yahoo-prize-2026-09-26-12-team-v1',
+    teams:YAHOO_NHL_PRIZE_TEAMS, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
     scoringLabel:'H2H Categories', draftDateLabel:'TBD', keeperDeadlineLabel:'—',
     starters:{C:2,LW:2,RW:2,D:4,G:2}, flexEligible:[], scoringMode:'categories',
     categoryStats:{skater:['G','A','+/-','PPP','SOG','HIT'],goalie:['W','GAA','SV%','SHO']},
     maxAcquisitionsPerWeek:4,minGoalieGamesPerWeek:3,
-    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
-    meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
-    platformEligibility:{yahoo:{'jason robertson':'LW/RW'}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
-    // Shares PLAYERS_CSV_NHL, so it needs its own revision or a corrected pool
-    // never reaches this profile's already-seeded cloud copy.
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
+    meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
+    platformEligibility:{yahoo:{...YAHOO_NHL_VERIFIED_ELIGIBILITY}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
+    // Shares PLAYERS_CSV_NHL, so it needs its own revision or a corrected
+    // pool never reaches this profile's already-seeded cloud copy.
     poolDataRevision:'nhl-2026-09-28-dedupe-and-position-repair',
   },
   'yahoo-nhl-public-roto': {
-    id:'yahoo-nhl-public-roto', name:'Yahoo NHL Public — Rotisserie (10-team reference)', sport:'nhl', platform:'yahoo',
-    leagueType:'redraft', draftType:'snake', superflex:false,
-    teams:10, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
+    id:'yahoo-nhl-public-roto', name:'Yahoo Public Prize NHL — Rotisserie (12-team reference)', sport:'nhl', platform:'yahoo',
+    leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,
+    referenceDataRevision:'yahoo-prize-2026-09-26-12-team-v1',
+    teams:YAHOO_NHL_PRIZE_TEAMS, rounds:16, rosterSize:16, irSlots:2, mySlot:1,
     scoringLabel:'Rotisserie', draftDateLabel:'TBD', keeperDeadlineLabel:'—',
     starters:{C:2,LW:2,RW:2,D:4,G:2}, flexEligible:[], scoringMode:'roto',
     categoryStats:{skater:['G','A','+/-','PPP','SOG','BLK'],goalie:['W','GAA','SV%','SHO']}, maxGamesPlayed:82,
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
+    meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
+    assumptions:[
+      'Yahoo Public Prize Rotisserie reference: G, A, +/-, PPP, SOG, BLK; goalie W, GAA, SV%, SHO.',
+      'The 82-game cap applies by active roster position. Confirm the exact selected league before drafting.'
+    ],
+    platformEligibility:{yahoo:{...YAHOO_NHL_VERIFIED_ELIGIBILITY}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
+    // Shares PLAYERS_CSV_NHL, so it needs its own revision or a corrected
+    // pool never reaches this profile's already-seeded cloud copy.
     poolDataRevision:'nhl-2026-09-28-dedupe-and-position-repair',
-    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
-    meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
-    platformEligibility:{yahoo:{'jason robertson':'LW/RW'}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
   },
   'fantastic-auction': {
     id:'fantastic-auction', name:'Fantastic Keeper Auction', leagueType:'keeper',
@@ -2625,8 +2710,10 @@ LEAGUES_DEFAULT['public-points-league-1']={
   ...LEAGUES_DEFAULT['yahoo-nhl-public'],
   id:'public-points-league-1',name:'Yahoo Prize H2H-Pts 135526',teams:12,mySlot:4,
   yahooLeagueId:'135526',yahooLeagueUrl:'https://hockey.fantasysports.yahoo.com/hockey/135526',
+  officialDraft:true, draftSource:'Yahoo draft results supplied Sep 26',
+  platform:'yahoo', platformEligibility:{yahoo:{...YAHOO_NHL_VERIFIED_ELIGIBILITY}},
   draftDateLabel:'Sep 26 · complete',poolDataRevision:'public-points-1-p192',
-  liveDraftRevision:'2026-09-26-p192',
+  liveDraftRevision:'2026-09-26-p192-user-verified',
   // Barkov was absent from the Sep 17 pool; a minimal row lets the reported
   // pick occupy its real board cell without inventing a projection.
   playersCsv:PLAYERS_CSV_NHL+'\nAleksander Barkov,C,FLA,63,63,0,5'+
@@ -2675,6 +2762,20 @@ LEAGUES_DEFAULT['public-points-league-1']={
     'Chris Kreider','Mason McTavish','Kris Letang','Tomas Hertl','Alexis Lafreniere','Joey Daccord',
     'Michael Misa','Patrick Kane','Filip Gustavsson','Igor Chernyshov','Jacob Trouba','Jake McCabe'
   ]
+};
+// Second joined Yahoo Public Prize H2H Points league. It intentionally inherits
+// the tested reference scoring/roster model but starts with a blank board and
+// placeholder opponents until Yahoo exposes the live team names/draft results.
+LEAGUES_DEFAULT['public-points-league-2']={
+  ...LEAGUES_DEFAULT['yahoo-nhl-public'],
+  id:'public-points-league-2',name:'Yahoo Prize H2H-Pts 141304',teams:12,mySlot:4,
+  yahooLeagueId:'141304',yahooLeagueUrl:'https://hockey.fantasysports.yahoo.com/hockey/141304',
+  officialDraft:true,draftSource:'Yahoo Prize league joined Sep 27 · draft board pending',
+  platform:'yahoo',draftDateLabel:'TBD',
+  referenceDataRevision:'yahoo-prize-141304-2026-09-27-v1',
+  owners:['Team 1','Team 2','Team 3','Me','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
+  meOwner:'Me',ownerSlot:{'Team 1':1,'Team 2':2,'Team 3':3,Me:4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
+  initialPickNames:[],rostersRaw:'',playersCsv:PLAYERS_CSV_NHL,
 };
 let LEAGUES = {...LEAGUES_DEFAULT};
 </script>
@@ -2767,6 +2868,8 @@ let CURRENT_LEAGUE_ID='aeo-keepers';
 let EXPOSURE={denominator:0,counts:{}};
 const DEFAULT_STREAM_CONFIDENCE={C:0.80,LW:0.30,RW:0.30,D:0.60,G:0.75};
 let STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE};
+let MARKET_ADP_STATUS='embedded';
+let DRAFT_SCHEDULE={teams:{},days:[],start:null};
 
 // parse rosters: owner -> [{player, drafted, keeper:(int|null)}]
 let ROSTERS={};
@@ -2794,7 +2897,7 @@ function dynastyKeptRoster(owner){ return effRoster(owner).filter(r=>!cutPlayers
 function effOwner(pl){return playerTrades[pl]||ORIG_OWNER[pl];}
 function effRoster(owner){const out=[];Object.keys(ROSTERS).forEach(o=>ROSTERS[o].forEach(r=>{if(effOwner(r.player)===owner)out.push(r);}));return out;}
 function ownerOf(ov){return pickOwnerOverride[ov]||slotForOverall(ov).slot;}
-function computePosRanks(){const byPos={};PLAYERS.forEach(p=>{(byPos[p.pos]=byPos[p.pos]||[]).push(p);});Object.values(byPos).forEach(a=>{a.slice().sort((x,y)=>x.adp-y.adp).forEach((p,i)=>p.posRank=i+1);});}
+function computePosRanks(){const byPos={};PLAYERS.forEach(p=>{(byPos[p.pos]=byPos[p.pos]||[]).push(p);});Object.values(byPos).forEach(a=>{a.slice().sort((x,y)=>marketAdp(x)-marketAdp(y)).forEach((p,i)=>p.posRank=i+1);});}
 // "My Rank" (Draft Room "My" column): a formula over live ECR/pos/rookie data,
 // not a hand-edited list — re-deriving it from ECR means a player's rank moves
 // on its own as news/injuries move their ECR, instead of a stale manual override
@@ -2837,8 +2940,10 @@ const NHL_TEAM_UPDATES={
   'John Carlson':'TBL','Frederik Andersen':'EDM','Brady Tkachuk':'FLA',
   'Darren Raddysh':'TOR','Pavel Dorofeyev':'NYR','Mason Marchment':'SJS',
   'Sergei Bobrovsky':'TOR','Luke Evangelista':'NJD','Jordan Kyrou':'WSH',
-  'Simon Nemec':'CGY','John-Jason Peterka':'BOS','Mason McTavish':'STL',
-  'Patrick Kane':'CHI',
+  'Simon Nemec':'CGY','John-Jason Peterka':'BOS','JJ Peterka':'BOS',
+  'Mason McTavish':'STL','Patrick Kane':'CHI','Quinn Hughes':'MIN',
+  'Noah Dobson':'MTL','Artemi Panarin':'LAK','Alex Tuch':'WSH',
+  'MacKenzie Weegar':'UTA','Bowen Byram':'CHI','Jacob Trouba':'SJS',
 };
 const NHL_POSITION_UPDATES={
   'Jason Robertson':'LW/RW','Cutter Gauthier':'C/LW/RW',
@@ -2879,8 +2984,17 @@ const NHL_MY_RANK={
   projTrustGames:65,
   minConfidence:0.85,
   flexibilityBonusPerExtra:0.035,
-  // F is the combined forward slot on platforms that don't split C/LW/RW.
-  replacementBenchShare:{C:0.25,LW:0.55,RW:0.55,F:0.5,D:0.65,G:0.35},
+  replacementBenchShare:{F:0.75,C:0.25,LW:0.55,RW:0.55,D:0.65,G:0.35},
+  categoryBalanceWeight:0.12,
+  categoryFloorWeight:0.06,
+  // Emergency draft-safe guardrails while the component projection is still a
+  // one-season baseline. Market is the anchor; our league/VORP model may express
+  // an opinion, but one noisy season cannot move an established early pick by
+  // several rounds. Categories remain category-native because points ADP is the
+  // wrong anchor for those formats.
+  safeMoveTop25:5,
+  safeMoveTop100:10,
+  safeMoveRest:15,
 };
 function nhlProjectedPoints(p){
   const sc=LEAGUE.scoring,st=p&&p.st||{};
@@ -2917,16 +3031,26 @@ function nhlCategoryValue(){
   ].forEach(group=>{
     const dist={};group.stats.forEach(stat=>{dist[stat]=nhlMeanSd(group.players.map(p=>statValue(p,stat)));});
     group.players.forEach(p=>{
-      const zs=group.stats.map(stat=>{const d=dist[stat],raw=statValue(p,stat);let z=(raw-d.mean)/d.sd;if(keyOf(stat)==='GAA')z=-z;return z;});
-      p.categoryValue=zs.length?zs.reduce((x,y)=>x+y,0)/Math.sqrt(zs.length):0;
+      const categoryZ={};
+      group.stats.forEach(stat=>{const d=dist[stat],raw=statValue(p,stat);let z=(raw-d.mean)/d.sd;if(keyOf(stat)==='GAA')z=-z;categoryZ[keyOf(stat)]=z;});
+      const zs=Object.values(categoryZ);
+      const rawValue=zs.length?zs.reduce((x,y)=>x+y,0)/Math.sqrt(zs.length):0;
+      const positiveShare=zs.length?zs.filter(z=>z>=0).length/zs.length:0;
+      const floor=zs.length?Math.max(-2,Math.min(...zs)):0;
+      // Reward broad contribution and gently penalize a severe category hole.
+      // This remains a category value (not Yahoo fantasy points) and keeps every
+      // category visible for roster-fit weighting in the live recommendation layer.
+      p.categoryZ=categoryZ;
+      p.categoryBalance=positiveShare;
+      p.categoryValue=rawValue+positiveShare*NHL_MY_RANK.categoryBalanceWeight+floor*NHL_MY_RANK.categoryFloorWeight;
     });
   });
 }
 function nhlReplacementLevels(valueKey){
   const out={};
-  activePositions().forEach(pos=>{
+  rosterPositionOrder().forEach(pos=>{
     const starters=(LEAGUE.teams||10)*((LEAGUE.starters&&LEAGUE.starters[pos])||0);
-    const extra=Math.round((LEAGUE.teams||10)*(NHL_MY_RANK.replacementBenchShare[pos]!=null?NHL_MY_RANK.replacementBenchShare[pos]:0.25));
+    const extra=Math.round((LEAGUE.teams||10)*(NHL_MY_RANK.replacementBenchShare[pos]||0.25));
     const demand=Math.max(1,starters+extra);
     const pool=PLAYERS.filter(p=>playerFillsPos(p,pos)&&Number.isFinite(+p[valueKey]))
       .slice().sort((x,y)=>(+y[valueKey]||0)-(+x[valueKey]||0));
@@ -2937,16 +3061,19 @@ function nhlReplacementLevels(valueKey){
 }
 function computeMyRanksNhl(){
   const isPoints=LEAGUE.scoringMode==='points';
-  PLAYERS.forEach(p=>{p.leagueProj=isPoints?nhlProjectedPoints(p):(+p.proj||0);});
+  PLAYERS.forEach(p=>{p.leagueProj=isPoints?nhlProjectedPoints(p):null;p.categoryZ=null;p.categoryValue=null;});
   if(!isPoints)nhlCategoryValue();
   const valueKey=isPoints?'leagueProj':'categoryValue';
   const replacement=nhlReplacementLevels(valueKey);
   PLAYERS.forEach(p=>{
-    const elig=eligiblePositions(p).filter(pos=>replacement[pos]!=null);
+    const displayElig=eligiblePositions(p);
+    const elig=rosterEligiblePositions(p).filter(pos=>replacement[pos]!=null);
     const choices=(elig.length?elig:[p.pos]).map(pos=>({pos,vorp:(+p[valueKey]||0)-(replacement[pos]||0)})).sort((x,y)=>y.vorp-x.vorp);
     const best=choices[0]||{pos:p.pos,vorp:+p[valueKey]||0};
     const sample=Math.min(1,(+p.gp||0)/NHL_MY_RANK.projTrustGames);
     const confidence=NHL_MY_RANK.minConfidence+(1-NHL_MY_RANK.minConfidence)*sample;
+    // Generic-F Fantrax leagues do not award fake flexibility for C/LW/RW labels:
+    // every skater is filling the same F bucket there.
     const flexBonus=Math.max(0,best.vorp)*NHL_MY_RANK.flexibilityBonusPerExtra*Math.max(0,elig.length-1);
     let value=best.vorp*confidence+flexBonus;
     const health=NHL_HEALTH_WATCH[p.name];
@@ -2954,15 +3081,84 @@ function computeMyRanksNhl(){
     p.myRankTrust=confidence;p.myReplacementPos=best.pos;p.myReplacementProj=replacement[best.pos]||0;p.myValue=value;
     const why=isPoints
       ? ['league proj '+Number(p.leagueProj||0).toFixed(1),best.pos+' replacement '+Number(p.myReplacementProj||0).toFixed(1),'VORP '+Number(best.vorp||0).toFixed(1)]
-      : [(LEAGUE.scoringMode==='roto'?'roto':'H2H cat')+' z '+Number(p.categoryValue||0).toFixed(2),best.pos+' replacement '+Number(p.myReplacementProj||0).toFixed(2),'VORP '+Number(best.vorp||0).toFixed(2)];
-    if(elig.length>1)why.push('+ '+(LEAGUE.platform||'fallback')+' flexibility '+elig.join('/'));
+      : [(LEAGUE.scoringMode==='roto'?'roto':'H2H cat')+' value '+Number(p.categoryValue||0).toFixed(2),best.pos+' replacement '+Number(p.myReplacementProj||0).toFixed(2),'VORP '+Number(best.vorp||0).toFixed(2)];
+    if(!isPoints&&p.categoryZ){
+      const top=Object.entries(p.categoryZ).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,z])=>k+' '+(z>=0?'+':'')+z.toFixed(1));
+      why.push('best categories '+top.join(', '));
+      why.push(Math.round((p.categoryBalance||0)*100)+'% categories at/above pool mean');
+    }
+    if(elig.length>1)why.push('+ '+(LEAGUE.platform||'fallback')+' flexibility '+displayElig.join('/'));
     if(confidence<0.97)why.push('projection confidence '+Math.round(confidence*100)+'%');
     if(health)why.push('health watch: '+health.label);
     p.myRankWhy=why.join('; ');
   });
-  PLAYERS.slice().sort((x,y)=>(y.myValue??-99999)-(x.myValue??-99999)).forEach((p,i)=>{p.myRank=i+1;});
+  const rawOrder=PLAYERS.slice().sort((x,y)=>(y.myValue??-99999)-(x.myValue??-99999));
+  rawOrder.forEach((p,i)=>{p.rawModelRank=i+1;});
+  if(isPoints){
+    PLAYERS.forEach(p=>{
+      const market=marketAdp(p);
+      const limit=market<=25?NHL_MY_RANK.safeMoveTop25:market<=100?NHL_MY_RANK.safeMoveTop100:NHL_MY_RANK.safeMoveRest;
+      const rawDelta=(p.rawModelRank||market)-market;
+      const bounded=Math.max(-limit,Math.min(limit,rawDelta));
+      p.draftSafeLimit=limit;
+      p.draftSafeScore=Math.max(1,market+bounded);
+      p.myRank=Math.round(p.draftSafeScore);
+      p.projectionDisagreement=Math.abs(rawDelta)>limit;
+      const guard=`draft-safe: ${LEAGUE.marketAdpSource==='fantrax'?'Fantrax':'Yahoo'} ADP ${market.toFixed(1)} ${bounded>=0?'+':''}${bounded.toFixed(1)} model adjustment (cap ±${limit}); raw one-season model rank ${p.rawModelRank}`;
+      p.myRankWhy=guard+(p.projectionDisagreement?' · disagreement capped; ':'; ')+p.myRankWhy;
+    });
+  } else {
+    rawOrder.forEach((p,i)=>{p.myRank=i+1;p.draftSafeScore=null;p.draftSafeLimit=null;p.projectionDisagreement=false;});
+  }
 }
-function adpRoundOf(name){const p=findPlayer(name); return p?Math.ceil(p.adp/LEAGUE.teams):null;}
+function projectionLabel(){return LEAGUE.scoringMode==='points'?'2025 Proj':'Cat';}
+function projectionDisplay(p){
+  if(LEAGUE.scoringMode==='points')return Number.isFinite(+p.leagueProj)?Number(p.leagueProj).toFixed(1):'';
+  return Number.isFinite(+p.categoryValue)?Number(p.categoryValue).toFixed(2):'';
+}
+function marketAdp(p){return Number.isFinite(+p.marketAdp)&&+p.marketAdp>0?+p.marketAdp:(+p.adp||999);}
+function adpRoundOf(name){const p=findPlayer(name); return p?Math.ceil(marketAdp(p)/LEAGUE.teams):null;}
+function fantraxDisplayName(raw){
+  const s=String(raw||'').trim(),i=s.indexOf(',');
+  return i<0?s:(s.slice(i+1).trim()+' '+s.slice(0,i).trim()).trim();
+}
+async function loadMarketAdp(){
+  PLAYERS.forEach(p=>{delete p.marketAdp;});
+  MARKET_ADP_STATUS='embedded';
+  if(LEAGUE.marketAdpSource!=='fantrax')return;
+  const leagueId=CURRENT_LEAGUE_ID;
+  MARKET_ADP_STATUS='loading';
+  try{
+    const r=await fetch('/api/nhl/fantrax-adp');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const rows=await r.json();
+    if(leagueId!==CURRENT_LEAGUE_ID)return;
+    let matched=0;
+    (rows||[]).forEach(row=>{
+      const p=findPlayer(fantraxDisplayName(row.name));
+      const adp=Number(row.adp);
+      if(p&&Number.isFinite(adp)&&adp>0){p.marketAdp=adp;matched++;}
+    });
+    MARKET_ADP_STATUS=matched?'fantrax':'fallback';
+    computePosRanks();computeMyRanks();render();
+  }catch(e){
+    if(leagueId!==CURRENT_LEAGUE_ID)return;
+    MARKET_ADP_STATUS='fallback';renderPool();renderNhlLivePicks();
+  }
+}
+async function loadDraftScheduleContext(){
+  DRAFT_SCHEDULE={teams:{},days:[],start:null};
+  if(SPORT.id!=='nhl'||LEAGUE.lineupPeriod!=='weekly')return;
+  const leagueId=CURRENT_LEAGUE_ID, today=new Date().toISOString().slice(0,10);
+  try{
+    let r=await fetch('/api/nhl/schedule?start='+today+'&days=7'),d=await r.json();
+    const total=Object.values(d.dayCounts||{}).reduce((a,b)=>a+b,0);
+    if(!total&&d.seasonStart&&d.seasonStart>today){r=await fetch('/api/nhl/schedule?start='+d.seasonStart+'&days=7');d=await r.json();}
+    if(leagueId!==CURRENT_LEAGUE_ID)return;
+    DRAFT_SCHEDULE=d&&d.teams?d:{teams:{},days:[],start:null};
+    renderNhlLivePicks(false);
+  }catch(e){}
+}
 // Auction pricing deliberately has TWO layers: (1) opponent market behavior,
 // anchored to Yahoo/default-market prices, and (2) Hovo target value, which can
 // blend independent expert values + our model. The rank/scarcity curve is only a
@@ -3369,7 +3565,7 @@ let unpayableKeepers=[];
 function slotForOverall(ov){const N=LEAGUE.teams;const r=Math.ceil(ov/N);const idx=ov-(r-1)*N;if(LEAGUE.draftType==='linear')return {round:r,slot:idx};const s=(r%2===1)?idx:(N-idx+1);return {round:r,slot:s};}
 function pickTakenAt(ov){return picks.find(p=>p.overall===ov);}
 function nextOpenPick(from){let ov=from;while(ov<=totalPicks && pickTakenAt(ov))ov++;return ov;}
-function available(){return PLAYERS.filter(p=>!p.drafted).sort((a,b)=>a.adp-b.adp);}
+function available(){return PLAYERS.filter(p=>!p.drafted).sort((a,b)=>marketAdp(a)-marketAdp(b));}
 
 function makePick(playerId, ov){
   const p=PLAYERS.find(x=>x.id===playerId); if(!p||p.drafted)return;
@@ -3407,33 +3603,30 @@ let TENDENCIES={};
 function blankBias(){const b={}; TEND_POS_FOR().forEach(p=>b[p]=0); return b;}
 function rebuildTendencies(){ TENDENCIES={}; OWNERS.forEach(o=>{TENDENCIES[o]={enabled:false,bias:blankBias()};}); }
 
-// Which positions this league actually rosters. Usually the sport's own list, but
-// platforms differ: a Fantrax hockey league commonly rosters F/D/G and never splits
-// forwards into C/LW/RW. Everything downstream — counts, roster slots, replacement
-// levels, the position filter — asks here rather than assuming the sport's list.
-function activePositions(){
-  return (LEAGUE && LEAGUE.positions && LEAGUE.positions.length) ? LEAGUE.positions : SPORT.positions;
+function rosterPositionOrder(){
+  if(LEAGUE.rosterPositions&&LEAGUE.rosterPositions.length)return LEAGUE.rosterPositions;
+  return SPORT.positions.filter(pos=>(LEAGUE.starters&&LEAGUE.starters[pos])!=null);
 }
-// Folding forwards into one F slot is derivable rather than data we must fetch: a
-// league that rosters F has no C/LW/RW concept at all, so every forward maps to F.
-// That is also exactly why such a league has no multi-eligibility to look up —
-// nobody is both F and D, and nothing intersects G.
-function applyLeaguePositionMap(profile){
-  const map=profile&&profile.positionMap;
-  if(!map||!Object.keys(map).length)return;
-  const fold=(list)=>{
-    const out=[];
-    (list||[]).forEach(x=>{const v=map[x]||x; if(v&&!out.includes(v))out.push(v);});
-    return out;
-  };
-  PLAYERS.forEach(pl=>{
-    pl.posEligible=fold(pl.posEligible);
-    if(pl.eligibility) Object.keys(pl.eligibility).forEach(k=>{pl.eligibility[k]=fold(pl.eligibility[k]);});
-    pl.pos=map[pl.pos]||pl.pos;
+function isForwardPosition(pos){return ['C','LW','RW','F'].includes(pos);}
+function rosterEligiblePositions(p){
+  const display=eligiblePositions(p);
+  const out=[];
+  rosterPositionOrder().forEach(pos=>{
+    if(pos==='F'&&display.some(isForwardPosition))out.push('F');
+    else if(display.includes(pos))out.push(pos);
   });
+  return out.length?out:display;
 }
-function blankCounts(){const c={}; activePositions().forEach(p=>c[p]=0); return c;}
-function countsOf(roster){const c=blankCounts(); roster.forEach(p=>{if(c[p.pos]!=null)c[p.pos]++;}); return c;}
+function blankCounts(){const c={}; [...new Set(SPORT.positions.concat(rosterPositionOrder()))].forEach(p=>c[p]=0); return c;}
+function countsOf(roster){
+  const c=blankCounts();
+  roster.forEach(p=>{
+    const slots=rosterEligiblePositions(p);
+    const pos=(slots.includes('F')?'F':slots.find(x=>c[x]!=null))||p.pos;
+    if(c[pos]!=null)c[pos]++;
+  });
+  return c;
+}
 // How badly does a team need another <pos>? 1 = filling a starter, negative = hoarding.
 function needScore(counts,pos){
   const S=LEAGUE.starters, base=S[pos]||0, have=counts[pos]||0;
@@ -3470,7 +3663,10 @@ function applyPlatformEligibility(profile){
     });
   });
 }
-function playerFillsPos(p,pos){ return eligiblePositions(p).includes(pos); }
+function playerFillsPos(p,pos){
+  if(pos==='F')return eligiblePositions(p).some(isForwardPosition);
+  return eligiblePositions(p).includes(pos);
+}
 function exposureText(p){
   const d=EXPOSURE&&EXPOSURE.denominator||0;
   const n=EXPOSURE&&EXPOSURE.counts&&EXPOSURE.counts[String(p.name||'').toLowerCase()]||0;
@@ -3485,13 +3681,13 @@ async function loadExposure(){
   if(el('poolTable'))renderPool();
 }
 function needScoreFor(counts,p){
-  return Math.max(...eligiblePositions(p).map(pos=>needScore(counts,pos)));
+  return Math.max(...rosterEligiblePositions(p).map(pos=>needScore(counts,pos)));
 }
 const RIVAL_W={need:26,tendency:8,lateKDST:90};
 // ADP is the backbone; need, tendency, and a K/DST lateness rule bend it. Shared by
 // the live Draft Room and the Strategy Lab so their results don't diverge.
 function rivalScore(p,counts,owner,round,noise){
-  let s=-p.adp;
+  let s=-marketAdp(p);
   s+=RIVAL_W.need*needScoreFor(counts,p);
   if(SPORT.lateRoundPositions.includes(p.pos)&&round<LEAGUE.rounds-2)s-=RIVAL_W.lateKDST;
   const t=TENDENCIES[owner];
@@ -3766,6 +3962,25 @@ function myUpcomingPicks(){
 // different question: what does this particular roster need before its next turn?
 // All modifiers are in approximate draft-pick units, not fantasy points. Never
 // turn a low-sample prior-season projection into a purported current role fact.
+function nhlCategoryRosterFit(p,roster){
+  if(LEAGUE.scoringMode==='points'||!p.categoryZ)return {score:0,reason:''};
+  const goalie=p.pos==='G';
+  const peers=roster.filter(q=>(q.pos==='G')===goalie&&q.categoryZ);
+  const cats=Object.keys(p.categoryZ),totals={};cats.forEach(k=>totals[k]=0);
+  peers.forEach(q=>cats.forEach(k=>totals[k]+=Number(q.categoryZ[k])||0));
+  if(!peers.length){
+    const broad=Math.round((p.categoryBalance||0)*cats.length);
+    return {score:Math.max(-2,Math.min(3,((p.categoryBalance||0)-0.5)*4)),reason:`contributes in ${broad}/${cats.length} ${goalie?'goalie':'skater'} categories`};
+  }
+  const min=Math.min(...cats.map(k=>totals[k]));
+  const weights=cats.map(k=>Math.exp(-0.32*(totals[k]-min)));
+  const weighted=cats.reduce((n,k,i)=>n+(Number(p.categoryZ[k])||0)*weights[i],0)/weights.reduce((a,b)=>a+b,0);
+  const ordinary=cats.reduce((n,k)=>n+(Number(p.categoryZ[k])||0),0)/Math.max(1,cats.length);
+  const score=Math.max(-7,Math.min(7,(weighted-ordinary)*3.2));
+  const helps=cats.filter(k=>totals[k]<=min+0.75&&(Number(p.categoryZ[k])||0)>0)
+    .sort((a,b)=>p.categoryZ[b]-p.categoryZ[a]).slice(0,2);
+  return {score,reason:helps.length?'balances '+helps.join('/'):'category fit is neutral'};
+}
 function nhlLiveRecommendations(limit=6){
   if(SPORT.id!=='nhl' || LEAGUE.draftType==='auction')return [];
   const upcoming=myUpcomingPicks();
@@ -3794,10 +4009,10 @@ function nhlLiveRecommendations(limit=6){
     // Positive means this room takes that group before market ADP; negative
     // means it is letting the group fall. Keep a small, bounded sample weight.
     roomShift[type]=sample.length>=3?Math.max(-8,Math.min(8,
-      sample.reduce((s,x)=>s+(x.player.adp-x.pick),0)/sample.length*0.35)):0;
+      sample.reduce((s,x)=>s+(marketAdp(x.player)-x.pick),0)/sample.length*0.35)):0;
   }
   const survival=(p)=>{
-    const market=(Number(p.adp)||Number(p.myRank)||next)-roomShift[p.pos==='D'?'D':p.pos==='G'?'G':'F'];
+    const market=(marketAdp(p)||Number(p.myRank)||next)-roomShift[p.pos==='D'?'D':p.pos==='G'?'G':'F'];
     return Math.max(0.03,Math.min(0.97,1/(1+Math.exp(Math.max(-30,Math.min(30,(next-market)*0.13))))));
   };
   const group=(p)=>p.pos==='D'?'D':p.pos==='G'?'G':'F';
@@ -3814,7 +4029,7 @@ function nhlLiveRecommendations(limit=6){
     const alternatives=ranked.filter(q=>q.id!==p.id&&group(q)===type);
     const nextEquivalent=alternatives.find(q=>survival(q)>=0.42);
     const gap=nextEquivalent?Math.max(0,Math.min(24,(nextEquivalent.myRank||999)-(p.myRank||999))):24;
-    let score=now-(p.myRank||p.adp||999);
+    let score=now-(p.myRank||marketAdp(p)||999);
     // The soft D1 checkpoint must never turn a fair Makar pick into a reason to
     // pass on a genuinely superior top-five player at 1.01.
     if(round===1&&p.myRank<=5)score+=(6-p.myRank)*3;
@@ -3831,7 +4046,12 @@ function nhlLiveRecommendations(limit=6){
       else if(counts.D===2)reasons.push('D3 is tier/value driven');
       if(counts.D<3&&run.D>=5&&survive<0.5){need+=3;reasons.push('defense run in this room');}
     } else if(type==='G'){
-      if(activeG===0)need=round>=4?10:1;
+      if(LEAGUE.scoringMode!=='points'){
+        if(activeG===0)need=round>=3?12:4;
+        else if(counts.G===1)need=round>=7?4:0;
+        else need=-26;
+        reasons.push(counts.G===0?'goalies drive four categories':counts.G===1?'G2 protects goalie-category balance':'G3 is category over-investment');
+      } else if(activeG===0)need=round>=4?10:1;
       else if(counts.G===1)need=-10;
       else need=-30;
       if(counts.G>activeG){need+=12;reasons.push('Hellebuyck is suspended; need an active G');}
@@ -3841,7 +4061,7 @@ function nhlLiveRecommendations(limit=6){
       if(counts.F<2&&round<=5)need+=5;
       if(round>=10&&counts.F<7)need+=4;
       if(roomShift.F<=-5&&survive>=0.4)reasons.push('forwards lasting longer in this room');
-      const onlyC=eligiblePositions(p).length===1&&p.pos==='C';
+      const onlyC=!LEAGUE.starters.F&&eligiblePositions(p).length===1&&p.pos==='C';
       if(onlyC){
         if(counts.C===0)need-=round<=2?Math.min(4,p.myRank/8):round<=5?4:0;
         else if(counts.C===1)need-=round<=9?15:7;
@@ -3864,13 +4084,24 @@ function nhlLiveRecommendations(limit=6){
       }
     }
     if(!newStarter&&streamConf>0){need-=streamConf*6;if(streamConf>=0.6)reasons.push('position is streamable');}
+    const catFit=nhlCategoryRosterFit(p,roster);
+    if(catFit.score){need+=catFit.score;reasons.unshift(catFit.reason);}
+    let weekGames=0;
+    if(LEAGUE.lineupPeriod==='weekly'){
+      weekGames=(DRAFT_SCHEDULE.teams&&DRAFT_SCHEDULE.teams[p.team]||[]).length;
+      if(weekGames){
+        const schedule=Math.max(-3.5,Math.min(3.5,(weekGames-3.25)*(0.7+progress*0.9)));
+        need+=schedule;
+        if(Math.abs(schedule)>=0.5)reasons.push(`${weekGames} games in modeled lineup week`);
+      }
+    }
     score+=need;
     const vona=Math.min(11,gap*0.38)*(1-survive);
     score+=vona;
     if(gap>=10&&survive<0.4)reasons.push(`${type} alternatives drop off by next turn`);
     else if(survive>=0.6)reasons.push('reasonable chance to wait');
     if(!reasons.length)reasons.push('strong intrinsic value');
-    return {player:p,score,survive,gap,reason:reasons.slice(0,2).join(' · '),
+    return {player:p,score,survive,gap,weekGames,reason:reasons.slice(0,2).join(' · '),
       label:survive>=0.62&&gap<10?'WAIT':gap>=10&&survive<0.4?'TIER CLIFF':'VALUE'};
   });
   if(stashWindow&&stashCandidates.length){
@@ -3918,11 +4149,13 @@ function renderNhlLivePicks(drawControls=true){
   const list=nhlLiveRecommendations(), box=el('nhlLivePicks');
   if(!list.length){box.textContent='Draft complete or no players available.';return;}
   const {now,next,paired,round,counts,activeG}=list[0];
-  el('nhlLiveContext').textContent=`Pick ${now} (R${round})${paired?` + ${now+1} at turn`:''} · next turn ${next} · roster ${counts.F} F / ${counts.D} D / ${counts.G} G (${activeG} active) · ${counts.C} C-only`;
+  const weekly=LEAGUE.lineupPeriod==='weekly'?` · weekly lineup${DRAFT_SCHEDULE.days&&DRAFT_SCHEDULE.days.length?` · ${DRAFT_SCHEDULE.days.length}-day schedule loaded`:''}`:'';
+  const cOnly=LEAGUE.starters.F?'':` · ${counts.C} C-only`;
+  el('nhlLiveContext').textContent=`Pick ${now} (R${round})${paired?` + ${now+1} at turn`:''} · next turn ${next} · roster ${counts.F} F / ${counts.D} D / ${counts.G} G (${activeG} active)${cOnly}${weekly}`;
   box.innerHTML=list.map(({player:p,label,reason,survive})=>`<div class="live-pick">
     <span class="live-label ${label==='WAIT'?'wait':''}">${label}</span>
     <div class="live-pick-main"><b>${headshotImg(p)}${p.name}</b> ${posCell(p)}
-      <span class="small muted">My ${p.myRank} · ADP ${p.adp} · proj ${Math.round(p.proj||0)}</span>
+      <span class="small muted">My ${p.myRank} · ADP ${marketAdp(p).toFixed(1)} · ${projectionLabel().toLowerCase()} ${projectionDisplay(p)}</span>
       <div class="live-pick-reason">${reason}${label==='WAIT'?' · market ADP suggests it may last':''}</div></div>
     <button class="pick-btn" data-live-pick="${p.id}">draft →</button>
   </div>`).join('');
@@ -3959,7 +4192,7 @@ function renderCues(){
   const up=myUpcomingPicks();
   const target=(up[0]===nextOpenPick(curPick))?up[1]:up[0];
   if(target){
-    const risk=available().filter(p=>p.adp<target);
+    const risk=available().filter(p=>marketAdp(p)<target);
     if(risk.length){
       const names=risk.slice(0,3).map(p=>`${queued.has(p.name)?'★':''}${p.name}`).join(', ');
       parts.push(`<span><b>${risk.length}</b> likely gone before your #${target}: ${names}${risk.length>3?'…':''}</span>`);
@@ -3985,6 +4218,8 @@ function renderPool(){
       if(bv==null)return -1;
       return av-bv;
     });
+  } else {
+    rows=rows.slice().sort((a,b)=>marketAdp(a)-marketAdp(b));
   }
   // Eligibility, not primary position: filtering to LW must surface every C/LW too.
   if(pos!=='ALL')rows=rows.filter(p=>playerFillsPos(p,pos));
@@ -4015,10 +4250,11 @@ function renderPool(){
       trT.innerHTML=`<td colspan="11">Tier ${p.tier}<span class="${n<=3?'val-bad':'muted'}"> · ${n} left${pos!=='ALL'?' at '+pos:''}</span></td>`;
       tb.appendChild(trT);
     }
-    const d=Math.round((p.adp-p.ecr)*10)/10; // + = falls later than ranked = value
+    const adp=marketAdp(p);
+    const d=Math.round((adp-p.ecr)*10)/10; // + = falls later than ranked = value
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><input type="checkbox" class="qcheck" data-q="${p.name.replace(/"/g,'&quot;')}" ${queued.has(p.name)?'checked':''}></td>
-      <td>${p.adp}</td><td>${p.ecr}</td><td${p.myRankWhy?` title="${String(p.myRankWhy).replace(/"/g,'&quot;')}"`:''}>${p.myRank!=null?p.myRank:'—'}</td><td class="small">${(p.leagueProj!=null?p.leagueProj:p.proj)?Number(p.leagueProj!=null?p.leagueProj:p.proj).toFixed(1):''}</td><td class="small" title="Exposure across your other drafted ${SPORT.label} leagues">${exposureText(p)}</td><td>${posCell(p)}</td>
+      <td>${adp<999?adp.toFixed(1):'—'}</td><td>${p.ecr}</td><td${p.myRankWhy?` title="${String(p.myRankWhy).replace(/"/g,'&quot;')}"`:''}>${p.myRank!=null?p.myRank:'—'}${p.projectionDisagreement?' ⚠':''}</td><td class="small">${projectionDisplay(p)}</td><td class="small" title="Exposure across your other drafted ${SPORT.label} leagues">${exposureText(p)}</td><td>${posCell(p)}</td>
       <td>${headshotImg(p)}${p.name}${teamLogoImg(p)}${p.keeper?`<span class="kchip">K</span>`:''}${rookieBadge(p)}${NHL_HEALTH_WATCH[p.name]?` <a class="small" title="${NHL_HEALTH_WATCH[p.name].note}" href="${NHL_HEALTH_WATCH[p.name].url}" target="_blank" rel="noopener">${NHL_HEALTH_WATCH[p.name].label}</a>`:''}</td><td class="muted small">${p.pos}${p.posRank||''}</td>
       <td class="dcol ${valClass(d)}">${d>0?'+':''}${d}</td>
       <td><button class="pick-btn" data-pk="${p.id}">draft →</button></td>`;
@@ -4038,7 +4274,7 @@ function renderQueue(){
   const targets=available().filter(p=>queued.has(p.name));
   if(!targets.length){ box.innerHTML='Check "Q" next to a player in Best Available to add them.'; return; }
   box.innerHTML=targets.map(p=>`<div class="mypick-row">
-    <span class="small"><span class="pos ${p.pos}">${p.pos}</span> ${p.name} <span class="muted">(adp ${p.adp})</span></span>
+    <span class="small"><span class="pos ${p.pos}">${p.pos}</span> ${p.name} <span class="muted">(adp ${marketAdp(p).toFixed(1)})</span></span>
     <span><button class="pick-btn" data-qpick="${p.id}">draft →</button> <a href="#" data-qrm="${p.name.replace(/"/g,'&quot;')}" style="margin-left:6px">✕</a></span>
   </div>`).join('');
   box.querySelectorAll('[data-qpick]').forEach(b=>b.onclick=()=>{
@@ -4099,7 +4335,7 @@ function renderMyPicks(){
       const rw=pk.keeper?'':`<a href="#" class="rewind" data-rw="${ov}" title="Rewind the draft to this pick">↩</a>`;
       right=`${pl?headshotImg(pl):''}<b>${pl?pl.name:''}</b> <span class="pos ${pl?pl.pos:''}">${pl?pl.pos:''}</span> ${pk.keeper?'<span class="kchip">keeper</span>':''}${rw}`;
     } else {
-      const pr=available().filter(p=>p.adp>=ov-6).slice(0,3).map(p=>`${p.name} <span class="muted">(${p.pos}${p.posRank||''}, adp ${p.adp})</span>`).join(', ')||'—';
+      const pr=available().filter(p=>marketAdp(p)>=ov-6).slice(0,3).map(p=>`${p.name} <span class="muted">(${p.pos}${p.posRank||''}, adp ${marketAdp(p).toFixed(1)})</span>`).join(', ')||'—';
       right=`<span class="muted">likely: ${pr}</span>`;
     }
     const acq=ownerOf(ov)!==slot?' <span class="tradetag">acq</span>':'';
@@ -4157,7 +4393,7 @@ function renderDraftAnalysis(){
   // 20+ spots past ADP every draft and would crowd out the real steals.
   const deltas=picks.filter(p=>!p.keeper).map(p=>{
     const pl=PLAYERS.find(x=>x.id===p.playerId); if(!pl||pl.pos==='K'||pl.pos==='DST')return null;
-    return {name:pl.name, pos:pl.pos, ov:p.overall, owner:ownerLabel(ownerOf(p.overall)), d:Math.round(pl.adp-p.overall)};
+    return {name:pl.name, pos:pl.pos, ov:p.overall, owner:ownerLabel(ownerOf(p.overall)), d:Math.round(marketAdp(pl)-p.overall)};
   }).filter(Boolean);
   const fmt=list=>list.length?list.map(x=>`<div class="mypick-row"><span class="small"><span class="pos ${x.pos}">${x.pos}</span> ${x.name} <span class="muted">\u2014 ${x.owner} at #${x.ov}</span></span><span class="small ${x.d>0?'val-good':'val-bad'}">${x.d>0?'+':''}${x.d}</span></div>`).join(''):'<span class="muted small">\u2014</span>';
   const steals=deltas.slice().sort((a,b)=>b.d-a.d).slice(0,5);
@@ -4173,7 +4409,7 @@ function renderDraftAnalysis(){
 // Whatever's left after starters is the bench.
 function slotRosterPlayers(roster,starters){
   const slots=[];
-  activePositions().forEach(pos=>{for(let i=0;i<(starters[pos]||0);i++)slots.push({label:pos});});
+  rosterPositionOrder().forEach(pos=>{for(let i=0;i<(starters[pos]||0);i++)slots.push({label:pos});});
   for(let i=0;i<(starters.FLEX||0);i++)slots.push({label:'FLEX'});
   for(let i=0;i<(starters.SUPERFLEX||0);i++)slots.push({label:'SFLEX'});
   const canFill=(p,label)=>{
@@ -4462,7 +4698,7 @@ function runLab(){
       for(let o=startOv;o<=totalPicks;o++){
         if(picks.find(p=>p.overall===o))continue;
         const slot=ownerOf(o);
-        const pool=PLAYERS.filter(p=>!taken.has(p.id)).sort((a,b)=>a.adp-b.adp);
+        const pool=PLAYERS.filter(p=>!taken.has(p.id)).sort((a,b)=>marketAdp(a)-marketAdp(b));
         if(!pool.length)break;
         if(slot===mySlot){
           const want=s.plan[planIdx]||'BPA';
@@ -4573,13 +4809,25 @@ function eligibilitySourceNote(){
   const plat=LEAGUE.platform;
   if(!plat||!PLAYERS.length)return '';
   const have=PLAYERS.filter(p=>p.eligibility&&p.eligibility[plat]&&p.eligibility[plat].length).length;
-  if(!have)return `\u26a0 positions are FantasyPros' \u2014 no ${plat} eligibility loaded`;
-  if(have<PLAYERS.length)return `${have}/${PLAYERS.length} positions confirmed from ${plat}`;
-  return `positions confirmed from ${plat}`;
+  const pos=!have?`\u26a0 positions are FantasyPros' \u2014 no ${plat} eligibility loaded`
+    :have<PLAYERS.length?`${have}/${PLAYERS.length} positions confirmed from ${plat}`
+    :`positions confirmed from ${plat}`;
+  let market='';
+  if(LEAGUE.marketAdpSource==='fantrax')market=MARKET_ADP_STATUS==='fantrax'?'market: live Fantrax ADP'
+    :MARKET_ADP_STATUS==='loading'?'market: loading Fantrax ADP'
+    :'\u26a0 market: Yahoo ADP fallback (Fantrax feed unavailable)';
+  else if(SPORT.id==='nhl')market='market: Yahoo ADP';
+  return [pos,market].filter(Boolean).join(' · ');
 }
+// Show the positions as THIS league rosters them. In a Fantrax Classic league that
+// rosters F/D/G there is no centre/wing distinction to act on — every lineup, waiver
+// and trade decision is about forwards — so showing "C/LW" there would be a
+// distinction the league cannot honour. rosterEligiblePositions() projects the
+// underlying eligibility onto the league's own slots; elsewhere it is a no-op.
 function posCell(p){
-  const elig=eligiblePositions(p);
-  return '<span class="pos '+p.pos+'">'+elig.join('/')+'</span>';
+  const elig=rosterEligiblePositions(p);
+  const primary=elig.includes(p.pos)?p.pos:(elig[0]||p.pos);
+  return '<span class="pos '+primary+'">'+elig.join('/')+'</span>';
 }
 function rookieBadge(p){ return p.rookie ? '<span class="rkchip" title="Rookie">RK</span>' : ''; }
 function loadPlayersData(txt){const arr=parsePlayers(txt); if(arr.length){PLAYERS=arr; const w=el('seedWarn'); if(w)w.style.display='none';} return arr.length;}
@@ -4622,7 +4870,7 @@ function applyConfig(cfg){PLAYERS=cfg.PLAYERS;KEEPERS=cfg.KEEPERS;picks=cfg.pick
   if(Array.isArray(cfg.cutPlayers))cutPlayers=new Set(cfg.cutPlayers);
   if(Array.isArray(cfg.queued))queued=new Set(cfg.queued);
   pickOwnerOverride=cfg.pickOwnerOverride||{}; playerTrades=cfg.playerTrades||{};
-  if(cfg.streamConfidence)STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE,...cfg.streamConfidence};
+  if(cfg.streamConfidence)STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE,...(LEAGUE.defaultStreamConfidence||{}),...cfg.streamConfidence};
   if(cfg.tendencies)OWNERS.forEach(o=>{const t=cfg.tendencies[o]; if(t)TENDENCIES[o]={enabled:!!t.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},t.bias||{})};});
   if(cfg.seed==='none')el('seedWarn').style.display='none';
   render(); if(el('teamsWrap')){renderTeams();renderTendencies();} renderTrades(); saveSetup();}
@@ -4662,6 +4910,7 @@ function loadLeagueIntoForm(id){
   el('lgLeagueType').value=p.leagueType||'keeper';
   updateLgKeeperFieldsVisibility();
   el('lgSuperflex').checked=!!p.superflex;
+  el('lgOfficialDraft').checked=!!p.officialDraft;
   el('lgScoring').value=p.scoringLabel||'';
   el('lgDraftDate').value=p.draftDateLabel||'';
   el('lgKeeperDeadline').value=p.keeperDeadlineLabel||'';
@@ -4811,6 +5060,7 @@ function collectLeagueForm(){
     draftType: el('lgDraftType').value,
     leagueType: el('lgLeagueType').value,
     superflex: el('lgSuperflex').checked,
+    officialDraft: el('lgOfficialDraft').checked,
     scoringLabel: el('lgScoring').value.trim()||'TBD',
     draftDateLabel: el('lgDraftDate').value.trim()||'TBD',
     keeperDeadlineLabel: el('lgKeeperDeadline').value.trim()||'TBD',
@@ -4856,7 +5106,7 @@ function newLeagueForm(){
   el('lgName').value='New League'; el('lgTeams').value=12; el('lgRounds').value=16; el('lgDraftType').value='snake';
   if(el('lgSport')) el('lgSport').value=ACTIVE_SPORT;
   el('lgLeagueType').value='keeper'; updateLgKeeperFieldsVisibility();
-  el('lgSuperflex').checked=false; el('lgScoring').value='TBD'; el('lgDraftDate').value='TBD';
+  el('lgSuperflex').checked=false; el('lgOfficialDraft').checked=false; el('lgScoring').value='TBD'; el('lgDraftDate').value='TBD';
   el('lgKeeperDeadline').value='TBD'; el('lgMaxKeepers').value=''; el('lgKeeperCostType').value='round';
   el('lgMySlot').value=''; el('lgOwners').value=''; el('lgRostersRaw').value=''; el('lgPlayersCsv').value='';
   renderStartersInputs({QB:1,RB:2,WR:2,TE:1,FLEX:1,K:1,DST:1});
@@ -4915,7 +5165,7 @@ async function importFromFantrax(){
     const r=await fetch('/api/import/fantrax/'+encodeURIComponent(fid));
     const data=await r.json();
     if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
-    ['platform','sport','platformEligibility','positions','positionMap','scoringMode','scoring','categoryStats','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'].forEach(k=>{if(data[k]!==undefined&&data[k]!==null)PENDING_LEAGUE_META[k]=data[k];});
+    ['platform','sport','platformEligibility','rosterPositions','scoringMode','scoring','categoryStats','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'].forEach(k=>{if(data[k]!==undefined)PENDING_LEAGUE_META[k]=data[k];});
     el('lgName').value=data.name||'';
     el('lgTeams').value=data.teams||12;
     el('lgOwners').value=(data.owners||[]).join(', ');
@@ -5057,10 +5307,10 @@ async function compareYahooSettings(){
       ? '✓ all reference scoring modifiers match'
       : known.length?`⚠ scoring checked ${known.length}/${Object.keys(baseline.scoring).length}; differing ${mismatch.join(', ')||'none found'}; review raw values`
       : '⚠ scoring modifiers could not be mapped; review raw values';
-    el('yahooStatus').textContent=`${data.name||key} · ${data.teams||'?'} teams (reference 10) · ${data.scoringType||'?'} scoring · ${data.draftType||'?'} draft · ${positionStatus} · ${scoringStatus}.`;
-    if(data.teams===10&&positionMatch&&known.length===10&&!mismatch.length&&
+    el('yahooStatus').textContent=`${data.name||key} · ${data.teams||'?'} teams (Public Prize reference ${baseline.teams}) · ${data.scoringType||'?'} scoring · ${data.draftType||'?'} draft · ${positionStatus} · ${scoringStatus}.`;
+    if([10,12].includes(Number(data.teams))&&positionMatch&&known.length===10&&!mismatch.length&&
       String(data.scoringType||'').includes('point')&&!/auction/i.test(data.draftType||'')){
-      yahooCompared={key,name:data.name||'Yahoo NHL Public',platformEligibility:data.platformEligibility||{}};
+      yahooCompared={key,name:data.name||'Yahoo NHL Public',teams:Number(data.teams),platformEligibility:data.platformEligibility||{}};
       el('yahooImportBtn').disabled=false;
       el('yahooStatus').textContent+=' Settings match; enter your slot and create the profile.';
     }
@@ -5069,15 +5319,15 @@ async function compareYahooSettings(){
 }
 async function importMatchedYahooNhl(){
   if(!yahooCompared)return;
-  const slot=Number(el('yahooImportSlot').value);
-  if(!Number.isInteger(slot)||slot<1||slot>10){el('yahooStatus').textContent='Enter your draft slot from 1 to 10.';return;}
+  const slot=Number(el('yahooImportSlot').value), teamCount=Number(yahooCompared.teams)||LEAGUES_DEFAULT['yahoo-nhl-public'].teams;
+  if(!Number.isInteger(slot)||slot<1||slot>teamCount){el('yahooStatus').textContent='Enter your draft slot from 1 to '+teamCount+'.';return;}
   const existing=Object.values(LEAGUES).find(p=>p.yahooLeagueKey===yahooCompared.key);
   if(existing){switchLeague(existing.id);el('yahooStatus').textContent='This Yahoo league is already imported; switched to it.';return;}
-  const owners=Array.from({length:10},(_,i)=>i+1===slot?'Me':`Team ${i+1}`);
+  const owners=Array.from({length:teamCount},(_,i)=>i+1===slot?'Me':`Team ${i+1}`);
   const ownerSlot=Object.fromEntries(owners.map((owner,i)=>[owner,i+1]));
   const baseline=LEAGUES_DEFAULT['yahoo-nhl-public'];
   const body={...baseline,id:undefined,
-    name:yahooCompared.name, yahooLeagueKey:yahooCompared.key, platform:'yahoo',
+    name:yahooCompared.name, yahooLeagueKey:yahooCompared.key, platform:'yahoo', teams:teamCount, officialDraft:false,
     platformEligibility:{yahoo:{...(baseline.platformEligibility&&baseline.platformEligibility.yahoo||{}),...(yahooCompared.platformEligibility||{})}},
     mySlot:slot,owners,ownerSlot,meOwner:'Me',draftDateLabel:'Check Yahoo draft room'};
   try{
@@ -5110,8 +5360,10 @@ async function setNhlDraftSlot(){
   }catch(e){el('onClock').textContent=`Slot ${slot} active here; cloud save failed: ${e.message}`;}
 }
 
-// ---------- IN-SEASON / FAAB LAB ----------
+// ---------- IN-SEASON / WAIVER LAB ----------
 let FAAB_REPORT=null;
+let INSEASON_STATE={};
+let WAIVER_TICKETS=[];
 const FAAB_ROSTER_HEADERS=['name','pos','team','week_proj','ros_rank','status','bye_week'];
 const FAAB_AVAILABLE_HEADERS=['name','pos','team','week_proj','ros_rank','endgame','role','schedule','injury','teammate','bye_week','status','notes'];
 function faabEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -5176,9 +5428,16 @@ function faabStateFromForm(){return {
   availableCsv:el('faabAvailableCsv').value,
   scheduleEnabled:el('faabScheduleEnabled').checked,
   emailEnabled:el('faabEmailEnabled').checked,
-  emailTo:el('faabEmail').value.trim()
+  emailTo:el('faabEmail').value.trim(),
+  teamDirection:el('waiverTeamDirection').value,
+  waiverMethod:el('waiverMethod').value,
+  waiverDeadline:el('waiverDeadline').value,
+  draftOrderRule:el('waiverDraftOrderRule').value.trim(),
+  waiverTrigger:el('waiverTrigger').value.trim()
 };}
 function applyFaabState(s={}){
+  INSEASON_STATE={...s};
+  const guillotine=LEAGUE.leagueType==='guillotine';
   el('faabWeek').value=s.week||2;
   el('faabStartingBudget').value=s.startingBudget||1000;
   el('faabRemainingBudget').value=s.remainingBudget==null?(s.startingBudget||1000):s.remainingBudget;
@@ -5187,6 +5446,11 @@ function applyFaabState(s={}){
   el('faabScheduleEnabled').checked=s.scheduleEnabled!==false;
   el('faabEmailEnabled').checked=!!s.emailEnabled;
   el('faabEmail').value=s.emailTo||s.emailDefault||(ME.user&&ME.user.email)||'';
+  el('waiverTeamDirection').value=s.teamDirection||(guillotine?'survive':'unspecified');
+  el('waiverMethod').value=s.waiverMethod||(guillotine?'faab':'unknown');
+  el('waiverDeadline').value=s.waiverDeadline||'';
+  el('waiverDraftOrderRule').value=s.draftOrderRule||'';
+  el('waiverTrigger').value=s.waiverTrigger||'';
   el('faabRosterCsv').value=s.rosterCsv||(s.roster?faabRowsCsv(s.roster,FAAB_ROSTER_HEADERS):defaultFaabRosterCsv());
   el('faabAvailableCsv').value=s.availableCsv||(s.available?faabRowsCsv(s.available,FAAB_AVAILABLE_HEADERS):FAAB_AVAILABLE_HEADERS.join(',')+'\n');
   if(s.dataSyncedAt)el('faabStatus').textContent='League data last refreshed '+new Date(s.dataSyncedAt).toLocaleString();
@@ -5207,16 +5471,78 @@ async function loadFaabHistory(openLatest=false){
     if(openLatest && rows && rows[0])await openFaabReport(rows[0].id);
   }catch(e){body.innerHTML='<tr><td colspan="4" class="muted">History unavailable.</td></tr>';}
 }
+function waiverTicketStatusText(status){return ({draft:'Draft',approved:'Approved',submitted:'Submitted',verified:'Verified',not_won:'Not won',cancelled:'Cancelled'})[status]||'Draft';}
+function waiverTicketActions(ticket){
+  const button=(status,label)=>`<button class="btn ghost" data-ticket-status="${status}" data-ticket-id="${faabEsc(ticket.id)}">${label}</button>`;
+  if(ticket.status==='draft')return button('approved','Approve')+button('cancelled','Cancel');
+  if(ticket.status==='approved')return button('submitted','Mark submitted')+button('cancelled','Cancel');
+  if(ticket.status==='submitted')return button('verified','Verify after refresh')+button('not_won','Not won')+button('cancelled','Cancel');
+  return '<span class="small muted">Closed</span>';
+}
+function renderWaiverTickets(tickets=WAIVER_TICKETS){
+  const body=el('waiverTickets');if(!body)return;
+  body.innerHTML=(tickets||[]).map(t=>{
+    const action=(t.action||'add').replace(/_/g,' ');
+    const bid=t.waiverMethod==='faab'?`$${t.recommendedBid||0} FAAB`:(t.waiverMethod||'Confirm route').replace(/_/g,' ');
+    const deadline=t.deadline?new Date(t.deadline).toLocaleString():'No deadline set';
+    const context=[t.teamDirection||'unspecified',t.draftOrderRule||'draft-order rule not set',deadline].map(faabEsc).join(' · ');
+    const details=[t.trigger,t.rationale].filter(Boolean).map(faabEsc).join(' · ');
+    return `<tr><td><span class="ticket-status ${faabEsc(t.status)}">${faabEsc(waiverTicketStatusText(t.status))}</span><div class="small muted" style="margin-top:4px">${new Date(t.updatedAt||t.createdAt).toLocaleString()}</div></td><td><b>${faabEsc(action)} ${faabEsc(t.player||'')}</b>${t.pos?` <span class="muted">${faabEsc(t.pos)}</span>`:''}${t.suggestedDrop?`<div class="small muted">drop ${faabEsc(t.suggestedDrop)}</div>`:''}</td><td><b>${faabEsc(bid)}</b><div class="small muted">${faabEsc((t.waiverMethod||'unknown').replace(/_/g,' '))}</div></td><td class="small">${context}${details?`<div class="muted" style="margin-top:4px">${details}</div>`:''}</td><td><div class="ticket-actions">${waiverTicketActions(t)}</div></td></tr>`;
+  }).join('')||'<tr><td colspan="5" class="muted">No tickets yet. Run a report, then create a ticket from a recommendation.</td></tr>';
+  body.querySelectorAll('[data-ticket-status]').forEach(b=>b.onclick=()=>updateWaiverTicket(b.dataset.ticketId,b.dataset.ticketStatus));
+}
+async function loadWaiverTickets(){
+  const status=el('waiverTicketStatus');if(status)status.textContent='Loading tickets…';
+  try{
+    const r=await fetch('/api/inseason/tickets?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    WAIVER_TICKETS=Array.isArray(d)?d:[];renderWaiverTickets();
+    if(status)status.textContent=WAIVER_TICKETS.length?`${WAIVER_TICKETS.length} saved ticket${WAIVER_TICKETS.length===1?'':'s'}`:'No tickets yet.';
+  }catch(e){if(status)status.textContent='⚠ '+e.message;}
+}
+async function updateWaiverTicket(id,status){
+  const label=waiverTicketStatusText(status);const notice=el('waiverTicketStatus');if(notice)notice.textContent=`Saving ${label.toLowerCase()} status…`;
+  try{
+    const r=await fetch('/api/inseason/tickets/'+encodeURIComponent(id)+'?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method:'PUT',headers:{'Content-Type':'application/json',...tokenHdr()},body:JSON.stringify({status})});const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    WAIVER_TICKETS=WAIVER_TICKETS.map(t=>t.id===d.id?d:t);renderWaiverTickets();
+    if(notice)notice.textContent=`✓ ${label}`;
+  }catch(e){if(notice)notice.textContent='⚠ '+e.message;}
+}
+async function createWaiverTicket(index){
+  const player=(FAAB_REPORT&&FAAB_REPORT.recommendations||[])[index];
+  const notice=el('waiverTicketStatus');
+  if(!player){if(notice)notice.textContent='Open a report before creating a ticket.';return;}
+  const duplicate=WAIVER_TICKETS.find(t=>t.player===player.name&&['draft','approved','submitted'].includes(t.status));
+  if(duplicate){if(notice)notice.textContent=`An open ticket already exists for ${player.name}.`;return;}
+  const context=faabStateFromForm();if(notice)notice.textContent=`Creating ${player.name} ticket…`;
+  try{
+    const payload={
+      action:'add',player:player.name,pos:player.pos,team:player.team,suggestedDrop:player.replacement||'',
+      recommendedBid:player.recommendedBid,projectedWinningBid:player.projectedWinningBid,stretchBid:player.stretchBid,
+      waiverMethod:context.waiverMethod,deadline:context.waiverDeadline,teamDirection:context.teamDirection,
+      draftOrderRule:context.draftOrderRule,trigger:context.waiverTrigger,rationale:[...(player.reasons||[]),player.notes||''].filter(Boolean).join(' · '),
+      reportId:FAAB_REPORT.id,snapshotAt:INSEASON_STATE.dataSyncedAt||FAAB_REPORT.createdAt
+    };
+    const r=await fetch('/api/inseason/tickets?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method:'POST',headers:{'Content-Type':'application/json',...tokenHdr()},body:JSON.stringify(payload)});const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    WAIVER_TICKETS=[d,...WAIVER_TICKETS.filter(t=>t.id!==d.id)];renderWaiverTickets();
+    if(notice)notice.textContent=`✓ ${player.name} ticket drafted`;
+  }catch(e){if(notice)notice.textContent='⚠ '+e.message;}
+}
 function renderFaabReport(report){
   FAAB_REPORT=report;
-  el('faabReportMeta').textContent=`Week ${report.week} · ${report.teamsAlive} alive · $${report.remainingBudget} left · ${new Date(report.createdAt).toLocaleString()}`;
+  const showFaab=el('waiverMethod').value==='faab';
+  el('faabReportMeta').textContent=showFaab?`Week ${report.week} · ${report.teamsAlive} alive · $${report.remainingBudget} left · ${new Date(report.createdAt).toLocaleString()}`:`Week ${report.week} · claim route: ${(el('waiverMethod').value||'unknown').replace(/_/g,' ')} · ${new Date(report.createdAt).toLocaleString()}`;
   const body=el('faabResults');
-  body.innerHTML=(report.recommendations||[]).map(p=>`<tr>
-    <td><b>${faabEsc(p.name)}</b><div class="small muted">${faabEsc(p.team)} · ${faabEsc(p.pos)} · ${faabEsc(p.tier)}</div><div class="small ${p.marketReachable?'faab-good':'faab-pass'}">${p.marketReachable?'Market is within your ceiling':'Disciplined pass at projected market'}</div></td>
+  body.innerHTML=(report.recommendations||[]).map((p,i)=>`<tr>
+    <td><b>${faabEsc(p.name)}</b><div class="small muted">${faabEsc(p.team)} · ${faabEsc(p.pos)} · ${faabEsc(p.tier)}</div><div class="small ${showFaab?(p.marketReachable?'faab-good':'faab-pass'):'muted'}">${showFaab?(p.marketReachable?'Market is within your ceiling':'Disciplined pass at projected market'):'Candidate for manual claim review'}</div></td>
     <td><b>${p.adjustedWeekProjection} pts</b><div class="small muted">lineup upgrade +${p.lineupUpgrade}${p.replacement?' over '+faabEsc(p.replacement):''}</div><div class="small muted">ROS rank ${p.rosRank<999?p.rosRank:'—'} · endgame ${Math.round(p.endgame*100)}%</div></td>
-    <td><div class="faab-metrics"><div class="faab-metric"><span class="small muted">Bid</span><b>$${p.recommendedBid}</b></div><div class="faab-metric"><span class="small muted">Projected win</span><b>$${p.projectedWinningBid}</b></div><div class="faab-metric"><span class="small muted">Stretch max</span><b>$${p.stretchBid}</b></div></div><div class="small muted" style="margin-top:4px">Independent fair value: $${p.fairBid}</div></td>
+    <td>${showFaab?`<div class="faab-metrics"><div class="faab-metric"><span class="small muted">Bid</span><b>$${p.recommendedBid}</b></div><div class="faab-metric"><span class="small muted">Projected win</span><b>$${p.projectedWinningBid}</b></div><div class="faab-metric"><span class="small muted">Stretch max</span><b>$${p.stretchBid}</b></div></div><div class="small muted" style="margin-top:4px">Independent fair value: $${p.fairBid}</div>`:`<div class="small muted">No FAAB bid applied. Confirm the host’s claim route before submission.</div>`}</td>
     <td class="small">${(p.reasons||[]).map(faabEsc).join(' · ')}${p.notes?'<div class="muted" style="margin-top:4px">'+faabEsc(p.notes)+'</div>':''}</td>
-  </tr>`).join('')||'<tr><td colspan="4" class="muted">No available players were supplied.</td></tr>';
+    <td><button class="btn ghost" data-create-ticket="${i}">Create ticket</button></td>
+  </tr>`).join('')||'<tr><td colspan="5" class="muted">No available players were supplied.</td></tr>';
+  body.querySelectorAll('[data-create-ticket]').forEach(b=>b.onclick=()=>createWaiverTicket(+b.dataset.createTicket));
 }
 async function openFaabReport(id){
   const r=await fetch('/api/inseason/reports/'+encodeURIComponent(id)+'?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});const d=await r.json();if(!r.ok)throw new Error(d.error||('HTTP '+r.status));renderFaabReport(d);
@@ -5247,9 +5573,11 @@ function downloadFaabCalendar(){
 async function loadInSeasonState(){
   if(!el('faabWeek'))return;
   FAAB_REPORT=null;
-  try{const r=await fetch('/api/inseason/state?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});const d=await r.json();if(r.ok)applyFaabState(d);}catch(e){applyFaabState({});}
+  WAIVER_TICKETS=[];renderWaiverTickets();
+  try{const r=await fetch('/api/inseason/state?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});const d=await r.json();applyFaabState(r.ok?d:{});}catch(e){applyFaabState({});}
   loadFaabSources();
   loadFaabHistory(true);
+  loadWaiverTickets();
 }
 
 // ---------- EVENTS ----------
@@ -5395,7 +5723,7 @@ async function delMock(id){ if(!confirm('Delete this mock?'))return; try{ await 
 // matter — you only get a few of these, so they should be the right few.
 let RADAR_SCHED=null;
 const RADAR_LIGHT_BONUS=0.35;
-function radarVisible(){ return !!(SPORT.dailyLineups) && !roomOnly(); }
+function radarVisible(){ return !!(SPORT.dailyLineups) && LEAGUE.lineupPeriod!=='weekly' && LEAGUE.scoringMode==='points' && !roomOnly(); }
 function applyRadarVisibility(){
   const btn=document.querySelector('nav button[data-view="radar"]');
   if(btn) btn.style.display=radarVisible()?'':'none';
@@ -5642,7 +5970,7 @@ async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||
   if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
   if(Array.isArray(s.cutPlayers))cutPlayers=new Set(s.cutPlayers);
   if(Array.isArray(s.queued))queued=new Set(s.queued);
-  if(s.streamConfidence)STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE,...s.streamConfidence};
+  if(s.streamConfidence)STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE,...(LEAGUE.defaultStreamConfidence||{}),...s.streamConfidence};
   auctionPicks=Array.isArray(s.auctionPicks)?s.auctionPicks.slice():[];
   pickOwnerOverride=s.pickOwnerOverride||{}; playerTrades=s.playerTrades||{};
   applyTendencies(s.tendencies);
@@ -5714,8 +6042,8 @@ function fillPosFilters(){
   ['posFilter','auctionPosFilter'].forEach(id=>{
     const sel=el(id); if(!sel) return;
     const cur=sel.value;
-    sel.innerHTML='<option value="ALL">All positions</option>'+activePositions().map(p=>`<option>${p}</option>`).join('');
-    sel.value=activePositions().includes(cur)?cur:'ALL';
+    sel.innerHTML='<option value="ALL">All positions</option>'+SPORT.positions.map(p=>`<option>${p}</option>`).join('');
+    sel.value=SPORT.positions.includes(cur)?cur:'ALL';
   });
 }
 
@@ -5743,11 +6071,9 @@ function applyLeagueProfile(id){
     auctionBudget:profile.auctionBudget||200,rosterSize:profile.rosterSize||profile.rounds||16,irSlots:profile.irSlots||0,minBid:profile.minBid||1,
     scoringLabel:profile.scoringLabel||'TBD', draftDateLabel:profile.draftDateLabel||'TBD', keeperDeadlineLabel:profile.keeperDeadlineLabel||'TBD',
     sport:SPORT.id, platform:profile.platform||null, scoringMode:profile.scoringMode||'points', scoring:profile.scoring||null,
-    // A league may roster a different position set than the sport's default (a
-    // Fantrax hockey league uses F/D/G); positionMap folds the sport's positions
-    // into it. Absent both, activePositions() falls back to the sport pack.
-    positions:(profile.positions&&profile.positions.length)?profile.positions.slice():null,
-    positionMap:profile.positionMap||null,
+    rosterPositions:profile.rosterPositions||null, lineupPeriod:profile.lineupPeriod||(SPORT.dailyLineups?'daily':'weekly'),
+    marketAdpSource:profile.marketAdpSource||((profile.platform==='yahoo'&&SPORT.id==='nhl')?'yahoo':null),
+    defaultStreamConfidence:profile.defaultStreamConfidence||null, assumptions:profile.assumptions||[],
     categoryStats:profile.categoryStats||null, maxGamesPlayed:profile.maxGamesPlayed||null,
     maxAcquisitionsPerWeek:profile.maxAcquisitionsPerWeek||null, minGoalieGamesPerWeek:profile.minGoalieGamesPerWeek||null,
   };
@@ -5764,7 +6090,7 @@ function applyLeagueProfile(id){
   rebuildSlotOwner(); rebuildTendencies(); fillRosterOwnerSelect();
 
   assigned=new Set(); cutPlayers=new Set(); pickOwnerOverride={}; playerTrades={}; queued=new Set(); KEEPERS=[]; picks=[]; auctionPicks=[]; curPick=1;
-  STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE};
+  STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE,...(LEAGUE.defaultStreamConfidence||{})};
 
   const w=el('seedWarn');
   if(PLAYERS_CSV && PLAYERS_CSV.indexOf('__PLAYERS')!==0 && PLAYERS_CSV.trim().length>20){
@@ -5781,9 +6107,9 @@ function applyLeagueProfile(id){
   if(profile.superflexAdpOverrides){
     Object.entries(profile.superflexAdpOverrides).forEach(([name,adp])=>{const p=findPlayer(name);if(p){p.adp=+adp;p.ecr=+adp;}});
   }
-  applyLeaguePositionMap(profile);
   computePosRanks();
   computeMyRanks();
+  const projHead=el('projHeader');if(projHead)projHead.textContent=projectionLabel();
   fillPosFilters();
   MY_LOCKED.forEach(n=>assigned.add(ME_OWNER+'|'+n));
 
@@ -5797,6 +6123,8 @@ function applyLeagueProfile(id){
   }
   renderHeader(); renderSportBar(); fillLeagueSelect(); updateKeeperCopy();
   applyRadarVisibility(); RADAR_SCHED=null; renderRadar();
+  loadMarketAdp();
+  loadDraftScheduleContext();
   if(!roomOnly()){
     // Views the current viewer isn't allowed had their DOM sections removed
     // outright by applyAccessUI() — skip populating them too, both to avoid
@@ -5845,7 +6173,7 @@ async function fetchCloudLeagues(){
       // already in KV, so production kept running the generic defaults and priced
       // a backup quarterback at $9. Backfill each such field independently, and
       // only where the cloud copy has no value at all.
-      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','platform','platformEligibility','positions','positionMap','scoring','scoringMode','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'];
+      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','platform','platformEligibility','scoring','scoringMode','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek','rosterPositions','lineupPeriod','marketAdpSource','defaultStreamConfidence','assumptions'];
       const isEmpty=v=>v==null||v===''||(Array.isArray(v)&&!v.length)||(typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length);
       const toPatch=[];
       Object.values(LEAGUES_DEFAULT).forEach(def=>{
@@ -5863,8 +6191,12 @@ async function fetchCloudLeagues(){
         if(def.poolDataRevision && cur.poolDataRevision!==def.poolDataRevision){
           ['poolDataRevision','playersCsv'].forEach(f=>{ if(def[f]!==undefined)add[f]=def[f]; });
         }
+        if(def.referenceDataRevision && cur.referenceDataRevision!==def.referenceDataRevision){
+          ['referenceDataRevision','name','teams','rounds','rosterSize','irSlots','owners','meOwner','ownerSlot','officialDraft','platformEligibility','scoringLabel','scoringMode','scoring','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek','rosterPositions','lineupPeriod','marketAdpSource','defaultStreamConfidence','assumptions']
+            .forEach(f=>{if(def[f]!==undefined)add[f]=def[f];});
+        }
         if(def.liveDraftRevision && cur.liveDraftRevision!==def.liveDraftRevision){
-          ['liveDraftRevision','initialPickNames','name','owners','meOwner','ownerSlot','draftDateLabel','yahooLeagueId','yahooLeagueUrl']
+          ['liveDraftRevision','initialPickNames','name','teams','owners','meOwner','ownerSlot','draftDateLabel','yahooLeagueId','yahooLeagueUrl','officialDraft','draftSource','platform','platformEligibility']
             .forEach(f=>{if(def[f]!==undefined)add[f]=def[f];});
         }
         if(def.auctionDataRevision && cur.auctionDataRevision!==def.auctionDataRevision){

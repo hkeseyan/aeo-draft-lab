@@ -49,10 +49,15 @@ as a flag on our projection, not a bargain. Players FantasyPros doesn't rank sor
 behind those it does, ordered by our projection, so the deep pool the Add Radar needs
 doesn't interleave with real draft picks.
 
-**My Rank (hockey).** `My Rank` is the stable **intrinsic league-value** board.
-It deliberately excludes ADP. Market timing belongs in the separate live pick
-recommendation layer, so a player's underlying value cannot improve merely because
-the market is drafting him earlier.
+**My Rank (hockey).** The engine first computes a stable, intrinsic **raw model
+rank** from the active league settings. Because the current NHL component projection
+is still primarily a one-season baseline, the operational `My Rank` in points
+leagues temporarily uses platform ADP as a draft-safety anchor: the raw model may
+move ADP by at most 5 picks inside the top 25, 10 picks from 26-100, and 15 picks
+thereafter. The tooltip preserves the raw model rank and flags when a larger
+disagreement was capped. The projection column is labeled `2025 Proj` so its
+provenance is visible. Category formats do not use this points-market anchor; their
+My Rank remains category-native.
 
 For **points leagues**, projected component stats are rescored through the active
 league's scoring settings. The model then estimates replacement at each position
@@ -63,17 +68,34 @@ projection-confidence discount and a small option-value bonus for extra position
 confidence, and any dated health-watch adjustment.
 
 For **H2H Categories and Rotisserie**, the same architecture uses standardized
-category value before positional replacement. The 10-team Yahoo references use
-H2H skater G/A/+/-/PPP/SOG/HIT and goalie W/GAA/SV%/SHO; Roto changes HIT to BLK
-and records the 82-game position cap. Goalie GAA is currently approximated from
-projected GA/game because the embedded projection does not carry goalie TOI.
+category value before positional replacement. The Yahoo **Public Prize** references
+are 12-team: H2H uses skater G/A/+/-/PPP/SOG/HIT and goalie W/GAA/SV%/SHO; Roto
+changes HIT to BLK and records the 82-game position cap. Yahoo Public Free is a
+separate product and may use a different league size, so imported leagues trust
+Yahoo's reported team count rather than inheriting the Prize size. The board shows
+`Cat`, not a fantasy-points projection, and retains each category z-score. Intrinsic
+value rewards broad contribution, applies a modest penalty for a severe category
+hole, and then subtracts positional replacement. The live layer weights candidates
+toward the current roster's weak categories and treats goalie construction
+separately because four of the ten categories are goalie categories. Goalie GAA is
+currently approximated from projected GA/game because the embedded projection does
+not carry goalie TOI.
 
-**Live pick recommendations are separate from My Rank.** The existing NHL live
-shortlist starts from intrinsic rank, then adds draft-state inputs: ADP/VONA timing
+The built-in **Fantrax Classic weekly points** mock is 12 teams, 5 F / 3 D / 2 G,
+six reserves and no IR. It scores skaters G 4, A 3, +/- 1, PPP 1, SOG 0.5 and HIT
+0.25; goalies W 5, GA -1, SV 0.25 and SHO 5. My Rank uses generic-F replacement
+rather than Yahoo's C/LW/RW scarcity. Market timing comes from Fantrax's public NHL
+ADP feed, with an explicit Yahoo-ADP fallback warning. The live shortlist adds a
+bounded seven-day game-count modifier and low weekly-lineup streaming priors; the
+daily Add Radar is hidden. Exact live-league rules and league-scoped eligibility
+remain confirmation TODOs. See `docs/NHL_FORMAT_PROFILES.md`.
+
+**Live pick recommendations are separate from the rank calculation.** The existing
+NHL live shortlist starts from My Rank, then adds draft-state inputs: ADP/VONA timing
 to the next turn, tier cliffs, open starter urgency, progressive position
 saturation, health/IR context, upside catalysts, and user-adjustable streaming
 confidence for C/LW/RW/D/G. Streaming confidence can reduce the urgency of filling
-an open slot, but never changes intrinsic My Rank. There are no hard round rules.
+an open slot, but never changes My Rank. There are no hard round rules.
 
 **Platform-specific position eligibility.** Players can carry independent Yahoo,
 Fantrax, and fallback eligibility sets. `eligiblePositions()` uses the active
@@ -83,11 +105,18 @@ retain league `eligiblePos` values. Display, filters, roster fitting, scarcity, 
 recommendations all use the same eligibility. The old green `F` pip is removed
 because the full position string is already shown.
 
-**Yahoo references and imported leagues.** Generic Yahoo public hockey references
-remain **10-team** for H2H Points, H2H Categories, and Rotisserie. The completed
-`public-points-league-1` / Yahoo 135526 profile is separately 12-team because that
-specific prize league actually drafted with 12 teams; it must not be used as the
-generic public reference. Custom/bangers formats are imported rather than guessed.
+**Yahoo references and imported leagues.** Yahoo's current Public Prize Hockey
+settings require **12 managers**, so the H2H Points, H2H Categories, and Rotisserie
+Prize reference profiles are all 12-team. The completed
+`public-points-league-1` / **Yahoo Prize H2H-Pts 135526** is the first official
+drafted NHL league and stores all 192 picks, the exact 12 team names/slots, and
+Yahoo-observed multi-position eligibility supplied with the draft results. Public
+Free remains distinct; the Yahoo importer accepts either 10 or 12 teams when Yahoo
+reports those settings instead of forcing one size. `public-points-league-2` /
+**Yahoo Prize H2H-Pts 141304** is the second official points league, inherits the
+same tested reference settings, places the user in slot 4, and starts with a blank
+192-pick board plus placeholder opponents until live team names/results arrive.
+Custom/bangers formats are imported rather than guessed.
 
 ## App shape
 
@@ -125,10 +154,11 @@ from C to LW when a C-only player is drafted. Roster rows show the same full
 active-platform position eligibility, portrait, and team logo as the draft list.
 
 **Exposure**: Best Available includes `Exp` such as `2/4`: the numerator is how many
-of the user's other saved leagues in the same sport roster that player; the
-denominator is how many prior same-sport leagues currently have a saved drafted
-roster. The active draft is excluded. Exposure is context only and does not silently
-alter My Rank.
+of the user's other **official drafted** leagues in the same sport roster that
+player; the denominator is the number of prior same-sport leagues explicitly marked
+"Official drafted league." The active draft, reference profiles, and practice mocks
+are excluded. Yahoo Prize H2H-Pts 135526 is currently the first and only official
+NHL league. Exposure is context only and does not silently alter My Rank.
 
 **Queue**: check "Q" next to any player in Best Available to add them to
 "My Queue" — a shortlist of upcoming targets, shown in ADP order with a
@@ -177,18 +207,23 @@ Hockey position colours: **C green, LW blue, RW purple, D yellow, G red**, plus
 **F blue** — F shares LW's blue because a league uses one or the other, never both.
 
 **Positions are a league question, not only a sport one.** Platforms differ: a Fantrax
-hockey league commonly rosters **F/D/G** and never splits forwards into C/LW/RW. A
-league profile may therefore declare its own `positions` list plus a `positionMap`
-folding the sport's positions into it (`{C:'F',LW:'F',RW:'F',W:'F'}`), and
-`activePositions()` resolves league-first, sport-fallback. Every downstream consumer
-asks it — roster counts, starter slots, replacement levels, the position filter.
+Classic hockey league rosters **F/D/G** and never splits forwards into C/LW/RW. A
+league profile declares `rosterPositions`, and `rosterPositionOrder()` resolves
+league-first with the sport pack as fallback. `rosterEligiblePositions()` then
+*projects* a player's underlying eligibility onto those slots — a C/LW becomes F in
+such a league — without rewriting the pool, so switching leagues never corrupts it.
+Roster counts, starter slots and replacement levels all work from that projection.
 
-That fold is **derivable, not data to fetch**: a league that rosters F has no
-centre/wing concept, so every forward becomes F — which is also precisely why such a
-league has no multi-eligibility to look up. Nobody is both F and D, and nothing
-intersects G. The Fantrax importer derives both fields from the league's own
-`rosterInfo.positionConstraints`, and leaves them null when the league does split
-forwards or reports no constraints, rather than inventing a position list.
+The board **displays the positions as the active league rosters them**: F in an F/D/G
+league, C/LW elsewhere. Showing "C/LW" in a league that cannot honour the distinction
+would imply a lineup choice that does not exist there. The underlying per-platform
+eligibility is untouched, so switching back restores C/LW immediately.
+
+That projection is also why such a league has no multi-eligibility to look up: with
+every forward collapsing to F, nobody is both F and D and nothing intersects G. The
+Fantrax importer derives `rosterPositions` from the league's own
+`rosterInfo.positionConstraints` and leaves it null when no constraints are reported,
+rather than inventing a position list.
 
 **Eligibility is per platform, because it differs per platform.** Fantrax may list a
 forward `C/LW` where Yahoo lists the same player `C/LW/RW`, and the wrong one is
@@ -238,6 +273,12 @@ League-specific in-season management for guillotine waivers. The page stores the
 The deterministic engine accounts for optimal-lineup improvement, the current player displaced, immediate weekly projection, rest-of-season/endgame tier, role certainty, upcoming-schedule grade, candidate injury/bye availability, teammate-driven opportunity, position scarcity, league size, season phase, and remaining user budget. Market priors are versioned (`off-with-their-heads-2025-plus-2026-09-16`) and distinguish the 18-team league from the 12-team league. Projected winning bids currently use opening-budget shares rather than pretending competitor remaining balances are known; that limitation is stated in every report and is the next planned calibration input.
 
 Inputs live at `GET/PUT /api/inseason/state`; reports are created/listed/read through `/api/inseason/reports` and retain the latest 30 index entries per user/league. Source configuration and manual refresh use `/api/data-sources` and `/api/data-sources/sync`; the normalized read model is `GET /api/league-data`. Provider credentials/keys are stored in separate KV records and are not echoed back to the client. Cloudflare cron refreshes configured league sources every four hours, and also runs at both UTC hours that may correspond to Tuesday 1:00am Pacific. The FAAB path performs a timezone and idempotency check so exactly one report runs across PDT/PST. The UI generates an 18-week recurring `.ics` reminder. `/api/inseason/email` and scheduled delivery use Resend only when `RESEND_API_KEY` and `FAAB_REPORT_FROM` are configured.
+
+### Waiver ticket workflow
+
+The Waiver Lab turns a report recommendation into a user-owned, per-league ticket with the following lifecycle: `draft → approved → submitted → verified`, with `not_won` and `cancelled` terminal outcomes. Tickets are created/listed at `GET/POST /api/inseason/tickets` and read/updated at `GET/PUT /api/inseason/tickets/:id`; the latest 100 are indexed per user and league in KV.
+
+Each ticket retains the candidate, optional suggested drop, bid levels, waiver method, deadline, team direction, draft-order rule, trigger, rationale, originating report, and snapshot timestamp. This makes an in-session recommendation reviewable after the fact rather than turning a one-off chat answer into an untraceable action. The app never submits a transaction to Yahoo, Sleeper, or FantasyPros: the manager performs the actual claim manually, refreshes the host/FantasyPros snapshot, then records `verified` only after that readback. For non-guillotine leagues, team direction and waiver method intentionally default to `unspecified`/`unknown` so dynasty strategy and platform rules are entered explicitly rather than inferred.
 
 The current FantasyPros direct feed covers the user's roster/matchup and decision context but not the complete free-agent pool. Therefore the normalized snapshot tracks coverage per field (`roster`, `available`, `projections`) and never presents a partial provider as complete. Yahoo or the last saved/manual pool remains the availability authority until a supported complete FantasyPros availability feed is added.
 

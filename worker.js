@@ -29,9 +29,13 @@ var commishHistoryKey = /* @__PURE__ */ __name((lg) => `commishHistory:${lg}`, "
 var inSeasonStateKey = /* @__PURE__ */ __name((lg) => `inseason:${lg}`, "inSeasonStateKey");
 var inSeasonReportsKey = /* @__PURE__ */ __name((lg) => `inseasonReports:${lg}`, "inSeasonReportsKey");
 var inSeasonReportKey = /* @__PURE__ */ __name((lg, id) => `inseasonReport:${lg}:${id}`, "inSeasonReportKey");
+var inSeasonTicketsKey = /* @__PURE__ */ __name((lg) => `inseasonTickets:${lg}`, "inSeasonTicketsKey");
+var inSeasonTicketKey = /* @__PURE__ */ __name((lg, id) => `inseasonTicket:${lg}:${id}`, "inSeasonTicketKey");
 var leagueSourceConfigKey = /* @__PURE__ */ __name((lg) => `leagueSource:${lg}`, "leagueSourceConfigKey");
 var leagueSnapshotKey = /* @__PURE__ */ __name((lg) => `leagueSnapshot:${lg}`, "leagueSnapshotKey");
 var FAAB_CALIBRATION_VERSION = "off-with-their-heads-2025-plus-2026-09-16";
+var WAIVER_TICKET_STATUSES = /* @__PURE__ */ new Set(["draft", "approved", "submitted", "verified", "not_won", "cancelled"]);
+var WAIVER_TICKET_ACTIONS = /* @__PURE__ */ new Set(["add", "drop", "hold", "wait"]);
 function slugify(s) {
   return String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-+|-+$)/g, "").slice(0, 40) || "league";
 }
@@ -480,26 +484,36 @@ function profileSlotForOverall(profile, ov) {
 }
 __name(profileSlotForOverall, "profileSlotForOverall");
 function savedRosterNames(profile, setup) {
-  if (!setup) return [];
-  if (Array.isArray(setup.myRosterNames) && setup.myRosterNames.length) {
+  if (setup && Array.isArray(setup.myRosterNames) && setup.myRosterNames.length) {
     return [...new Set(setup.myRosterNames.map(String).map((x) => x.trim()).filter(Boolean))];
   }
-  const idToName = clientPlayerIdNameMap(profile);
   const mySlot = Number(profile && profile.mySlot);
   if (!mySlot) return [];
   const names = [];
-  const overrides = setup.pickOwnerOverride || {};
-  (setup.picks || []).forEach((pk) => {
-    const ov = Number(pk.overall);
-    const owner = Number(overrides[ov] || profileSlotForOverall(profile, ov));
-    const name = idToName.get(Number(pk.playerId));
-    if (owner === mySlot && name) names.push(name);
-  });
-  (setup.auctionPicks || []).forEach((pk) => {
-    const name = idToName.get(Number(pk.playerId));
-    if (Number(pk.owner) === mySlot && name) names.push(name);
-  });
-  return [...new Set(names)];
+  if (setup) {
+    const idToName = clientPlayerIdNameMap(profile);
+    const overrides = setup.pickOwnerOverride || {};
+    (setup.picks || []).forEach((pk) => {
+      const ov = Number(pk.overall);
+      const owner = Number(overrides[ov] || profileSlotForOverall(profile, ov));
+      const name = idToName.get(Number(pk.playerId));
+      if (owner === mySlot && name) names.push(name);
+    });
+    (setup.auctionPicks || []).forEach((pk) => {
+      const name = idToName.get(Number(pk.playerId));
+      if (Number(pk.owner) === mySlot && name) names.push(name);
+    });
+  }
+  // Completed built-in/imported official drafts can carry their canonical board
+  // directly on the profile. Use it as a durable fallback so exposure does not
+  // disappear merely because a browser-specific setup record was never saved.
+  if (!names.length && profile && profile.officialDraft === true && Array.isArray(profile.initialPickNames)) {
+    profile.initialPickNames.forEach((name, idx) => {
+      const ov = idx + 1;
+      if (profileSlotForOverall(profile, ov) === mySlot && name) names.push(String(name).trim());
+    });
+  }
+  return [...new Set(names.filter(Boolean))];
 }
 __name(savedRosterNames, "savedRosterNames");
 function fantasyProsLeagueKey(value) {
@@ -646,6 +660,85 @@ async function saveInSeasonReport(kv, lg, report, me = null) {
   return report;
 }
 __name(saveInSeasonReport, "saveInSeasonReport");
+function waiverTicketSummary(ticket) {
+  return {
+    id: ticket.id,
+    createdAt: ticket.createdAt,
+    updatedAt: ticket.updatedAt,
+    status: ticket.status,
+    action: ticket.action,
+    player: ticket.player,
+    pos: ticket.pos,
+    team: ticket.team,
+    suggestedDrop: ticket.suggestedDrop,
+    recommendedBid: ticket.recommendedBid,
+    projectedWinningBid: ticket.projectedWinningBid,
+    stretchBid: ticket.stretchBid,
+    waiverMethod: ticket.waiverMethod,
+    deadline: ticket.deadline,
+    teamDirection: ticket.teamDirection,
+    draftOrderRule: ticket.draftOrderRule,
+    trigger: ticket.trigger,
+    rationale: ticket.rationale,
+    reportId: ticket.reportId,
+    snapshotAt: ticket.snapshotAt,
+    submittedAt: ticket.submittedAt,
+    verifiedAt: ticket.verifiedAt,
+    closedAt: ticket.closedAt
+  };
+}
+__name(waiverTicketSummary, "waiverTicketSummary");
+function ticketText(value, max = 500) {
+  return String(value == null ? "" : value).trim().slice(0, max);
+}
+__name(ticketText, "ticketText");
+function normalizeWaiverTicket(body = {}, previous = null) {
+  const now = Date.now();
+  const requestedStatus = String(body.status || previous && previous.status || "draft").toLowerCase();
+  const requestedAction = String(body.action || previous && previous.action || "add").toLowerCase();
+  const status = WAIVER_TICKET_STATUSES.has(requestedStatus) ? requestedStatus : "draft";
+  const action = WAIVER_TICKET_ACTIONS.has(requestedAction) ? requestedAction : "add";
+  const ticket = {
+    ...(previous || {}),
+    id: previous && previous.id || `${now.toString(36)}-${crypto.randomUUID().slice(0, 8)}`,
+    createdAt: previous && previous.createdAt || now,
+    updatedAt: now,
+    status,
+    action,
+    player: ticketText(body.player == null ? previous && previous.player : body.player, 120),
+    pos: ticketText(body.pos == null ? previous && previous.pos : body.pos, 24).toUpperCase(),
+    team: ticketText(body.team == null ? previous && previous.team : body.team, 24).toUpperCase(),
+    suggestedDrop: ticketText(body.suggestedDrop == null ? previous && previous.suggestedDrop : body.suggestedDrop, 120),
+    recommendedBid: Math.max(0, n(body.recommendedBid == null ? previous && previous.recommendedBid : body.recommendedBid, 0)),
+    projectedWinningBid: Math.max(0, n(body.projectedWinningBid == null ? previous && previous.projectedWinningBid : body.projectedWinningBid, 0)),
+    stretchBid: Math.max(0, n(body.stretchBid == null ? previous && previous.stretchBid : body.stretchBid, 0)),
+    waiverMethod: ticketText(body.waiverMethod == null ? previous && previous.waiverMethod : body.waiverMethod, 40) || "unknown",
+    deadline: ticketText(body.deadline == null ? previous && previous.deadline : body.deadline, 80),
+    teamDirection: ticketText(body.teamDirection == null ? previous && previous.teamDirection : body.teamDirection, 40) || "unspecified",
+    draftOrderRule: ticketText(body.draftOrderRule == null ? previous && previous.draftOrderRule : body.draftOrderRule, 160),
+    trigger: ticketText(body.trigger == null ? previous && previous.trigger : body.trigger, 500),
+    rationale: ticketText(body.rationale == null ? previous && previous.rationale : body.rationale, 2e3),
+    executionNote: ticketText(body.executionNote == null ? previous && previous.executionNote : body.executionNote, 1e3),
+    reportId: ticketText(body.reportId == null ? previous && previous.reportId : body.reportId, 80),
+    snapshotAt: Math.max(0, n(body.snapshotAt == null ? previous && previous.snapshotAt : body.snapshotAt, 0)) || null
+  };
+  if (!ticket.player && action !== "hold" && action !== "wait") throw new Error("A player is required for an add or drop ticket.");
+  if (status === "submitted" && !ticket.submittedAt) ticket.submittedAt = now;
+  if (status === "verified" && !ticket.verifiedAt) ticket.verifiedAt = now;
+  if ((status === "not_won" || status === "cancelled") && !ticket.closedAt) ticket.closedAt = now;
+  return ticket;
+}
+__name(normalizeWaiverTicket, "normalizeWaiverTicket");
+async function saveWaiverTicket(kv, lg, ticket, me) {
+  const ticketKey = scoped(inSeasonTicketKey(lg, ticket.id), me);
+  const ticketsKey = scoped(inSeasonTicketsKey(lg), me);
+  await kv.put(ticketKey, JSON.stringify(ticket));
+  const current = await kv.get(ticketsKey, { type: "json" }) || [];
+  const index = [waiverTicketSummary(ticket), ...current.filter((x) => x.id !== ticket.id)].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 100);
+  await kv.put(ticketsKey, JSON.stringify(index));
+  return ticket;
+}
+__name(saveWaiverTicket, "saveWaiverTicket");
 function reportEmailHtml(report) {
   const h = /* @__PURE__ */ __name((v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]), "h");
   const rows = report.recommendations.slice(0, 20).map((p) => `<tr><td>${h(p.name)}</td><td>${h(p.pos)}</td><td>$${p.recommendedBid}</td><td>$${p.projectedWinningBid}</td><td>$${p.stretchBid}</td><td>${h(p.reasons.join("; "))}</td></tr>`).join("");
@@ -1084,6 +1177,28 @@ var worker_default = {
         }
         return J({ error: "method" }, 405);
       }
+      if (path === "/api/nhl/fantrax-adp") {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const cacheKey = "nhl:fantrax-adp:v1";
+        const cached = await kv.get(cacheKey, { type: "json" });
+        if (cached) return J(cached);
+        try {
+          const r = await fetch("https://www.fantrax.com/fxea/general/getAdp?sport=NHL");
+          if (!r.ok) return J({ error: "Fantrax ADP returned " + r.status }, 502);
+          const raw = await r.json();
+          if (!Array.isArray(raw)) return J({ error: "Fantrax ADP response was not a list" }, 502);
+          const out = raw.map((row) => ({
+            name: row && row.name || "",
+            adp: Number(row && (row.ADP != null ? row.ADP : row.adp)),
+            pos: row && row.pos || "",
+            id: row && (row.id || row.fantraxId) || ""
+          })).filter((row) => row.name && Number.isFinite(row.adp) && row.adp > 0);
+          await kv.put(cacheKey, JSON.stringify(out), { expirationTtl: 6 * 60 * 60 });
+          return J(out);
+        } catch (e) {
+          return J({ error: "Fantrax ADP fetch failed: " + e.message }, 502);
+        }
+      }
       if (path === "/api/nhl/schedule") {
         if (request.method !== "GET") return J({ error: "method" }, 405);
         const start = url.searchParams.get("start") || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
@@ -1193,6 +1308,9 @@ var worker_default = {
         const leagues = [];
         for (const profile of profiles) {
           if (!profile || profile.id === lg || String(profile.sport || "nfl") !== sport) continue;
+          // Exposure is portfolio ownership, not mock-draft repetition. Only
+          // leagues explicitly marked as official drafted teams contribute.
+          if (profile.officialDraft !== true) continue;
           const setup = await kv.get(scoped(setupKey(profile.id), me), { type: "json" });
           const names = savedRosterNames(profile, setup);
           if (!names.length) continue;
@@ -1289,11 +1407,11 @@ var worker_default = {
           if (draftType) notes.push(`Fantrax reports a ${draftType} draft.`);
           if (unresolved) notes.push(`${unresolved} roster entries kept their Fantrax player id because the player dictionary did not name them.`);
           notes.push("Fantrax roster data carries no drafted round or keeper flag, so players are marked FA/NONE.");
-          // A Fantrax league declares the slots it actually rosters. Hockey leagues
-          // there commonly use one combined forward slot (F) rather than C/LW/RW, and
-          // such a league has no centre/wing concept at all — every forward folds into
-          // F. Derive that from the league's own constraints instead of guessing, and
-          // note that it is also why no player is multi-eligible in that league.
+          // A Fantrax league declares the slots it actually rosters, and hockey leagues
+          // there commonly use one combined forward slot (F) rather than C/LW/RW. Read
+          // that from the league's own constraints rather than assuming either shape —
+          // the built-in Fantrax profile hardcodes F/D/G, but a real league may differ.
+          // rosterPositions is the field the app already resolves positions through.
           const constraintCodes = (() => {
             const pc = info && info.rosterInfo && info.rosterInfo.positionConstraints;
             if (!pc) return [];
@@ -1301,11 +1419,12 @@ var worker_default = {
             const known = ["C", "LW", "RW", "F", "W", "D", "G"];
             return [...new Set(raw.map((x) => String(x || "").toUpperCase().trim()))].filter((x) => known.includes(x));
           })();
-          let positions = null, positionMap = null;
+          let rosterPositions = null;
           if (constraintCodes.includes("F") && !constraintCodes.includes("C")) {
-            positions = ["F", "D", "G"].filter((x) => constraintCodes.includes(x));
-            positionMap = { C: "F", LW: "F", RW: "F", W: "F" };
-            notes.push("This league rosters one combined forward slot (F), so C/LW/RW fold into F and nobody is multi-eligible.");
+            rosterPositions = ["F", "D", "G"].filter((x) => constraintCodes.includes(x));
+            notes.push("This league rosters one combined forward slot (F), so forwards are treated as F and nobody is multi-eligible.");
+          } else if (constraintCodes.length) {
+            rosterPositions = ["C", "LW", "RW", "D", "G"].filter((x) => constraintCodes.includes(x));
           }
           return J({
             name: info && info.leagueName || "Imported Fantrax League",
@@ -1318,8 +1437,7 @@ var worker_default = {
             sport: "nhl",
             platform: "fantrax",
             platformEligibility: { fantrax: platformEligibility },
-            positions,
-            positionMap,
+            rosterPositions,
             _source: "fantrax",
             _fantraxLeagueId: fxId,
             _note: notes.join(" ")
@@ -1554,6 +1672,48 @@ var worker_default = {
         const id = decodeURIComponent(path.split("/").pop());
         const report = await kv.get(scoped(inSeasonReportKey(lg, id), me), { type: "json" });
         return report ? J(report) : J({ error: "report not found" }, 404);
+      }
+      if (path === "/api/inseason/tickets") {
+        const ticketsKey = scoped(inSeasonTicketsKey(lg), me);
+        if (request.method === "GET") return J(await kv.get(ticketsKey, { type: "json" }) || []);
+        if (request.method === "POST") {
+          let b;
+          try {
+            b = await request.json();
+          } catch {
+            return J({ error: "bad json" }, 400);
+          }
+          try {
+            return J(await saveWaiverTicket(kv, lg, normalizeWaiverTicket(b), me), 201);
+          } catch (e) {
+            return J({ error: e.message }, 400);
+          }
+        }
+        return J({ error: "method" }, 405);
+      }
+      if (/^\/api\/inseason\/tickets\/[^/]+$/.test(path)) {
+        const id = decodeURIComponent(path.split("/").pop());
+        const ticketKey = scoped(inSeasonTicketKey(lg, id), me);
+        if (request.method === "GET") {
+          const ticket = await kv.get(ticketKey, { type: "json" });
+          return ticket ? J(ticket) : J({ error: "ticket not found" }, 404);
+        }
+        if (request.method === "PUT") {
+          let b;
+          try {
+            b = await request.json();
+          } catch {
+            return J({ error: "bad json" }, 400);
+          }
+          const current = await kv.get(ticketKey, { type: "json" });
+          if (!current) return J({ error: "ticket not found" }, 404);
+          try {
+            return J(await saveWaiverTicket(kv, lg, normalizeWaiverTicket(b, current), me));
+          } catch (e) {
+            return J({ error: e.message }, 400);
+          }
+        }
+        return J({ error: "method" }, 405);
       }
       if (path === "/api/inseason/email") {
         if (request.method !== "POST") return J({ error: "method" }, 405);

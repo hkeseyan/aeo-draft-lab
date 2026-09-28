@@ -25,8 +25,9 @@ jobs:
           for attempt in $(seq 1 24); do
             html="$(curl -fsS --max-time 15 https://aeo-draft-lab.hkeseyan.workers.dev/ || true)"
             if printf '%s' "$html" | grep -q 'Exposure across your other drafted leagues in this sport' \
+              && printf '%s' "$html" | grep -q "Yahoo Public Prize NHL — H2H Points (12-team reference)" \
               && printf '%s' "$html" | grep -q "yahoo-nhl-public-categories" \
-              && ! printf '%s' "$html" | grep -q "yahoo-nhl-prize-categories" \
+              && printf '%s' "$html" | grep -q "officialDraft:true" \
               && ! printf '%s' "$html" | grep -q '\.fchip'; then
               echo "Production Worker matches the final NHL release markers."
               exit 0

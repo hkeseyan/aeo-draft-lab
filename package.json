@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/boot-smoke.mjs && node tests/faab-engine.test.mjs && node tests/source-sync.test.mjs && node tests/fantrax-import.test.mjs && node tests/yahoo-oauth.test.mjs && node tests/validate-fantastic-data.mjs"
+    "test": "node tests/boot-smoke.mjs && node tests/faab-engine.test.mjs && node tests/source-sync.test.mjs && node tests/fantrax-import.test.mjs && node tests/yahoo-oauth.test.mjs && node tests/exposure.test.mjs && node tests/validate-fantastic-data.mjs"
   },
   "devDependencies": {
     "jsdom": "^27.0.0"

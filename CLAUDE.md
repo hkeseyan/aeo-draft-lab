@@ -159,13 +159,14 @@ A **Fantrax import** (`GET /api/import/fantrax/:leagueId`) is the recommended
 integration path over Yahoo: league-ID keyed, no OAuth, no approval queue. Note
 Fantrax returns HTTP 200 with an `error` body on a bad id.
 
-**A Fantrax NHL league may roster F/D/G rather than C/LW/RW** (the user's confirmed
-2026-27 league does). Positions are therefore resolved per league via
-`activePositions()` — a profile's own `positions` list wins over the sport pack — and
-`positionMap` folds forwards into F at pool load. That fold is derivable, which is
-also why such a league has no multi-eligibility: nobody is both F and D. The Fantrax
-importer derives both from `rosterInfo.positionConstraints` and stays null when the
-league splits forwards.
+**A Fantrax NHL league rosters F/D/G rather than C/LW/RW** (the user's confirmed
+2026-27 league does). Positions resolve per league through `rosterPositionOrder()`
+(a profile's `rosterPositions` beats the sport pack), and `rosterEligiblePositions()`
+projects a player's eligibility onto those slots rather than rewriting the pool — so
+a C/LW shows and counts as F there, and switching leagues restores C/LW. `posCell()`
+renders that projection, so the board shows what the league can actually honour. The
+Fantrax importer derives `rosterPositions` from
+`rosterInfo.positionConstraints`, staying null when no constraints are reported.
 
 **Pool data integrity — three defects found and fixed 2026-09-28, worth not
 reintroducing.** The NHL stats feed lists a traded player once per team, and the
@@ -189,8 +190,12 @@ are genuinely multi-eligible there. Per-league eligibility would have to come fr
 right market anchor for a Fantrax league (we only have Yahoo ADP today).
 
 **My Rank (hockey)** is the roster-construction layer — see `SPECS.md` → "My Rank
-(hockey)". It blends market ADP with our projection *weighted by sample confidence*
-(`gp`), then applies proportional positional adjustments: centre-only marked down
+(hockey)". It first computes a raw league-specific rank from projected value and
+replacement, then applies temporary draft-safety guardrails in points leagues:
+platform ADP plus or minus 5 picks in the top 25, 10 through pick 100, and 15 later.
+The tooltip retains the raw one-season model rank and identifies capped disagreement;
+the projection column says `2025 Proj`. Category ranks remain category-native and
+unanchored. The underlying model applies proportional positional adjustments: centre-only marked down
 (streamable, only two start), dual/triple forward eligibility marked up, the elite
 tier exempt from both, a premium bump for volume-starter goalies and a markdown past
 the league's startable goalie count, a small bump for elite D. Weights are named
@@ -202,10 +207,16 @@ change, or line/PP context, so it overrates declining veterans and underrates
 prospects and role-changers — a large `adp` vs `proj` gap on an older player is a
 flag on our projection, not a bargain. It also has **no mean reversion**: a star
 coming off a bad year (Hellebuyck 2025-26: .895, 0 shutouts) projects on that year
-alone, while the market correctly bets on a bounce-back. Category
-(roto/H2H-cat) scoring is not built — Yahoo's default public league is points, so it
-wasn't needed for the first leagues; it lands in the NBA month, where 9-cat makes it
-unavoidable.
+alone, while the market correctly bets on a bounce-back.
+
+**NHL format profiles (2026-09-27):** the three target mocks are Yahoo Public
+Prize daily H2H Points, Fantrax Classic weekly H2H Points, and Yahoo Public Prize
+Rotisserie; the H2H Categories fallback remains available. Fantrax uses 5F/3D/2G,
+Fantrax scoring, public Fantrax ADP, weekly game-count context and low streaming
+priors. Categories keep per-stat z-scores, category breadth/floor, positional
+replacement, roster-balance fit and goalie-category construction; they do not show
+or optimize Yahoo fantasy points. Exact assumptions and live-league TODOs are in
+`docs/NHL_FORMAT_PROFILES.md`.
 
 Testing, before any push: `node tests/boot-smoke.mjs` (boots the whole page in
 jsdom, 45 assertions across both sports; needs `npm install --no-save jsdom`),

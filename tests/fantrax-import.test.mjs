@@ -9,12 +9,27 @@ const env = { MOCKS: kv };
 function stubFantrax(responses) {
   globalThis.fetch = async (url) => {
     const u = String(url);
-    const key = u.includes('getLeagueInfo') ? 'info' : u.includes('getTeamRosters') ? 'rosters' : u.includes('getPlayerIds') ? 'ids' : null;
+    const key = u.includes('getLeagueInfo') ? 'info' : u.includes('getTeamRosters') ? 'rosters' : u.includes('getPlayerIds') ? 'ids' : u.includes('getAdp') ? 'adp' : null;
     assert.ok(key, 'unexpected outbound request: ' + u);
     return { ok: true, status: 200, json: async () => responses[key] || {} };
   };
 }
 const call = (id) => worker.fetch(new Request(`https://x.test/api/import/fantrax/${id}`), env, {});
+const callAdp = () => worker.fetch(new Request('https://x.test/api/nhl/fantrax-adp'), env, {});
+
+// ---- public NHL market ADP ------------------------------------------------
+stubFantrax({ adp: [
+  { name: 'MacKinnon, Nathan', pos: 'C', id: '02f9l', ADP: 1.55 },
+  { name: 'McDavid, Connor', pos: 'C', id: '02un4', ADP: 1.64 },
+  { name: 'Bad Row', pos: 'D', id: 'bad', ADP: null },
+] });
+let adpRes = await callAdp();
+let adpBody = await adpRes.json();
+assert.equal(adpRes.status, 200);
+assert.deepEqual(adpBody, [
+  { name: 'MacKinnon, Nathan', adp: 1.55, pos: 'C', id: '02f9l' },
+  { name: 'McDavid, Connor', adp: 1.64, pos: 'C', id: '02un4' },
+]);
 
 // ---- happy path -----------------------------------------------------------
 stubFantrax({
@@ -107,8 +122,7 @@ stubFantrax({
   rosters: { rosters: { t1: { teamName: 'T', rosterItems: [{ id: 'p1' }] } } },
 });
 body = await (await call('fdg')).json();
-assert.deepEqual(body.positions, ['F', 'D', 'G'], 'F/D/G leagues report their own position list');
-assert.deepEqual(body.positionMap, { C: 'F', LW: 'F', RW: 'F', W: 'F' }, 'forwards fold into F');
+assert.deepEqual(body.rosterPositions, ['F', 'D', 'G'], 'F/D/G leagues report their own roster positions');
 assert.match(body._note, /combined forward slot/);
 
 // ---- a league that does split the forwards keeps the sport's positions ----
@@ -121,8 +135,7 @@ stubFantrax({
   rosters: { rosters: { t1: { teamName: 'T', rosterItems: [] } } },
 });
 body = await (await call('split')).json();
-assert.equal(body.positions, null, 'a C/LW/RW league must not be folded');
-assert.equal(body.positionMap, null);
+assert.deepEqual(body.rosterPositions, ['C','LW','RW','D','G'], 'a league that splits forwards keeps C/LW/RW');
 
 // ---- no constraints reported at all --------------------------------------
 stubFantrax({
@@ -130,6 +143,6 @@ stubFantrax({
   rosters: { rosters: { t1: { teamName: 'T', rosterItems: [] } } },
 });
 body = await (await call('bare')).json();
-assert.equal(body.positions, null, 'missing constraints must not invent a position list');
+assert.equal(body.rosterPositions, null, 'missing constraints must not invent a position list');
 
 console.log('Fantrax import: all checks passed.');
