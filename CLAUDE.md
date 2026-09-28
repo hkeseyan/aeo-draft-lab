@@ -169,8 +169,12 @@ are genuinely multi-eligible there. Per-league eligibility would have to come fr
 right market anchor for a Fantrax league (we only have Yahoo ADP today).
 
 **My Rank (hockey)** is the roster-construction layer — see `SPECS.md` → "My Rank
-(hockey)". It blends market ADP with our projection *weighted by sample confidence*
-(`gp`), then applies proportional positional adjustments: centre-only marked down
+(hockey)". It first computes a raw league-specific rank from projected value and
+replacement, then applies temporary draft-safety guardrails in points leagues:
+platform ADP plus or minus 5 picks in the top 25, 10 through pick 100, and 15 later.
+The tooltip retains the raw one-season model rank and identifies capped disagreement;
+the projection column says `2025 Proj`. Category ranks remain category-native and
+unanchored. The underlying model applies proportional positional adjustments: centre-only marked down
 (streamable, only two start), dual/triple forward eligibility marked up, the elite
 tier exempt from both, a premium bump for volume-starter goalies and a markdown past
 the league's startable goalie count, a small bump for elite D. Weights are named

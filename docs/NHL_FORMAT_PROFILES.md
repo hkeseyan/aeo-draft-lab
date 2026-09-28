@@ -9,9 +9,11 @@ existing Yahoo H2H Categories fallback profile.
 - Skaters: G 6, A 4, +/- 2, PPP 2, SOG 0.9, BLK 1.
 - Goalies: W 5, GA -3, SV 0.6, SHO 5.
 - Four acquisitions per week and a three-goalie-game minimum.
-- My Rank rescales the component-stat projection through these values and uses
-  position-specific replacement value. The existing Yahoo daily recommendation
-  behavior remains intact.
+- The raw model rank rescales the component-stat projection through these values
+  and uses position-specific replacement value. The displayed My Rank is temporarily
+  anchored to Yahoo ADP with maximum moves of 5 picks in the top 25, 10 through
+  pick 100 and 15 thereafter. Its tooltip retains the raw rank and marks capped
+  disagreements. The projection column is labeled `2025 Proj`.
 - Joined leagues: 135526 (completed canonical board) and 141304 (slot 4, blank
   board pending the draft and actual opponent names).
 
@@ -20,9 +22,11 @@ existing Yahoo H2H Categories fallback profile.
 - 12 teams; 5 generic F, 3 D, 2 G; six reserves and no IR.
 - Skaters: G 4, A 3, +/- 1, PPP 1, SOG 0.5, HIT 0.25.
 - Goalies: W 5, GA -1, SV 0.25, SHO 5. Goalie assists inherit A 3.
-- My Rank uses Fantrax scoring and replacement levels for the actual F/D/G
+- The raw model rank uses Fantrax scoring and replacement levels for the actual F/D/G
   roster buckets. C/LW/RW remain visible as source eligibility but do not create
   false scarcity or flexibility inside a generic-F league.
+- Displayed My Rank uses the same draft-safety caps against live Fantrax ADP, with
+  the embedded Yahoo ADP only as a clearly labeled fallback.
 - Mock opponents and draft timing use the public Fantrax NHL ADP feed. If it is
   unavailable, the board says that it has fallen back to the embedded Yahoo ADP.
 - The live shortlist loads a seven-day NHL schedule context. Game count is a
