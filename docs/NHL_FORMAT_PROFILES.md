@@ -12,6 +12,8 @@ existing Yahoo H2H Categories fallback profile.
 - My Rank rescales the component-stat projection through these values and uses
   position-specific replacement value. The existing Yahoo daily recommendation
   behavior remains intact.
+- Joined leagues: 135526 (completed canonical board) and 141304 (slot 4, blank
+  board pending the draft and actual opponent names).
 
 ## Fantrax Classic H2H Points — weekly mock
 

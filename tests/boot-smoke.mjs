@@ -138,7 +138,7 @@ ok &= check('scoring values carried onto LEAGUE', 'LEAGUE.scoring.sog', 0.9);
 ok &= check('weekly acquisition cap carried', 'LEAGUE.maxAcquisitionsPerWeek', 4);
 ok &= check('sport bar shows both sports', () => w.document.getElementById('sportBar').children.length, 2);
 ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','),
-  'yahoo-nhl-public,fantrax-nhl-weekly-points,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1');
+  'yahoo-nhl-public,fantrax-nhl-weekly-points,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1,public-points-league-2');
 ok &= check('position filter is hockey', () => [...w.document.getElementById('posFilter').options].map(o => o.value).join(','), 'ALL,C,LW,RW,D,G');
 ok &= check('tendency columns are hockey', () => [...w.document.getElementById('tendHead').children].map(x => x.textContent).join(','), 'Use,Owner,C,LW,RW,D,G');
 
@@ -313,6 +313,15 @@ ok &= check('more games beats fewer at equal rate', () => JSON.parse(ev(`(functi
   };
   return JSON.stringify(score(10,'EDM') > score(10,'TOR'));
 })()`)), true);
+
+ev('switchLeague("public-points-league-2")');
+await new Promise(r => setTimeout(r, 250));
+ok &= check('Yahoo Prize league 141304 inherits the points reference',
+  'CURRENT_LEAGUE_ID==="public-points-league-2" && LEAGUE.teams===12 && LEAGUE.scoringMode==="points" && LEAGUE.scoring.g===6 && LEAGUE.scoring.sv===0.6', true);
+ok &= check('Yahoo Prize league 141304 is attached at draft slot four',
+  'LEAGUES[CURRENT_LEAGUE_ID].yahooLeagueId==="141304" && mySlot===4 && ME_OWNER==="Me" && OWNER_SLOT.Me===4', true);
+ok &= check('Yahoo Prize league 141304 starts with a blank 192-pick board',
+  'totalPicks===192 && picks.length===0 && curPick===1', true);
 
 ev('switchLeague("public-points-league-1")');
 await new Promise(r => setTimeout(r, 400));

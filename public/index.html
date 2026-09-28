@@ -2752,6 +2752,20 @@ LEAGUES_DEFAULT['public-points-league-1']={
     'Michael Misa','Patrick Kane','Filip Gustavsson','Igor Chernyshov','Jacob Trouba','Jake McCabe'
   ]
 };
+// Second joined Yahoo Public Prize H2H Points league. It intentionally inherits
+// the tested reference scoring/roster model but starts with a blank board and
+// placeholder opponents until Yahoo exposes the live team names/draft results.
+LEAGUES_DEFAULT['public-points-league-2']={
+  ...LEAGUES_DEFAULT['yahoo-nhl-public'],
+  id:'public-points-league-2',name:'Yahoo Prize H2H-Pts 141304',teams:12,mySlot:4,
+  yahooLeagueId:'141304',yahooLeagueUrl:'https://hockey.fantasysports.yahoo.com/hockey/141304',
+  officialDraft:true,draftSource:'Yahoo Prize league joined Sep 27 · draft board pending',
+  platform:'yahoo',draftDateLabel:'TBD',
+  referenceDataRevision:'yahoo-prize-141304-2026-09-27-v1',
+  owners:['Team 1','Team 2','Team 3','Me','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
+  meOwner:'Me',ownerSlot:{'Team 1':1,'Team 2':2,'Team 3':3,Me:4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
+  initialPickNames:[],rostersRaw:'',playersCsv:PLAYERS_CSV_NHL,
+};
 let LEAGUES = {...LEAGUES_DEFAULT};
 </script>
 <script>
