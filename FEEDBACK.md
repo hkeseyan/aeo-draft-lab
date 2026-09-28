@@ -506,3 +506,4 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 - 🆕 2026-08-18 — More feature ideas exist from a prior Claude Cowork spec
   session, not yet transcribed here — user will bring them over from another
   device. Once added, triage each into its own entry below.
+- ✅ 2026-09-27 — **Made NHL points rankings draft-safe while projections are still one-season based.** Yahoo and Fantrax points My Rank now anchor to the active platform's ADP and cap the raw model's movement at ±5 picks in the top 25, ±10 from 26-100, and ±15 later. The raw league/VORP rank remains visible in the tooltip, capped disagreements receive a warning marker, and the projection column is explicitly labeled `2025 Proj`. Fantrax ranks recalculate when live Fantrax ADP arrives. Yahoo Categories/Roto remains category-native and is not translated into points-market rank.

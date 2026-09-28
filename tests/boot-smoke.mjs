@@ -142,16 +142,24 @@ ok &= check('league dropdown scoped to the sport', () => [...w.document.getEleme
 ok &= check('position filter is hockey', () => [...w.document.getElementById('posFilter').options].map(o => o.value).join(','), 'ALL,C,LW,RW,D,G');
 ok &= check('tendency columns are hockey', () => [...w.document.getElementById('tendHead').children].map(x => x.textContent).join(','), 'Use,Owner,C,LW,RW,D,G');
 
-// --- My Rank: stable intrinsic league value; ADP is market context only ---
+// --- My Rank: raw model value plus temporary draft-safe points guardrails ---
 ok &= check('points My Rank uses league scoring and replacement value',
   'PLAYERS.filter(p=>p.leagueProj>0 && /replacement/.test(p.myRankWhy||"")).length', v => v > 300);
-ok &= check('My Rank is independent of ADP changes', () => ev(`(function(){
-  const original=PLAYERS.map(p=>p.adp), before=PLAYERS.map(p=>p.myRank).join(',');
+ok &= check('points My Rank stays inside market movement caps',
+  'PLAYERS.every(p=>Math.abs(p.myRank-marketAdp(p))<=(marketAdp(p)<=25?5:marketAdp(p)<=100?10:15)+0.01)', true);
+ok &= check('raw model rank is independent while draft-safe rank responds to ADP', () => ev(`(function(){
+  const original=PLAYERS.map(p=>p.adp), rawBefore=PLAYERS.map(p=>p.rawModelRank).join(','), before=PLAYERS.map(p=>p.myRank).join(',');
   PLAYERS.forEach((p,i)=>p.adp=1000-i); computeMyRanks();
-  const after=PLAYERS.map(p=>p.myRank).join(',');
+  const rawAfter=PLAYERS.map(p=>p.rawModelRank).join(','), after=PLAYERS.map(p=>p.myRank).join(',');
   PLAYERS.forEach((p,i)=>p.adp=original[i]); computeMyRanks();
-  return before===after;
+  return rawBefore===rawAfter && before!==after;
 })()`), true);
+ok &= check('named star disagreements cannot fall multiple rounds', () => ev(`(function(){
+  const names=['Quinn Hughes','Cale Makar','Evan Bouchard','Zach Werenski','Auston Matthews','Nick Suzuki'];
+  return names.every(name=>{const p=findPlayer(name),m=marketAdp(p),cap=m<=25?5:m<=100?10:15;return p&&Math.abs(p.myRank-m)<=cap;});
+})()`), true);
+ok &= check('large projection disagreements are visible and explained',
+  'PLAYERS.filter(p=>p.projectionDisagreement&&/raw one-season model rank/.test(p.myRankWhy||"")).length', v => v > 0);
 ok &= check('Yahoo reference eligibility gives Jason Robertson both wings',
   'JSON.stringify(eligiblePositions(PLAYERS.find(p=>p.name==="Jason Robertson")))', '["LW","RW"]');
 ok &= check('every ranked player carries an explanation', 'PLAYERS.filter(p=>p.myRankWhy!=null).length', 400);
@@ -181,13 +189,13 @@ ok &= check('exact NHL settings comparison enables profile creation',
   () => !w.document.getElementById('yahooImportBtn').disabled, true);
 w.fetch = oldFetch;
 
-// The recommendation panel is contextual; My Rank itself must remain stable.
+// The recommendation panel adds draft-state context on top of draft-safe My Rank.
 ok &= check('NHL live pick panel has six available candidates',
   'nhlLiveRecommendations().length', 6);
 ok &= check('NHL live panel rendered separately from the rank table',
   () => w.document.querySelectorAll('#nhlLivePicks .live-pick').length, 6);
 ok &= check('projection and exposure sit beside ADP, ECR and My Rank',
-  () => [...w.document.querySelectorAll('#poolTable th')].slice(1,6).map(x=>x.textContent).join(','), 'ADP,ECR,My,Proj,Exp');
+  () => [...w.document.querySelectorAll('#poolTable th')].slice(1,6).map(x=>x.textContent).join(','), 'ADP,ECR,My,2025 Proj,Exp');
 ok &= check('exposure shows prior-league fraction',
   'exposureText(PLAYERS.find(p=>p.name==="Jason Robertson"))', '2/4');
 ok &= check('NHL portraits and team logos use NHL assets',
@@ -392,6 +400,8 @@ ok &= check('Fantrax My Rank uses Fantrax scoring and F replacement',
   'PLAYERS.filter(p=>p.pos!=="D"&&p.pos!=="G"&&p.myReplacementPos==="F"&&/league proj/.test(p.myRankWhy||"")).length', v => v > 200);
 ok &= check('Fantrax live ADP overrides Yahoo market timing',
   'marketAdp(findPlayer("Nathan MacKinnon"))+":"+MARKET_ADP_STATUS', '1.55:fantrax');
+ok &= check('Fantrax safe rank recalculates from live Fantrax ADP',
+  'Math.abs(findPlayer("Nathan MacKinnon").myRank-marketAdp(findPlayer("Nathan MacKinnon")))<=5', true);
 ok &= check('weekly profile loads game-count context and hides daily Add Radar',
   'Object.keys(DRAFT_SCHEDULE.teams).length>0 && !radarVisible()', true);
 ok &= check('Fantrax weekly game count changes live recommendation value', () => ev(`(function(){

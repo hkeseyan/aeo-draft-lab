@@ -2976,6 +2976,14 @@ const NHL_MY_RANK={
   replacementBenchShare:{F:0.75,C:0.25,LW:0.55,RW:0.55,D:0.65,G:0.35},
   categoryBalanceWeight:0.12,
   categoryFloorWeight:0.06,
+  // Emergency draft-safe guardrails while the component projection is still a
+  // one-season baseline. Market is the anchor; our league/VORP model may express
+  // an opinion, but one noisy season cannot move an established early pick by
+  // several rounds. Categories remain category-native because points ADP is the
+  // wrong anchor for those formats.
+  safeMoveTop25:5,
+  safeMoveTop100:10,
+  safeMoveRest:15,
 };
 function nhlProjectedPoints(p){
   const sc=LEAGUE.scoring,st=p&&p.st||{};
@@ -3073,9 +3081,26 @@ function computeMyRanksNhl(){
     if(health)why.push('health watch: '+health.label);
     p.myRankWhy=why.join('; ');
   });
-  PLAYERS.slice().sort((x,y)=>(y.myValue??-99999)-(x.myValue??-99999)).forEach((p,i)=>{p.myRank=i+1;});
+  const rawOrder=PLAYERS.slice().sort((x,y)=>(y.myValue??-99999)-(x.myValue??-99999));
+  rawOrder.forEach((p,i)=>{p.rawModelRank=i+1;});
+  if(isPoints){
+    PLAYERS.forEach(p=>{
+      const market=marketAdp(p);
+      const limit=market<=25?NHL_MY_RANK.safeMoveTop25:market<=100?NHL_MY_RANK.safeMoveTop100:NHL_MY_RANK.safeMoveRest;
+      const rawDelta=(p.rawModelRank||market)-market;
+      const bounded=Math.max(-limit,Math.min(limit,rawDelta));
+      p.draftSafeLimit=limit;
+      p.draftSafeScore=Math.max(1,market+bounded);
+      p.myRank=Math.round(p.draftSafeScore);
+      p.projectionDisagreement=Math.abs(rawDelta)>limit;
+      const guard=`draft-safe: ${LEAGUE.marketAdpSource==='fantrax'?'Fantrax':'Yahoo'} ADP ${market.toFixed(1)} ${bounded>=0?'+':''}${bounded.toFixed(1)} model adjustment (cap ±${limit}); raw one-season model rank ${p.rawModelRank}`;
+      p.myRankWhy=guard+(p.projectionDisagreement?' · disagreement capped; ':'; ')+p.myRankWhy;
+    });
+  } else {
+    rawOrder.forEach((p,i)=>{p.myRank=i+1;p.draftSafeScore=null;p.draftSafeLimit=null;p.projectionDisagreement=false;});
+  }
 }
-function projectionLabel(){return LEAGUE.scoringMode==='points'?'Proj':'Cat';}
+function projectionLabel(){return LEAGUE.scoringMode==='points'?'2025 Proj':'Cat';}
 function projectionDisplay(p){
   if(LEAGUE.scoringMode==='points')return Number.isFinite(+p.leagueProj)?Number(p.leagueProj).toFixed(1):'';
   return Number.isFinite(+p.categoryValue)?Number(p.categoryValue).toFixed(2):'';
@@ -3104,7 +3129,7 @@ async function loadMarketAdp(){
       if(p&&Number.isFinite(adp)&&adp>0){p.marketAdp=adp;matched++;}
     });
     MARKET_ADP_STATUS=matched?'fantrax':'fallback';
-    computePosRanks();render();
+    computePosRanks();computeMyRanks();render();
   }catch(e){
     if(leagueId!==CURRENT_LEAGUE_ID)return;
     MARKET_ADP_STATUS='fallback';renderPool();renderNhlLivePicks();
@@ -4218,7 +4243,7 @@ function renderPool(){
     const d=Math.round((adp-p.ecr)*10)/10; // + = falls later than ranked = value
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><input type="checkbox" class="qcheck" data-q="${p.name.replace(/"/g,'&quot;')}" ${queued.has(p.name)?'checked':''}></td>
-      <td>${adp<999?adp.toFixed(1):'—'}</td><td>${p.ecr}</td><td${p.myRankWhy?` title="${String(p.myRankWhy).replace(/"/g,'&quot;')}"`:''}>${p.myRank!=null?p.myRank:'—'}</td><td class="small">${projectionDisplay(p)}</td><td class="small" title="Exposure across your other drafted ${SPORT.label} leagues">${exposureText(p)}</td><td>${posCell(p)}</td>
+      <td>${adp<999?adp.toFixed(1):'—'}</td><td>${p.ecr}</td><td${p.myRankWhy?` title="${String(p.myRankWhy).replace(/"/g,'&quot;')}"`:''}>${p.myRank!=null?p.myRank:'—'}${p.projectionDisagreement?' ⚠':''}</td><td class="small">${projectionDisplay(p)}</td><td class="small" title="Exposure across your other drafted ${SPORT.label} leagues">${exposureText(p)}</td><td>${posCell(p)}</td>
       <td>${headshotImg(p)}${p.name}${teamLogoImg(p)}${p.keeper?`<span class="kchip">K</span>`:''}${rookieBadge(p)}${NHL_HEALTH_WATCH[p.name]?` <a class="small" title="${NHL_HEALTH_WATCH[p.name].note}" href="${NHL_HEALTH_WATCH[p.name].url}" target="_blank" rel="noopener">${NHL_HEALTH_WATCH[p.name].label}</a>`:''}</td><td class="muted small">${p.pos}${p.posRank||''}</td>
       <td class="dcol ${valClass(d)}">${d>0?'+':''}${d}</td>
       <td><button class="pick-btn" data-pk="${p.id}">draft →</button></td>`;

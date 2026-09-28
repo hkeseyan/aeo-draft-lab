@@ -49,10 +49,15 @@ as a flag on our projection, not a bargain. Players FantasyPros doesn't rank sor
 behind those it does, ordered by our projection, so the deep pool the Add Radar needs
 doesn't interleave with real draft picks.
 
-**My Rank (hockey).** `My Rank` is the stable **intrinsic league-value** board.
-It deliberately excludes ADP. Market timing belongs in the separate live pick
-recommendation layer, so a player's underlying value cannot improve merely because
-the market is drafting him earlier.
+**My Rank (hockey).** The engine first computes a stable, intrinsic **raw model
+rank** from the active league settings. Because the current NHL component projection
+is still primarily a one-season baseline, the operational `My Rank` in points
+leagues temporarily uses platform ADP as a draft-safety anchor: the raw model may
+move ADP by at most 5 picks inside the top 25, 10 picks from 26-100, and 15 picks
+thereafter. The tooltip preserves the raw model rank and flags when a larger
+disagreement was capped. The projection column is labeled `2025 Proj` so its
+provenance is visible. Category formats do not use this points-market anchor; their
+My Rank remains category-native.
 
 For **points leagues**, projected component stats are rescored through the active
 league's scoring settings. The model then estimates replacement at each position
@@ -85,12 +90,12 @@ bounded seven-day game-count modifier and low weekly-lineup streaming priors; th
 daily Add Radar is hidden. Exact live-league rules and league-scoped eligibility
 remain confirmation TODOs. See `docs/NHL_FORMAT_PROFILES.md`.
 
-**Live pick recommendations are separate from My Rank.** The existing NHL live
-shortlist starts from intrinsic rank, then adds draft-state inputs: ADP/VONA timing
+**Live pick recommendations are separate from the rank calculation.** The existing
+NHL live shortlist starts from My Rank, then adds draft-state inputs: ADP/VONA timing
 to the next turn, tier cliffs, open starter urgency, progressive position
 saturation, health/IR context, upside catalysts, and user-adjustable streaming
 confidence for C/LW/RW/D/G. Streaming confidence can reduce the urgency of filling
-an open slot, but never changes intrinsic My Rank. There are no hard round rules.
+an open slot, but never changes My Rank. There are no hard round rules.
 
 **Platform-specific position eligibility.** Players can carry independent Yahoo,
 Fantrax, and fallback eligibility sets. `eligiblePositions()` uses the active
