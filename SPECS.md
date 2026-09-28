@@ -107,8 +107,11 @@ Prize reference profiles are all 12-team. The completed
 drafted NHL league and stores all 192 picks, the exact 12 team names/slots, and
 Yahoo-observed multi-position eligibility supplied with the draft results. Public
 Free remains distinct; the Yahoo importer accepts either 10 or 12 teams when Yahoo
-reports those settings instead of forcing one size. Custom/bangers formats are
-imported rather than guessed.
+reports those settings instead of forcing one size. `public-points-league-2` /
+**Yahoo Prize H2H-Pts 141304** is the second official points league, inherits the
+same tested reference settings, places the user in slot 4, and starts with a blank
+192-pick board plus placeholder opponents until live team names/results arrive.
+Custom/bangers formats are imported rather than guessed.
 
 ## App shape
 
