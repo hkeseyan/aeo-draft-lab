@@ -43,6 +43,11 @@ const dom = new JSDOM(html, {
       if (u.startsWith('/api/commish')) return j({});
       if (u.startsWith('/api/mocks')) return j([]);
       if (u.startsWith('/api/nhl/schedule')) return j(SCHED);
+      if (u.startsWith('/api/nhl/fantrax-adp')) return j([
+        { name:'MacKinnon, Nathan', adp:1.55, pos:'C', id:'02f9l' },
+        { name:'McDavid, Connor', adp:1.64, pos:'C', id:'02un4' },
+        { name:'Makar, Cale', adp:8.5, pos:'D', id:'03q3f' },
+      ]);
       if (u.startsWith('/api/exposure')) return j({ denominator: 4, counts: { 'jason robertson': 2 }, leagues: [] });
       return j({});
     };
@@ -133,7 +138,7 @@ ok &= check('scoring values carried onto LEAGUE', 'LEAGUE.scoring.sog', 0.9);
 ok &= check('weekly acquisition cap carried', 'LEAGUE.maxAcquisitionsPerWeek', 4);
 ok &= check('sport bar shows both sports', () => w.document.getElementById('sportBar').children.length, 2);
 ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','),
-  'yahoo-nhl-public,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1');
+  'yahoo-nhl-public,fantrax-nhl-weekly-points,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1');
 ok &= check('position filter is hockey', () => [...w.document.getElementById('posFilter').options].map(o => o.value).join(','), 'ALL,C,LW,RW,D,G');
 ok &= check('tendency columns are hockey', () => [...w.document.getElementById('tendHead').children].map(x => x.textContent).join(','), 'Use,Owner,C,LW,RW,D,G');
 
@@ -354,13 +359,41 @@ await new Promise(r => setTimeout(r, 250));
 ok &= check('Public Prize categories reference is 12 teams with hits',
   'LEAGUE.teams===12 && LEAGUE.scoringMode==="categories" && LEAGUE.categoryStats.skater.includes("HIT")', true);
 ok &= check('categories profile computes category replacement value',
-  'PLAYERS.filter(p=>Number.isFinite(p.categoryValue)&&/H2H cat z/.test(p.myRankWhy||"")).length', v => v > 300);
+  'PLAYERS.filter(p=>Number.isFinite(p.categoryValue)&&/H2H cat value/.test(p.myRankWhy||"")).length', v => v > 300);
+ok &= check('categories board does not display Yahoo fantasy points',
+  'document.getElementById("projHeader").textContent+":"+(PLAYERS[0].leagueProj===null)', 'Cat:true');
+ok &= check('categories recommendation explains balanced contribution',
+  'nhlLiveRecommendations(30).some(x=>/contributes in|balances /.test(x.reason))', true);
 ev('switchLeague("yahoo-nhl-public-roto")');
 await new Promise(r => setTimeout(r, 250));
 ok &= check('Public Prize roto reference is 12 teams with blocks and 82-game cap',
   'LEAGUE.teams===12 && LEAGUE.scoringMode==="roto" && LEAGUE.categoryStats.skater.includes("BLK") && !LEAGUE.categoryStats.skater.includes("HIT") && LEAGUE.maxGamesPlayed===82', true);
 ok &= check('roto profile computes category replacement value',
-  'PLAYERS.filter(p=>Number.isFinite(p.categoryValue)&&/roto z/.test(p.myRankWhy||"")).length', v => v > 300);
+  'PLAYERS.filter(p=>Number.isFinite(p.categoryValue)&&/roto value/.test(p.myRankWhy||"")).length', v => v > 300);
+ok &= check('roto players retain category-level explanations',
+  'PLAYERS.filter(p=>p.categoryZ&&Object.keys(p.categoryZ).length>=4&&/best categories/.test(p.myRankWhy||"")).length', v => v > 300);
+ev('switchLeague("fantrax-nhl-weekly-points")');
+await new Promise(r => setTimeout(r, 300));
+ok &= check('Fantrax weekly points profile uses Classic roster and scoring',
+  'LEAGUE.platform==="fantrax" && LEAGUE.lineupPeriod==="weekly" && LEAGUE.scoring.g===4 && LEAGUE.scoring.sv===0.25 && LEAGUE.irSlots===0', true);
+ok &= check('Fantrax generic forward roster slots are 5F/3D/2G', slots, 'F,F,F,F,F,D,D,D,G,G');
+ok &= check('Fantrax forwards fill generic F without inventing an F display position',
+  'playerFillsPos(findPlayer("Connor McDavid"),"F") && eligiblePositions(findPlayer("Connor McDavid")).every(p=>p!=="F")', true);
+ok &= check('Fantrax My Rank uses Fantrax scoring and F replacement',
+  'PLAYERS.filter(p=>p.pos!=="D"&&p.pos!=="G"&&p.myReplacementPos==="F"&&/league proj/.test(p.myRankWhy||"")).length', v => v > 200);
+ok &= check('Fantrax live ADP overrides Yahoo market timing',
+  'marketAdp(findPlayer("Nathan MacKinnon"))+":"+MARKET_ADP_STATUS', '1.55:fantrax');
+ok &= check('weekly profile loads game-count context and hides daily Add Radar',
+  'Object.keys(DRAFT_SCHEDULE.teams).length>0 && !radarVisible()', true);
+ok &= check('Fantrax weekly game count changes live recommendation value', () => ev(`(function(){
+  const p=findPlayer('Nathan MacKinnon'), original=DRAFT_SCHEDULE;
+  DRAFT_SCHEDULE={teams:{COL:['a','b','c','d']},days:['a','b','c','d'],start:'a'};
+  const four=nhlLiveRecommendations(100).find(x=>x.player.id===p.id).score;
+  DRAFT_SCHEDULE={teams:{COL:['a']},days:['a'],start:'a'};
+  const one=nhlLiveRecommendations(100).find(x=>x.player.id===p.id).score;
+  DRAFT_SCHEDULE=original;
+  return four>one;
+})()`), true);
 ev('switchLeague("aeo-keepers")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('football unaffected after switching back', () => ev('SPORT.id') + ' ' + slots(), 'nfl QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');
