@@ -1819,15 +1819,12 @@ const SPORT_ORDER=['nfl','nhl'];
 let SPORT=SPORTS.nfl;
 function sportOf(profile){ return SPORTS[(profile&&profile.sport)||'nfl']||SPORTS.nfl; }
 
-// 2026-27 NHL pool, three sources merged.
-//   adp  - real Yahoo average draft position (FantasyPros' ADP table, Yahoo column),
-//          so mock rivals draft against the market this league actually drafts in
-//          rather than against our own board.
-//   ecr  - FantasyPros expert consensus rank. Thin (2 experts, roto-flavoured) but
-//          it is an outside opinion, which is the point of having it next to ours.
-//   proj - ours: NHL public stats API, 2025-26 per-game rates shrunk toward the
-//          positional mean by games played, times projected games, scored through
-//          this league's own point values.
+// 2026-27 NHL pool. ADP remains a market input only. On boot, the embedded
+// historical component line is replaced by current preseason raw-stat sources;
+// their G/A/SOG/HIT/etc. totals are blended before any league scoring is applied.
+// The embedded line is an offline fallback, never a weighted source when a current
+// source is available. This intentionally prevents a missed/injured 2025-26 season
+// from silently erasing a player's 2026-27 draft value.
 // pos carries real multi-position eligibility from FantasyPros (C/LW etc.).
 // Players FantasyPros doesn't rank sort in behind those who are, by our projection,
 // so the deep pool the Add Radar needs doesn't interleave with real draft picks.
@@ -2361,6 +2358,28 @@ const LEAGUES_DEFAULT = {
     meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
     rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
   },
+  'trax50-classic-draft-76': {
+    id:'trax50-classic-draft-76', name:'TRAX50 Classic Draft (76)', sport:'nhl', platform:'fantrax',
+    fantraxLeagueId:'bdd8aa7jmtjj0e84', leagueType:'redraft', draftType:'snake', officialDraft:true,
+    referenceDataRevision:'trax50-classic-76-2026-09-28-v1', teams:12, rounds:16, rosterSize:16, irSlots:0,
+    mySlot:null, scoringLabel:'H2H Points · Fantrax TRAX50 Classic', draftDateLabel:'Live draft · 45 sec/pick', keeperDeadlineLabel:'—',
+    rosterPositions:['F','D','G'], starters:{F:5,D:3,G:2}, flexEligible:[], scoringMode:'points', lineupPeriod:'weekly', marketAdpSource:'fantrax',
+    scoring:{g:4,a:3,hit:0.25,pm:1,sog:0.5,ppp:1,w:5,ga:-1,sv:0.25,sho:5},
+    waiverRules:{claims:'unlimited',priority:'rotating',waiverDays:2,freeAgents:'FCFS',trades:false},
+    lineupLock:'Player-specific; five minutes before each player’s team first scheduled game of the Monday scoring period.',
+    availabilityDiscounts:{stash:0.62,watch:0.86,suspended:0.15},
+    defaultStreamConfidence:{C:0.15,LW:0.15,RW:0.15,D:0.15,G:0.20},
+    assumptions:[
+      'Official Fantrax ID bdd8aa7jmtjj0e84. 12 teams; 16 rounds, snake, 45 seconds per pick.',
+      'Weekly Monday periods; each player locks five minutes before his team’s first scheduled game. Only 5 F / 3 D / 2 G accrue points; six reserves; no IR.',
+      'No trades; unlimited claims; rotating-priority two-day waivers; undrafted/free agents are FCFS.',
+      'Fantrax ADP is the market signal. Draft My Rank is preseason talent/value first; weekly game count belongs in start/waiver recommendations.',
+      'Current NHL Fantasy Data and Hashtag Hockey raw-stat feeds are automatic. Add an authorized Yahoo raw-stat export to projectionSources to complete the intended three-source blend; values are rescaled through this league scoring, not reused as provider points.'
+    ],
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
+    meOwner:'Me', ownerSlot:{Me:1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
+    rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
+  },
   'yahoo-nhl-public-categories': {
     id:'yahoo-nhl-public-categories', name:'Yahoo Public Prize NHL — H2H Categories (12-team reference)', sport:'nhl', platform:'yahoo',
     leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,
@@ -2752,19 +2771,24 @@ LEAGUES_DEFAULT['public-points-league-1']={
     'Michael Misa','Patrick Kane','Filip Gustavsson','Igor Chernyshov','Jacob Trouba','Jake McCabe'
   ]
 };
-// Second joined Yahoo Public Prize H2H Points league. It intentionally inherits
-// the tested reference scoring/roster model but starts with a blank board and
-// placeholder opponents until Yahoo exposes the live team names/draft results.
+// Completed Yahoo Prize H2H Points 141304 draft supplied in the current chat.
+// Preserve all 192 picks and the true team order; Sid the Mid is assigned from
+// the existing slot-four context (Dahlin was the user's documented R3 pick).
+// If that inference is wrong, the board remains intact and only meOwner/mySlot
+// needs editing in the Leagues tab.
 LEAGUES_DEFAULT['public-points-league-2']={
   ...LEAGUES_DEFAULT['yahoo-nhl-public'],
   id:'public-points-league-2',name:'Yahoo Prize H2H-Pts 141304',teams:12,mySlot:4,
   yahooLeagueId:'141304',yahooLeagueUrl:'https://hockey.fantasysports.yahoo.com/hockey/141304',
-  officialDraft:true,draftSource:'Yahoo Prize league joined Sep 27 · draft board pending',
-  platform:'yahoo',draftDateLabel:'TBD',
-  referenceDataRevision:'yahoo-prize-141304-2026-09-27-v1',
-  owners:['Team 1','Team 2','Team 3','Me','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
-  meOwner:'Me',ownerSlot:{'Team 1':1,'Team 2':2,'Team 3':3,Me:4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
-  initialPickNames:[],rostersRaw:'',playersCsv:PLAYERS_CSV_NHL,
+  officialDraft:true,draftSource:'Completed Yahoo draft results supplied Sep 28',platform:'yahoo',draftDateLabel:'Sep 27 · complete',
+  referenceDataRevision:'yahoo-prize-141304-2026-09-28-v2',liveDraftRevision:'2026-09-28-p192-chat-import',
+  owners:["Mark's Marvelous Team","Andrew's Awesome Team","Mike's Majestic Team",'Sid the Mid',"Brandon's Brilliant Team","Brett's Genius Team",'The Blue Line','Net Slide','DOLLA BILL KIRILL🤑','Gowsy','Cold as Ice','Ovie’s Oats 🥜'],
+  meOwner:'Sid the Mid',ownerSlot:{"Mark's Marvelous Team":1,"Andrew's Awesome Team":2,"Mike's Majestic Team":3,'Sid the Mid':4,"Brandon's Brilliant Team":5,"Brett's Genius Team":6,'The Blue Line':7,'Net Slide':8,'DOLLA BILL KIRILL🤑':9,Gowsy:10,'Cold as Ice':11,'Ovie’s Oats 🥜':12},
+  assumptions:['Completed 16-round Yahoo draft imported from the user’s Sep 28 chat.', 'User team inferred as Sid the Mid from the existing slot-four context and documented R3 Dahlin pick; change only ownership if needed.'],
+  initialPickNames:['Connor McDavid','Nathan MacKinnon','Macklin Celebrini','Nikita Kucherov','Cale Makar','Leon Draisaitl','Jason Robertson','Nick Suzuki','Kirill Kaprizov','David Pastrnak','Zach Werenski','Martin Necas','Cole Caufield','Jack Hughes','Auston Matthews','Quinn Hughes','Evan Bouchard','Andrei Vasilevskiy','Wyatt Johnston','Jack Eichel','Lane Hutson','Matt Boldy','Kyle Connor','Mikko Rantanen','Logan Thompson','Jake Guentzel','Alex DeBrincat','Rasmus Dahlin','Mark Scheifele','Tage Thompson','Filip Forsberg','Miro Heiskanen','Brady Tkachuk','Dylan Guenther','Cutter Gauthier','Matthew Schaefer','Brandon Hagel','Ilya Sorokin','William Nylander','Jake Oettinger','Artemi Panarin','Jakob Chychrun','Matthew Tkachuk','Kirill Marchenko','Mitch Marner','Clayton Keller','Tim Stutzle','Leo Carlsson','Jake Sanderson','Moritz Seider','Adrian Kempe','Igor Shesterkin','Sam Reinhart','Adam Fox','Juraj Slafkovský','Zach Hyman','Connor Hellebuyck','Darren Raddysh','Jesper Wallstedt','Porter Martone','Jakub Dobes','Aleksander Barkov','Connor Bedard','Will Smith','Josh Morrissey','Karel Vejmelka','Sidney Crosby','Jesper Bratt','Pavel Dorofeyev','Sebastian Aho','Erik Karlsson','Scott Wedgewood','Jackson LaCombe','Roman Josi','John Carlson','Lucas Raymond','Andrei Svechnikov','Brayden Point','Mika Zibanejad','Charlie McAvoy','Mikhail Sergachev','Bowen Byram','Drake Batherson','Jeremy Swayman','Brock Faber','Alex Ovechkin','Morgan Geekie','Brandt Clarke','Roope Hintz','Robert Thomas','Shayne Gostisbehere','Carter Hart','Alex Tuch','Noah Dobson','Nick Schmaltz','Ivan Demidov','Jacob Markstrom','Dylan Holloway','Rasmus Andersson','Seth Jarvis','Jet Greaves','Victor Hedman','Bo Horvat','Mathew Barzal','Logan Cooley','Shea Theodore','Mark Stone','Matthew Knies','Gavin McKenna','Cole Hutson','Alexis Lafreniere','Beckett Sennecke','Mackenzie Blackwood','Dylan Larkin','J.T. Miller','MacKenzie Weegar','Juuse Saros','Kevin Lankinen','Adam Fantilli','Timo Meier','Dougie Hamilton','Nikolaj Ehlers','Yaroslav Askarov','Thomas Harley','Brandon Montour','Brandon Bussi','Steven Stamkos','Tom Wilson','Seth Jones','Luke Hughes','Trevor Zegras','Vince Dunn','Sam Bennett','Travis Konecny','Sergei Bobrovsky','Philip Broberg','Joel Hofer','Bryan Rust','Filip Hronek','Mattias Samuelsson','Nico Hischier','John Tavares','Spencer Knight','Thomas Chabot','Rickard Rakell','John Gibson','Brock Nelson','Mattias Ekholm','Quinton Byfield','Ivar Stenberg','Evgeni Malkin','Gabriel Vilardi','Josh Doan','Ukko-Pekka Luukkonen','Devon Toews','Ryan Nugent-Hopkins','Dylan Strome','Esa Lindell','Tomas Hertl','Linus Ullmark','Jacob Fowler','Jacob Trouba','Luke Evangelista','Joel Eriksson Ek','Ryan O\'Reilly','Mike Matheson','Lukas Dostal','Logan Stankoven','Simon Nemec','Sam Malinski','Patrick Kane','Kevin Fiala','Charlie Coyle','Jake Allen','Ivan Provorov','Noah Hanifin','Elias Pettersson','JJ Peterka','Dan Vladar','Alexander Nikishin','Darcy Kuemper','Travis Sanheim','Frederik Andersen','Egor Chinakhov','Valeri Nichushkin','Dylan Cozens','Tyler Bertuzzi','Jackson Blake','Pavel Zacha','Joey Daccord','Jake McCabe','Jordan Kyrou'],
+  // Board-only fallbacks keep every reported pick addressable. Current preseason
+  // source rows replace the blank components where a matching player is present.
+  rostersRaw:'',playersCsv:PLAYERS_CSV_NHL+'\nAleksander Barkov,C,FLA,63,63,0,5'+'\nGavin McKenna,LW,TOR,,,,'+'\nQuinton Byfield,C,LAK,,,,'+'\nIvar Stenberg,LW,SJS,,,,'+'\nJacob Fowler,G,MTL,,,,'+'\nAlexander Nikishin,D,CAR,,,,'+'\nEgor Chinakhov,LW,CBJ,,,,'+'\nJackson Blake,RW,CAR,,,,',
 };
 let LEAGUES = {...LEAGUES_DEFAULT};
 </script>
@@ -2973,6 +2997,10 @@ const NHL_MY_RANK={
   projTrustGames:65,
   minConfidence:0.85,
   flexibilityBonusPerExtra:0.035,
+  // Talent/projection stays the primary draft signal. Positional replacement is
+  // useful, but its premium may not exceed this share of a player's own value.
+  // This stops a thin D/G tier from overwhelming an elite forward projection.
+  maxScarcityShare:0.18,
   replacementBenchShare:{F:0.75,C:0.25,LW:0.55,RW:0.55,D:0.65,G:0.35},
   categoryBalanceWeight:0.12,
   categoryFloorWeight:0.06,
@@ -2985,6 +3013,68 @@ const NHL_MY_RANK={
   safeMoveTop100:10,
   safeMoveRest:15,
 };
+function nhlAvailabilityMultiplier(health){
+  if(!health)return 1;
+  const defaults={suspended:0.15,stash:LEAGUE.irSlots?0.82:0.70,watch:0.90};
+  const configured=LEAGUE.availabilityDiscounts&&LEAGUE.availabilityDiscounts[health.kind];
+  return Number.isFinite(+configured)?+configured:(defaults[health.kind]||0.85);
+}
+const NHL_PRESEASON_SOURCES=[
+  {id:'nhl-fantasy-data',label:'NHL Fantasy Data',weight:0.50},
+  {id:'hashtag-hockey',label:'Hashtag Hockey',weight:0.25},
+  {id:'yahoo',label:'Yahoo raw projections',weight:0.25},
+];
+function normalizedPlayerName(name){return String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');}
+function blendNhlProjectionSources(sources,generatedAt){
+  const byName=new Map(),byId=new Map();
+  (sources||[]).forEach(source=>(source.rows||[]).forEach(row=>{
+    const keyed={...row,_source:source.id,_weight:Number(source.weight)||0};
+    if(row.name){const key=normalizedPlayerName(row.name);byName.set(key,(byName.get(key)||[]).concat(keyed));}
+    if(row.id){const key=String(row.id);byId.set(key,(byId.get(key)||[]).concat(keyed));}
+  }));
+  const keys=['gp','g','a','pm','ppp','sog','blk','hit','w','sv','ga','sho'];
+  let matched=0;
+  PLAYERS.forEach(p=>{
+    const rows=(byId.get(String(p.nhlId||''))||byName.get(normalizedPlayerName(p.name))||[]);
+    if(!rows.length)return;
+    const stats={...p.st},used=[];
+    keys.forEach(key=>{
+      const values=rows.filter(row=>Number.isFinite(+row[key]));
+      const weight=values.reduce((n,row)=>n+Math.max(0,row._weight),0);
+      if(!values.length||!weight)return;
+      const value=values.reduce((n,row)=>n+(+row[key])*Math.max(0,row._weight),0)/weight;
+      if(key==='gp')p.gp=value;else stats[key]=value;
+      values.forEach(row=>{if(!used.includes(row._source))used.push(row._source);});
+    });
+    p.st=stats;p.projectionSourceCount=used.length;p.projectionSources=used;
+    p.projectionAsOf=generatedAt||null;p.projectionFallback=false;matched++;
+  });
+  PLAYERS.forEach(p=>{if(!p.projectionSourceCount){p.projectionSourceCount=0;p.projectionSources=[];p.projectionFallback=true;}});
+  return matched;
+}
+async function loadNhlPreseasonProjections(){
+  if(SPORT.id!=='nhl')return;
+  const leagueId=CURRENT_LEAGUE_ID;
+  try{
+    const r=await fetch('/api/nhl/preseason-projections');if(!r.ok)throw new Error('HTTP '+r.status);
+    const remote=await r.json();if(leagueId!==CURRENT_LEAGUE_ID)return;
+    // Additional sources are intentionally data-only rows supplied in the profile
+    // (Yahoo OAuth/manual export and Hashtag import). We reweight only among
+    // sources that actually returned a player's raw stat, never fabricate data.
+    const configured=(LEAGUES[leagueId]?.projectionSources||[]).concat(remote.sources||[])
+      .map(source=>({...source,weight:(NHL_PRESEASON_SOURCES.find(x=>x.id===source.id)?.weight)||source.weight||0.25}));
+    const matched=blendNhlProjectionSources(configured,remote.generatedAt);
+    if(matched){
+      PLAYERS.forEach(p=>{p.fppg=(+p.gp||0)>0?nhlProjectedPoints(p)/(+p.gp||1):0;});
+      computeMyRanks();render();
+    }
+  }catch(e){
+    // Offline mode is explicit in the player explanation rather than silently
+    // treating historical components as a current forecast.
+    PLAYERS.forEach(p=>{p.projectionFallback=true;p.projectionSources=[];p.projectionSourceCount=0;});
+    renderPool();renderNhlLivePicks();
+  }
+}
 function nhlProjectedPoints(p){
   const sc=LEAGUE.scoring,st=p&&p.st||{};
   if(!sc||!Object.keys(sc).length)return +p.proj||0;
@@ -3064,12 +3154,15 @@ function computeMyRanksNhl(){
     // Generic-F Fantrax leagues do not award fake flexibility for C/LW/RW labels:
     // every skater is filling the same F bucket there.
     const flexBonus=Math.max(0,best.vorp)*NHL_MY_RANK.flexibilityBonusPerExtra*Math.max(0,elig.length-1);
-    let value=best.vorp*confidence+flexBonus;
+    const intrinsic=(+p[valueKey]||0)*confidence;
+    const scarcityPremium=Math.max(0,best.vorp)*confidence;
+    const cappedScarcity=Math.min(scarcityPremium,Math.max(4,Math.abs(intrinsic)*NHL_MY_RANK.maxScarcityShare));
+    let value=intrinsic+cappedScarcity+flexBonus;
     const health=NHL_HEALTH_WATCH[p.name];
-    if(health)value*=health.kind==='suspended'?0.15:health.kind==='stash'?0.70:0.77;
-    p.myRankTrust=confidence;p.myReplacementPos=best.pos;p.myReplacementProj=replacement[best.pos]||0;p.myValue=value;
+    if(health)value*=nhlAvailabilityMultiplier(health);
+    p.myRankTrust=confidence;p.myReplacementPos=best.pos;p.myReplacementProj=replacement[best.pos]||0;p.myValue=value;p.scarcityPremium=cappedScarcity;
     const why=isPoints
-      ? ['league proj '+Number(p.leagueProj||0).toFixed(1),best.pos+' replacement '+Number(p.myReplacementProj||0).toFixed(1),'VORP '+Number(best.vorp||0).toFixed(1)]
+      ? ['league proj '+Number(p.leagueProj||0).toFixed(1),best.pos+' replacement '+Number(p.myReplacementProj||0).toFixed(1),'scarcity +'+Number(cappedScarcity||0).toFixed(1)+' (capped)']
       : [(LEAGUE.scoringMode==='roto'?'roto':'H2H cat')+' value '+Number(p.categoryValue||0).toFixed(2),best.pos+' replacement '+Number(p.myReplacementProj||0).toFixed(2),'VORP '+Number(best.vorp||0).toFixed(2)];
     if(!isPoints&&p.categoryZ){
       const top=Object.entries(p.categoryZ).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,z])=>k+' '+(z>=0?'+':'')+z.toFixed(1));
@@ -3078,6 +3171,7 @@ function computeMyRanksNhl(){
     }
     if(elig.length>1)why.push('+ '+(LEAGUE.platform||'fallback')+' flexibility '+displayElig.join('/'));
     if(confidence<0.97)why.push('projection confidence '+Math.round(confidence*100)+'%');
+    why.push(p.projectionSourceCount?('preseason sources '+p.projectionSources.join(', ')): 'offline historical fallback — refresh preseason sources');
     if(health)why.push('health watch: '+health.label);
     p.myRankWhy=why.join('; ');
   });
@@ -3100,7 +3194,7 @@ function computeMyRanksNhl(){
     rawOrder.forEach((p,i)=>{p.myRank=i+1;p.draftSafeScore=null;p.draftSafeLimit=null;p.projectionDisagreement=false;});
   }
 }
-function projectionLabel(){return LEAGUE.scoringMode==='points'?'2025 Proj':'Cat';}
+function projectionLabel(){return LEAGUE.scoringMode==='points'?'Preseason Proj':'Cat';}
 function projectionDisplay(p){
   if(LEAGUE.scoringMode==='points')return Number.isFinite(+p.leagueProj)?Number(p.leagueProj).toFixed(1):'';
   return Number.isFinite(+p.categoryValue)?Number(p.categoryValue).toFixed(2):'';
@@ -4110,7 +4204,21 @@ function nhlLiveRecommendations(limit=6){
       assessed.splice(0,assessed.length,...ordinary,stash);
     }
   }
-  return assessed.sort((a,b)=>b.score-a.score).slice(0,limit).map((x,i)=>({...x,label:i===0&&x.label!=='WAIT'&&x.label!=='IR STASH'?'TAKE NOW':x.label,
+  // A top list of only D/G is almost always a modelling failure in an ordinary
+  // points draft, not a signal to ignore comparable forwards. Preserve a truly
+  // urgent positional need, but reserve forward representation whenever one is
+  // within four recommendation points of the displayed cut line.
+  const ordered=assessed.sort((a,b)=>b.score-a.score),shown=ordered.slice(0,limit);
+  const cutoff=shown[shown.length-1]?.score??-Infinity;
+  const forwardAlternatives=ordered.filter(x=>group(x.player)==='F'&&x.score>=cutoff-4);
+  const forwardTarget=Math.min(2,limit,forwardAlternatives.length);
+  for(const forward of forwardAlternatives){
+    if(shown.filter(x=>group(x.player)==='F').length>=forwardTarget)break;
+    if(shown.some(x=>x.player.id===forward.player.id))continue;
+    const replace=[...shown].reverse().find(x=>group(x.player)!=='F'&&x.score<=forward.score+4);
+    if(replace)shown[shown.indexOf(replace)]=forward;
+  }
+  return shown.sort((a,b)=>b.score-a.score).map((x,i)=>({...x,label:i===0&&x.label!=='WAIT'&&x.label!=='IR STASH'?'TAKE NOW':x.label,
     now,next,paired,round,counts,activeG}));
 }
 function renderNhlStreamControls(){
@@ -6056,7 +6164,8 @@ function applyLeagueProfile(id){
     sport:SPORT.id, platform:profile.platform||null, scoringMode:profile.scoringMode||'points', scoring:profile.scoring||null,
     rosterPositions:profile.rosterPositions||null, lineupPeriod:profile.lineupPeriod||(SPORT.dailyLineups?'daily':'weekly'),
     marketAdpSource:profile.marketAdpSource||((profile.platform==='yahoo'&&SPORT.id==='nhl')?'yahoo':null),
-    defaultStreamConfidence:profile.defaultStreamConfidence||null, assumptions:profile.assumptions||[],
+    defaultStreamConfidence:profile.defaultStreamConfidence||null, projectionSources:profile.projectionSources||[],
+    availabilityDiscounts:profile.availabilityDiscounts||{}, assumptions:profile.assumptions||[],
     categoryStats:profile.categoryStats||null, maxGamesPlayed:profile.maxGamesPlayed||null,
     maxAcquisitionsPerWeek:profile.maxAcquisitionsPerWeek||null, minGoalieGamesPerWeek:profile.minGoalieGamesPerWeek||null,
   };
@@ -6107,6 +6216,7 @@ function applyLeagueProfile(id){
   renderHeader(); renderSportBar(); fillLeagueSelect(); updateKeeperCopy();
   applyRadarVisibility(); RADAR_SCHED=null; renderRadar();
   loadMarketAdp();
+  loadNhlPreseasonProjections();
   loadDraftScheduleContext();
   if(!roomOnly()){
     // Views the current viewer isn't allowed had their DOM sections removed
@@ -6156,7 +6266,7 @@ async function fetchCloudLeagues(){
       // already in KV, so production kept running the generic defaults and priced
       // a backup quarterback at $9. Backfill each such field independently, and
       // only where the cloud copy has no value at all.
-      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','platform','platformEligibility','scoring','scoringMode','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek','rosterPositions','lineupPeriod','marketAdpSource','defaultStreamConfidence','assumptions'];
+      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','platform','platformEligibility','scoring','scoringMode','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek','rosterPositions','lineupPeriod','marketAdpSource','defaultStreamConfidence','projectionSources','availabilityDiscounts','assumptions'];
       const isEmpty=v=>v==null||v===''||(Array.isArray(v)&&!v.length)||(typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length);
       const toPatch=[];
       Object.values(LEAGUES_DEFAULT).forEach(def=>{
@@ -6175,7 +6285,7 @@ async function fetchCloudLeagues(){
           ['poolDataRevision','playersCsv'].forEach(f=>{ if(def[f]!==undefined)add[f]=def[f]; });
         }
         if(def.referenceDataRevision && cur.referenceDataRevision!==def.referenceDataRevision){
-          ['referenceDataRevision','name','teams','rounds','rosterSize','irSlots','owners','meOwner','ownerSlot','officialDraft','platformEligibility','scoringLabel','scoringMode','scoring','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek','rosterPositions','lineupPeriod','marketAdpSource','defaultStreamConfidence','assumptions']
+          ['referenceDataRevision','name','teams','rounds','rosterSize','irSlots','owners','meOwner','ownerSlot','officialDraft','platformEligibility','scoringLabel','scoringMode','scoring','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek','rosterPositions','lineupPeriod','marketAdpSource','defaultStreamConfidence','projectionSources','availabilityDiscounts','assumptions']
             .forEach(f=>{if(def[f]!==undefined)add[f]=def[f];});
         }
         if(def.liveDraftRevision && cur.liveDraftRevision!==def.liveDraftRevision){
