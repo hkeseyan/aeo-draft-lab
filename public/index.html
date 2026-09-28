@@ -11,8 +11,11 @@
     --qb:#f97066; --rb:#34d399; --wr:#60a5fa; --te:#fbbf24; --k:#c084fc; --dst:#94a3b8;
     /* Hockey. Same palette roles as football so the board reads identically. */
     /* Hockey. Same five shades as before, reassigned: G red, C blue, LW green,
-       RW purple, D yellow. */
-    --posc:#60a5fa; --poslw:#34d399; --posrw:#c084fc; --posd:#fbbf24; --posg:#f97066;
+       RW purple, D yellow. F is the single combined forward slot some platforms
+       use instead of C/LW/RW (Fantrax); it shares LW's blue because the two can
+       never appear in the same league. */
+    --posc:#34d399; --poslw:#60a5fa; --posrw:#c084fc; --posd:#fbbf24; --posg:#f97066;
+    --posf:#60a5fa;
     --me:#3b2f6b;
   }
   *{box-sizing:border-box}
@@ -53,7 +56,7 @@
   .pos.QB{background:var(--qb)} .pos.RB{background:var(--rb)} .pos.WR{background:var(--wr)}
   .pos.TE{background:var(--te)} .pos.K{background:var(--k)} .pos.DST{background:var(--dst)}
   .pos.C{background:var(--posc)} .pos.LW{background:var(--poslw)} .pos.RW{background:var(--posrw)}
-  .pos.D{background:var(--posd)} .pos.G{background:var(--posg)}
+  .pos.D{background:var(--posd)} .pos.G{background:var(--posg)} .pos.F{background:var(--posf)}
   .sportbar{display:inline-flex;gap:2px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:2px}
   .sportbar button{background:transparent;border:none;color:var(--muted);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}
   .sportbar button.active{background:var(--accent);color:#fff}
@@ -2022,7 +2025,7 @@ Brent Burns,D,COL,204.0,557.0,414.8,11,75,18.9,11.0,21.0,30.2,0.9,157.3,83.2,18.
 Sam Bennett,C,FLA,205.0,83.0,453.7,11,73,18.5,25.0,30.7,-9.6,13.4,193.1,30.7,110.5,,,,,205.0,83.0,8477935
 J.J. Moser,D,TBL,206.0,559.0,367.1,11,74,21.6,6.6,20.6,38.4,0.9,104.0,85.2,57.1,,,,,206.0,,8482655
 Elias Pettersson,C,VAN,207.0,119.0,411.0,11,72,19.0,14.6,35.0,-29.2,21.4,128.4,105.1,65.2,,,,,207.0,119.0,8480012
-Elias Pettersson,D/C,VAN,207.0,119.0,176.3,11,70,15.0,3.0,7.0,-16.0,0.0,46.0,85.0,136.0,,,,,207.0,119.0,8483678
+Elias Pettersson,D,VAN,398.0,398.0,176.3,11,70,15.0,3.0,7.0,-16.0,0.0,46.0,85.0,136.0,,,,,,,8483678
 William Eklund,LW/C,SJS,208.0,140.0,387.8,11,74,18.5,14.2,36.1,-29.4,15.2,167.0,48.4,68.3,,,,,208.0,140.0,8482667
 Jake Allen,G,NJD,209.0,259.0,452.4,11,49,0,,,,,,,,22.5,1234.3,132.4,1.3,209.0,259.0,8474596
 Tyler Bertuzzi,LW,CHI,210.0,250.0,425.9,11,74,18.4,30.0,24.4,-15.0,19.7,153.6,22.5,51.5,,,,,210.0,250.0,8477479
@@ -2094,7 +2097,6 @@ Elias Lindholm,C/RW,BOS,277.0,189.0,391.8,12,69,17.9,17.0,31.0,-7.0,20.0,114.0,5
 John-Jason Peterka,RW,UTA,278.0,630.0,388.1,12,75,16.0,22.9,20.1,5.5,4.6,145.4,17.4,14.6,,,,,,,8482175
 Josh Manson,D,COL,279.0,631.0,387.5,12,74,17.8,4.7,24.4,39.3,0.0,119.9,92.7,163.0,,,,,,,8476312
 Vladimir Tarasenko,RW,MIN,280.0,349.0,386.5,12,72,14.9,22.1,23.0,-10.6,12.5,142.1,31.7,57.6,,,,,,349.0,8475765
-Vladimir Tarasenko,RW,MIN,281.0,349.0,386.5,12,72,14.9,22.1,23.0,-10.6,12.5,142.1,31.7,57.6,,,,,,349.0,8475765
 Chris Kreider,LW,ANA,282.0,195.0,384.4,12,72,17.0,21.1,26.9,-3.8,16.3,133.4,19.2,66.2,,,,,,195.0,8475184
 Ryan McLeod,C,BUF,283.0,635.0,382.2,12,75,17.6,13.0,37.0,23.1,6.5,83.3,31.5,14.8,,,,,,,8480802
 Anton Lundell,C,FLA,284.0,207.0,380.4,12,67,19.2,18.8,27.2,-8.4,15.7,144.5,36.6,78.5,,,,,,207.0,8482113
@@ -2208,7 +2210,6 @@ Louis Crevier,D,CHI,391.0,743.0,297.4,12,74,17.1,6.6,17.1,-1.9,0.0,108.2,90.1,11
 Gustav Forsling,D,FLA,392.0,289.0,296.3,12,75,22.6,1.9,24.4,-4.7,1.9,105.0,91.9,48.8,,,,,,289.0,8478055
 Brayden Schenn,C/LW,NYI,393.0,237.0,295.4,12,75,16.8,16.9,19.7,-26.2,8.4,111.6,38.4,168.8,,,,,,237.0,8475170
 Jordan Martinook,LW,CAR,394.0,746.0,295.2,12,73,14.8,11.4,16.1,5.7,0.0,103.3,47.4,106.2,,,,,,,8476921
-Jordan Martinook,LW,CAR,395.0,747.0,295.2,12,73,14.8,11.4,16.1,5.7,0.0,103.3,47.4,106.2,,,,,,,8476921
 Ross Colton,C,COL,396.0,748.0,295.0,12,71,12.5,8.8,14.6,8.8,0.0,148.8,24.3,154.6,,,,,,,8479525
 Jaden Schwartz,LW,SEA,397.0,749.0,294.9,12,59,16.1,13.0,17.7,5.9,3.5,96.8,49.6,37.8,,,,,,,8475768
 `;
@@ -2283,7 +2284,7 @@ const LEAGUES_DEFAULT = {
     owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
     meOwner:'Me',
     ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
-    poolDataRevision:'nhl-2026-09-26-platform-eligibility',
+    poolDataRevision:'nhl-2026-09-28-dedupe-and-position-repair',
     platformEligibility:{yahoo:{'jason robertson':'LW/RW'}},
     rostersRaw:'',
     playersCsv: PLAYERS_CSV_NHL,
@@ -2299,6 +2300,9 @@ const LEAGUES_DEFAULT = {
     owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
     meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
     platformEligibility:{yahoo:{'jason robertson':'LW/RW'}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
+    // Shares PLAYERS_CSV_NHL, so it needs its own revision or a corrected pool
+    // never reaches this profile's already-seeded cloud copy.
+    poolDataRevision:'nhl-2026-09-28-dedupe-and-position-repair',
   },
   'yahoo-nhl-public-roto': {
     id:'yahoo-nhl-public-roto', name:'Yahoo NHL Public — Rotisserie (10-team reference)', sport:'nhl', platform:'yahoo',
@@ -2307,6 +2311,7 @@ const LEAGUES_DEFAULT = {
     scoringLabel:'Rotisserie', draftDateLabel:'TBD', keeperDeadlineLabel:'—',
     starters:{C:2,LW:2,RW:2,D:4,G:2}, flexEligible:[], scoringMode:'roto',
     categoryStats:{skater:['G','A','+/-','PPP','SOG','BLK'],goalie:['W','GAA','SV%','SHO']}, maxGamesPlayed:82,
+    poolDataRevision:'nhl-2026-09-28-dedupe-and-position-repair',
     owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10'],
     meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10},
     platformEligibility:{yahoo:{'jason robertson':'LW/RW'}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
@@ -2874,7 +2879,8 @@ const NHL_MY_RANK={
   projTrustGames:65,
   minConfidence:0.85,
   flexibilityBonusPerExtra:0.035,
-  replacementBenchShare:{C:0.25,LW:0.55,RW:0.55,D:0.65,G:0.35},
+  // F is the combined forward slot on platforms that don't split C/LW/RW.
+  replacementBenchShare:{C:0.25,LW:0.55,RW:0.55,F:0.5,D:0.65,G:0.35},
 };
 function nhlProjectedPoints(p){
   const sc=LEAGUE.scoring,st=p&&p.st||{};
@@ -2918,9 +2924,9 @@ function nhlCategoryValue(){
 }
 function nhlReplacementLevels(valueKey){
   const out={};
-  SPORT.positions.forEach(pos=>{
+  activePositions().forEach(pos=>{
     const starters=(LEAGUE.teams||10)*((LEAGUE.starters&&LEAGUE.starters[pos])||0);
-    const extra=Math.round((LEAGUE.teams||10)*(NHL_MY_RANK.replacementBenchShare[pos]||0.25));
+    const extra=Math.round((LEAGUE.teams||10)*(NHL_MY_RANK.replacementBenchShare[pos]!=null?NHL_MY_RANK.replacementBenchShare[pos]:0.25));
     const demand=Math.max(1,starters+extra);
     const pool=PLAYERS.filter(p=>playerFillsPos(p,pos)&&Number.isFinite(+p[valueKey]))
       .slice().sort((x,y)=>(+y[valueKey]||0)-(+x[valueKey]||0));
@@ -3401,7 +3407,32 @@ let TENDENCIES={};
 function blankBias(){const b={}; TEND_POS_FOR().forEach(p=>b[p]=0); return b;}
 function rebuildTendencies(){ TENDENCIES={}; OWNERS.forEach(o=>{TENDENCIES[o]={enabled:false,bias:blankBias()};}); }
 
-function blankCounts(){const c={}; SPORT.positions.forEach(p=>c[p]=0); return c;}
+// Which positions this league actually rosters. Usually the sport's own list, but
+// platforms differ: a Fantrax hockey league commonly rosters F/D/G and never splits
+// forwards into C/LW/RW. Everything downstream — counts, roster slots, replacement
+// levels, the position filter — asks here rather than assuming the sport's list.
+function activePositions(){
+  return (LEAGUE && LEAGUE.positions && LEAGUE.positions.length) ? LEAGUE.positions : SPORT.positions;
+}
+// Folding forwards into one F slot is derivable rather than data we must fetch: a
+// league that rosters F has no C/LW/RW concept at all, so every forward maps to F.
+// That is also exactly why such a league has no multi-eligibility to look up —
+// nobody is both F and D, and nothing intersects G.
+function applyLeaguePositionMap(profile){
+  const map=profile&&profile.positionMap;
+  if(!map||!Object.keys(map).length)return;
+  const fold=(list)=>{
+    const out=[];
+    (list||[]).forEach(x=>{const v=map[x]||x; if(v&&!out.includes(v))out.push(v);});
+    return out;
+  };
+  PLAYERS.forEach(pl=>{
+    pl.posEligible=fold(pl.posEligible);
+    if(pl.eligibility) Object.keys(pl.eligibility).forEach(k=>{pl.eligibility[k]=fold(pl.eligibility[k]);});
+    pl.pos=map[pl.pos]||pl.pos;
+  });
+}
+function blankCounts(){const c={}; activePositions().forEach(p=>c[p]=0); return c;}
 function countsOf(roster){const c=blankCounts(); roster.forEach(p=>{if(c[p.pos]!=null)c[p.pos]++;}); return c;}
 // How badly does a team need another <pos>? 1 = filling a starter, negative = hoarding.
 function needScore(counts,pos){
@@ -4142,7 +4173,7 @@ function renderDraftAnalysis(){
 // Whatever's left after starters is the bench.
 function slotRosterPlayers(roster,starters){
   const slots=[];
-  SPORT.positions.forEach(pos=>{for(let i=0;i<(starters[pos]||0);i++)slots.push({label:pos});});
+  activePositions().forEach(pos=>{for(let i=0;i<(starters[pos]||0);i++)slots.push({label:pos});});
   for(let i=0;i<(starters.FLEX||0);i++)slots.push({label:'FLEX'});
   for(let i=0;i<(starters.SUPERFLEX||0);i++)slots.push({label:'SFLEX'});
   const canFill=(p,label)=>{
@@ -4884,7 +4915,7 @@ async function importFromFantrax(){
     const r=await fetch('/api/import/fantrax/'+encodeURIComponent(fid));
     const data=await r.json();
     if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
-    ['platform','sport','platformEligibility','scoringMode','scoring','categoryStats','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'].forEach(k=>{if(data[k]!==undefined)PENDING_LEAGUE_META[k]=data[k];});
+    ['platform','sport','platformEligibility','positions','positionMap','scoringMode','scoring','categoryStats','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'].forEach(k=>{if(data[k]!==undefined&&data[k]!==null)PENDING_LEAGUE_META[k]=data[k];});
     el('lgName').value=data.name||'';
     el('lgTeams').value=data.teams||12;
     el('lgOwners').value=(data.owners||[]).join(', ');
@@ -5683,8 +5714,8 @@ function fillPosFilters(){
   ['posFilter','auctionPosFilter'].forEach(id=>{
     const sel=el(id); if(!sel) return;
     const cur=sel.value;
-    sel.innerHTML='<option value="ALL">All positions</option>'+SPORT.positions.map(p=>`<option>${p}</option>`).join('');
-    sel.value=SPORT.positions.includes(cur)?cur:'ALL';
+    sel.innerHTML='<option value="ALL">All positions</option>'+activePositions().map(p=>`<option>${p}</option>`).join('');
+    sel.value=activePositions().includes(cur)?cur:'ALL';
   });
 }
 
@@ -5712,6 +5743,11 @@ function applyLeagueProfile(id){
     auctionBudget:profile.auctionBudget||200,rosterSize:profile.rosterSize||profile.rounds||16,irSlots:profile.irSlots||0,minBid:profile.minBid||1,
     scoringLabel:profile.scoringLabel||'TBD', draftDateLabel:profile.draftDateLabel||'TBD', keeperDeadlineLabel:profile.keeperDeadlineLabel||'TBD',
     sport:SPORT.id, platform:profile.platform||null, scoringMode:profile.scoringMode||'points', scoring:profile.scoring||null,
+    // A league may roster a different position set than the sport's default (a
+    // Fantrax hockey league uses F/D/G); positionMap folds the sport's positions
+    // into it. Absent both, activePositions() falls back to the sport pack.
+    positions:(profile.positions&&profile.positions.length)?profile.positions.slice():null,
+    positionMap:profile.positionMap||null,
     categoryStats:profile.categoryStats||null, maxGamesPlayed:profile.maxGamesPlayed||null,
     maxAcquisitionsPerWeek:profile.maxAcquisitionsPerWeek||null, minGoalieGamesPerWeek:profile.minGoalieGamesPerWeek||null,
   };
@@ -5745,6 +5781,7 @@ function applyLeagueProfile(id){
   if(profile.superflexAdpOverrides){
     Object.entries(profile.superflexAdpOverrides).forEach(([name,adp])=>{const p=findPlayer(name);if(p){p.adp=+adp;p.ecr=+adp;}});
   }
+  applyLeaguePositionMap(profile);
   computePosRanks();
   computeMyRanks();
   fillPosFilters();
@@ -5808,7 +5845,7 @@ async function fetchCloudLeagues(){
       // already in KV, so production kept running the generic defaults and priced
       // a backup quarterback at $9. Backfill each such field independently, and
       // only where the cloud copy has no value at all.
-      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','platform','platformEligibility','scoring','scoringMode','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'];
+      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','platform','platformEligibility','positions','positionMap','scoring','scoringMode','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'];
       const isEmpty=v=>v==null||v===''||(Array.isArray(v)&&!v.length)||(typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length);
       const toPatch=[];
       Object.values(LEAGUES_DEFAULT).forEach(def=>{

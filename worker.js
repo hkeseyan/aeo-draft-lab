@@ -1289,6 +1289,24 @@ var worker_default = {
           if (draftType) notes.push(`Fantrax reports a ${draftType} draft.`);
           if (unresolved) notes.push(`${unresolved} roster entries kept their Fantrax player id because the player dictionary did not name them.`);
           notes.push("Fantrax roster data carries no drafted round or keeper flag, so players are marked FA/NONE.");
+          // A Fantrax league declares the slots it actually rosters. Hockey leagues
+          // there commonly use one combined forward slot (F) rather than C/LW/RW, and
+          // such a league has no centre/wing concept at all — every forward folds into
+          // F. Derive that from the league's own constraints instead of guessing, and
+          // note that it is also why no player is multi-eligible in that league.
+          const constraintCodes = (() => {
+            const pc = info && info.rosterInfo && info.rosterInfo.positionConstraints;
+            if (!pc) return [];
+            const raw = Array.isArray(pc) ? pc.map((x) => x && (x.position || x.posId || x.code || x.id)) : Object.keys(pc);
+            const known = ["C", "LW", "RW", "F", "W", "D", "G"];
+            return [...new Set(raw.map((x) => String(x || "").toUpperCase().trim()))].filter((x) => known.includes(x));
+          })();
+          let positions = null, positionMap = null;
+          if (constraintCodes.includes("F") && !constraintCodes.includes("C")) {
+            positions = ["F", "D", "G"].filter((x) => constraintCodes.includes(x));
+            positionMap = { C: "F", LW: "F", RW: "F", W: "F" };
+            notes.push("This league rosters one combined forward slot (F), so C/LW/RW fold into F and nobody is multi-eligible.");
+          }
           return J({
             name: info && info.leagueName || "Imported Fantrax League",
             teams: teamIds.length || 12,
@@ -1300,6 +1318,8 @@ var worker_default = {
             sport: "nhl",
             platform: "fantrax",
             platformEligibility: { fantrax: platformEligibility },
+            positions,
+            positionMap,
             _source: "fantrax",
             _fantraxLeagueId: fxId,
             _note: notes.join(" ")

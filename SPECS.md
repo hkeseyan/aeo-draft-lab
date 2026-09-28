@@ -173,7 +173,22 @@ eligible for, slash-separated (`C/LW`), coloured by his primary — no chips or
 abbreviations. The position filter matches eligibility rather than the primary
 position, so filtering to LW surfaces every C/LW too.
 
-Hockey position colours: **G red, C blue, LW green, RW purple, D yellow**.
+Hockey position colours: **C green, LW blue, RW purple, D yellow, G red**, plus
+**F blue** — F shares LW's blue because a league uses one or the other, never both.
+
+**Positions are a league question, not only a sport one.** Platforms differ: a Fantrax
+hockey league commonly rosters **F/D/G** and never splits forwards into C/LW/RW. A
+league profile may therefore declare its own `positions` list plus a `positionMap`
+folding the sport's positions into it (`{C:'F',LW:'F',RW:'F',W:'F'}`), and
+`activePositions()` resolves league-first, sport-fallback. Every downstream consumer
+asks it — roster counts, starter slots, replacement levels, the position filter.
+
+That fold is **derivable, not data to fetch**: a league that rosters F has no
+centre/wing concept, so every forward becomes F — which is also precisely why such a
+league has no multi-eligibility to look up. Nobody is both F and D, and nothing
+intersects G. The Fantrax importer derives both fields from the league's own
+`rosterInfo.positionConstraints`, and leaves them null when the league does split
+forwards or reports no constraints, rather than inventing a position list.
 
 **Eligibility is per platform, because it differs per platform.** Fantrax may list a
 forward `C/LW` where Yahoo lists the same player `C/LW/RW`, and the wrong one is

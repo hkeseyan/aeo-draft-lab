@@ -91,10 +91,23 @@ ok &= check('fourth slot applied to board and roster owner',
   'mySlot===4 && LEAGUE.mySlot===4 && OWNER_SLOT.Me===4 && overall(1,mySlot)===4', true);
 w.document.getElementById('draftSlotInput').value = '1';
 await ev('setNhlDraftSlot()');
-ok &= check('NHL pool loaded', 'PLAYERS.length', 400);
+ok &= check('NHL pool loaded', 'PLAYERS.length', 398);
 ok &= check('top NHL player is a real skater', 'PLAYERS[0].name', v => /MacKinnon|McDavid|Kucherov/.test(v));
 ok &= check('fantasy points per game computed', 'PLAYERS[0].fppg', v => v > 5);
 ok &= check('projected category totals parsed', 'PLAYERS[0].st.sog', v => v > 100);
+ok &= check('no player appears twice in the pool', () => {
+  const ids = JSON.parse(ev('JSON.stringify(PLAYERS.map(p=>p.nhlId).filter(Boolean))'));
+  const dupes = ids.filter((x, i) => ids.indexOf(x) !== i);
+  return dupes.length ? 'duplicate nhl_id: ' + [...new Set(dupes)] : true;
+}, true);
+ok &= check('no impossible eligibility (a skater cannot be D and a forward)', () => {
+  const bad = JSON.parse(ev(`JSON.stringify(PLAYERS.filter(p=>p.posEligible.includes('D')&&p.posEligible.some(x=>['C','LW','RW'].includes(x))).map(p=>p.name+':'+p.posEligible.join('/')))`));
+  return bad.length ? bad.join(', ') : true;
+}, true);
+ok &= check('no goalie is eligible anywhere else', () => {
+  const bad = JSON.parse(ev(`JSON.stringify(PLAYERS.filter(p=>p.posEligible.includes('G')&&p.posEligible.length>1).map(p=>p.name))`));
+  return bad.length ? bad.join(', ') : true;
+}, true);
 ok &= check('only hockey positions in pool', '[...new Set(PLAYERS.map(p=>p.pos))].sort().join(",")', 'C,D,G,LW,RW');
 ok &= check('goalies present', 'PLAYERS.filter(p=>p.pos==="G").length', v => v > 10);
 ok &= check('NHL starting slots', slots, 'C,C,LW,LW,RW,RW,D,D,D,D,G,G');
@@ -141,7 +154,7 @@ ok &= check('My Rank is independent of ADP changes', () => ev(`(function(){
 })()`), true);
 ok &= check('Yahoo reference eligibility gives Jason Robertson both wings',
   'JSON.stringify(eligiblePositions(PLAYERS.find(p=>p.name==="Jason Robertson")))', '["LW","RW"]');
-ok &= check('every ranked player carries an explanation', 'PLAYERS.filter(p=>p.myRankWhy!=null).length', 400);
+ok &= check('every ranked player carries an explanation', 'PLAYERS.filter(p=>p.myRankWhy!=null).length', 398);
 ok &= check('football My Rank model is untouched', () => ev('SPORTS.nfl.myRankModel') + '/' + ev('SPORTS.nhl.myRankModel'), 'nfl/nhl');
 
 const oldFetch = w.fetch;
@@ -216,11 +229,15 @@ ok &= check('multi-position matching reroutes flexible player', () => ev(`(funct
   return fit.starterSlots.every(x=>x.player)&&fit.starterSlots.find(x=>x.label==='LW').player.name==='Leon Draisaitl';
 })()`), true);
 
-ok &= check('position colours: G red, C blue, LW green, RW purple, D yellow', () => {
+ok &= check('position colours: C green, LW blue, RW purple, D yellow, G red', () => {
   const css = fs.readFileSync('public/index.html','utf8');
   const m = css.match(/--posc:(#\w+); --poslw:(#\w+); --posrw:(#\w+); --posd:(#\w+); --posg:(#\w+);/);
   return m ? m.slice(1).join(',') : 'vars not found';
-}, '#60a5fa,#34d399,#c084fc,#fbbf24,#f97066');
+}, '#34d399,#60a5fa,#c084fc,#fbbf24,#f97066');
+ok &= check('F shares LW blue and has its own class', () => {
+  const css = fs.readFileSync('public/index.html','utf8');
+  return /--posf:#60a5fa;/.test(css) && /\.pos\.F\{background:var\(--posf\)\}/.test(css) ? true : 'F styling missing';
+}, true);
 ok &= check('no F chip on the board', () => {
   const cell = ev('posCell(PLAYERS.find(p=>p.posEligible.length>1)||PLAYERS[0])');
   return /fchip/.test(cell) || />F</.test(cell) ? cell : true;
@@ -353,6 +370,48 @@ ok &= check('roto reference is 10 teams with blocks and 82-game cap',
   'LEAGUE.teams===10 && LEAGUE.scoringMode==="roto" && LEAGUE.categoryStats.skater.includes("BLK") && !LEAGUE.categoryStats.skater.includes("HIT") && LEAGUE.maxGamesPlayed===82', true);
 ok &= check('roto profile computes category replacement value',
   'PLAYERS.filter(p=>Number.isFinite(p.categoryValue)&&/roto z/.test(p.myRankWhy||"")).length', v => v > 300);
+// --- a platform that rosters F/D/G instead of C/LW/RW (Fantrax) ---
+ev(`LEAGUES['fx-fdg-test']={id:'fx-fdg-test',name:'Fantrax F/D/G test',sport:'nhl',platform:'fantrax',
+  leagueType:'redraft',draftType:'snake',teams:12,rounds:18,rosterSize:18,mySlot:1,
+  scoringMode:'points',starters:{F:9,D:4,G:2},flexEligible:[],
+  positions:['F','D','G'],positionMap:{C:'F',LW:'F',RW:'F',W:'F'},
+  owners:['Me'],meOwner:'Me',ownerSlot:{'Me':1},rostersRaw:'',playersCsv:PLAYERS_CSV_NHL}`);
+ev("switchLeague('fx-fdg-test')");
+await new Promise(r => setTimeout(r, 500));
+ok &= check('league position list overrides the sport default', 'activePositions().join(",")', 'F,D,G');
+ok &= check('forwards fold into F', () => ev(`(function(){
+  const d=PLAYERS.find(p=>p.name==='Leon Draisaitl');   // C/LW on Yahoo
+  const k=PLAYERS.find(p=>p.name==='Cale Makar');       // D stays D
+  const g=PLAYERS.find(p=>p.name==='Andrei Vasilevskiy');
+  return [d&&d.posEligible.join('/'), k&&k.posEligible.join('/'), g&&g.posEligible.join('/')].join(' | ');
+})()`), 'F | D | G');
+ok &= check('nothing is multi-eligible once forwards are folded', 'PLAYERS.filter(p=>p.posEligible.length>1).length', 0);
+ok &= check('no C/LW/RW survives in the pool', '[...new Set(PLAYERS.map(p=>p.pos))].sort().join(",")', 'D,F,G');
+ok &= check('counts are keyed F/D/G', 'Object.keys(blankCounts()).join(",")', 'F,D,G');
+ok &= check('roster slots are F/D/G', () => ev('slotRosterPlayers([],LEAGUE.starters).starterSlots.map(x=>x.label).join(",")'),
+  'F,F,F,F,F,F,F,F,F,D,D,D,D,G,G');
+ok &= check('position filter offers F/D/G', () => [...w.document.getElementById('posFilter').options].map(o => o.value).join(','), 'ALL,F,D,G');
+ok &= check('board renders F, not C/LW', () => {
+  const cell = ev("posCell(PLAYERS.find(p=>p.pos==='F'))");
+  return /class="pos F">F</.test(cell) ? true : cell;
+}, true);
+ok &= check('no centre-only penalty where centres do not exist', () => ev(`(function(){
+  return PLAYERS.filter(p=>/centre-only|dual forward|three forward/.test(p.myRankWhy||'')).length;
+})()`), 0);
+ok &= check('My Rank prices against F/D/G replacement, never C/LW/RW', () => ev(`(function(){
+  const why=PLAYERS.map(p=>p.myRankWhy||'').join(' ');
+  const has=(t)=>new RegExp(t+' replacement').test(why);
+  return JSON.stringify({F:has('F'),D:has('D'),G:has('G'),C:has('C'),LW:has('LW'),RW:has('RW')});
+})()`), '{"F":true,"D":true,"G":true,"C":false,"LW":false,"RW":false}');
+ok &= check('no flexibility bonus where nobody is multi-eligible', () => ev(`(function(){
+  return PLAYERS.filter(p=>/flex/i.test(p.myRankWhy||'')).length;
+})()`), 0);
+ok &= check('rivals draft a legal F/D/G roster', () => ev(`(function(){
+  resetDraft(); for(let i=1;i<=100;i++) rivalPick(i,0);
+  const c=countsOf(rosterOf(2));
+  return JSON.stringify(c);
+})()`), v => { const c = JSON.parse(v); return Object.keys(c).join(',') === 'F,D,G' && (c.G||0) <= 3; });
+
 ev('switchLeague("aeo-keepers")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('football unaffected after switching back', () => ev('SPORT.id') + ' ' + slots(), 'nfl QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');

@@ -97,4 +97,39 @@ stubFantrax({
 body = await (await call('cap')).json();
 assert.equal(body.draftType, 'auction', 'draftType should also be read from draftSettings');
 
+// ---- a hockey league that rosters one combined forward slot ---------------
+stubFantrax({
+  info: {
+    leagueName: 'Forwards Only',
+    rosterInfo: { maxTotalPlayers: 18, positionConstraints: { F: {}, D: {}, G: {}, Res: {} } },
+    teamInfo: {}, playerInfo: { p1: { name: 'A Forward' } },
+  },
+  rosters: { rosters: { t1: { teamName: 'T', rosterItems: [{ id: 'p1' }] } } },
+});
+body = await (await call('fdg')).json();
+assert.deepEqual(body.positions, ['F', 'D', 'G'], 'F/D/G leagues report their own position list');
+assert.deepEqual(body.positionMap, { C: 'F', LW: 'F', RW: 'F', W: 'F' }, 'forwards fold into F');
+assert.match(body._note, /combined forward slot/);
+
+// ---- a league that does split the forwards keeps the sport's positions ----
+stubFantrax({
+  info: {
+    leagueName: 'Split Forwards',
+    rosterInfo: { maxTotalPlayers: 20, positionConstraints: { C: {}, LW: {}, RW: {}, D: {}, G: {} } },
+    teamInfo: {}, playerInfo: {},
+  },
+  rosters: { rosters: { t1: { teamName: 'T', rosterItems: [] } } },
+});
+body = await (await call('split')).json();
+assert.equal(body.positions, null, 'a C/LW/RW league must not be folded');
+assert.equal(body.positionMap, null);
+
+// ---- no constraints reported at all --------------------------------------
+stubFantrax({
+  info: { leagueName: 'Bare', teamInfo: {}, playerInfo: {} },
+  rosters: { rosters: { t1: { teamName: 'T', rosterItems: [] } } },
+});
+body = await (await call('bare')).json();
+assert.equal(body.positions, null, 'missing constraints must not invent a position list');
+
 console.log('Fantrax import: all checks passed.');
