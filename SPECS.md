@@ -203,7 +203,27 @@ eligible for, slash-separated (`C/LW`), coloured by his primary — no chips or
 abbreviations. The position filter matches eligibility rather than the primary
 position, so filtering to LW surfaces every C/LW too.
 
-Hockey position colours: **G red, C blue, LW green, RW purple, D yellow**.
+Hockey position colours: **C green, LW blue, RW purple, D yellow, G red**, plus
+**F blue** — F shares LW's blue because a league uses one or the other, never both.
+
+**Positions are a league question, not only a sport one.** Platforms differ: a Fantrax
+Classic hockey league rosters **F/D/G** and never splits forwards into C/LW/RW. A
+league profile declares `rosterPositions`, and `rosterPositionOrder()` resolves
+league-first with the sport pack as fallback. `rosterEligiblePositions()` then
+*projects* a player's underlying eligibility onto those slots — a C/LW becomes F in
+such a league — without rewriting the pool, so switching leagues never corrupts it.
+Roster counts, starter slots and replacement levels all work from that projection.
+
+The board **displays the positions as the active league rosters them**: F in an F/D/G
+league, C/LW elsewhere. Showing "C/LW" in a league that cannot honour the distinction
+would imply a lineup choice that does not exist there. The underlying per-platform
+eligibility is untouched, so switching back restores C/LW immediately.
+
+That projection is also why such a league has no multi-eligibility to look up: with
+every forward collapsing to F, nobody is both F and D and nothing intersects G. The
+Fantrax importer derives `rosterPositions` from the league's own
+`rosterInfo.positionConstraints` and leaves it null when no constraints are reported,
+rather than inventing a position list.
 
 **Eligibility is per platform, because it differs per platform.** Fantrax may list a
 forward `C/LW` where Yahoo lists the same player `C/LW/RW`, and the wrong one is

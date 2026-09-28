@@ -12,7 +12,11 @@
     /* Hockey. Same palette roles as football so the board reads identically. */
     /* Hockey. Same five shades as before, reassigned: G red, C blue, LW green,
        RW purple, D yellow. */
-    --posc:#60a5fa; --poslw:#34d399; --posrw:#c084fc; --posd:#fbbf24; --posg:#f97066;
+    --posc:#34d399; --poslw:#60a5fa; --posrw:#c084fc; --posd:#fbbf24; --posg:#f97066;
+    /* F is the single combined forward slot some platforms roster instead of
+       C/LW/RW (Fantrax Classic). It shares LW's blue because a league uses one
+       scheme or the other and never both at once. */
+    --posf:#60a5fa;
     --me:#3b2f6b;
   }
   *{box-sizing:border-box}
@@ -53,7 +57,7 @@
   .pos.QB{background:var(--qb)} .pos.RB{background:var(--rb)} .pos.WR{background:var(--wr)}
   .pos.TE{background:var(--te)} .pos.K{background:var(--k)} .pos.DST{background:var(--dst)}
   .pos.C{background:var(--posc)} .pos.LW{background:var(--poslw)} .pos.RW{background:var(--posrw)}
-  .pos.D{background:var(--posd)} .pos.G{background:var(--posg)}
+  .pos.D{background:var(--posd)} .pos.G{background:var(--posg)} .pos.F{background:var(--posf)}
   .sportbar{display:inline-flex;gap:2px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:2px}
   .sportbar button{background:transparent;border:none;color:var(--muted);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}
   .sportbar button.active{background:var(--accent);color:#fff}
@@ -2046,7 +2050,7 @@ Brent Burns,D,COL,204.0,557.0,414.8,11,75,18.9,11.0,21.0,30.2,0.9,157.3,83.2,18.
 Sam Bennett,C,FLA,205.0,83.0,453.7,11,73,18.5,25.0,30.7,-9.6,13.4,193.1,30.7,110.5,,,,,205.0,83.0,8477935
 J.J. Moser,D,TBL,206.0,559.0,367.1,11,74,21.6,6.6,20.6,38.4,0.9,104.0,85.2,57.1,,,,,206.0,,8482655
 Elias Pettersson,C,VAN,207.0,119.0,411.0,11,72,19.0,14.6,35.0,-29.2,21.4,128.4,105.1,65.2,,,,,207.0,119.0,8480012
-Elias Pettersson,D/C,VAN,207.0,119.0,176.3,11,70,15.0,3.0,7.0,-16.0,0.0,46.0,85.0,136.0,,,,,207.0,119.0,8483678
+Elias Pettersson,D,VAN,398.0,398.0,176.3,11,70,15.0,3.0,7.0,-16.0,0.0,46.0,85.0,136.0,,,,,,,8483678
 William Eklund,LW/C,SJS,208.0,140.0,387.8,11,74,18.5,14.2,36.1,-29.4,15.2,167.0,48.4,68.3,,,,,208.0,140.0,8482667
 Jake Allen,G,NJD,209.0,259.0,452.4,11,49,0,,,,,,,,22.5,1234.3,132.4,1.3,209.0,259.0,8474596
 Tyler Bertuzzi,LW,CHI,210.0,250.0,425.9,11,74,18.4,30.0,24.4,-15.0,19.7,153.6,22.5,51.5,,,,,210.0,250.0,8477479
@@ -2118,7 +2122,6 @@ Elias Lindholm,C/RW,BOS,277.0,189.0,391.8,12,69,17.9,17.0,31.0,-7.0,20.0,114.0,5
 John-Jason Peterka,RW,UTA,278.0,630.0,388.1,12,75,16.0,22.9,20.1,5.5,4.6,145.4,17.4,14.6,,,,,,,8482175
 Josh Manson,D,COL,279.0,631.0,387.5,12,74,17.8,4.7,24.4,39.3,0.0,119.9,92.7,163.0,,,,,,,8476312
 Vladimir Tarasenko,RW,MIN,280.0,349.0,386.5,12,72,14.9,22.1,23.0,-10.6,12.5,142.1,31.7,57.6,,,,,,349.0,8475765
-Vladimir Tarasenko,RW,MIN,281.0,349.0,386.5,12,72,14.9,22.1,23.0,-10.6,12.5,142.1,31.7,57.6,,,,,,349.0,8475765
 Chris Kreider,LW,ANA,282.0,195.0,384.4,12,72,17.0,21.1,26.9,-3.8,16.3,133.4,19.2,66.2,,,,,,195.0,8475184
 Ryan McLeod,C,BUF,283.0,635.0,382.2,12,75,17.6,13.0,37.0,23.1,6.5,83.3,31.5,14.8,,,,,,,8480802
 Anton Lundell,C,FLA,284.0,207.0,380.4,12,67,19.2,18.8,27.2,-8.4,15.7,144.5,36.6,78.5,,,,,,207.0,8482113
@@ -2232,7 +2235,6 @@ Louis Crevier,D,CHI,391.0,743.0,297.4,12,74,17.1,6.6,17.1,-1.9,0.0,108.2,90.1,11
 Gustav Forsling,D,FLA,392.0,289.0,296.3,12,75,22.6,1.9,24.4,-4.7,1.9,105.0,91.9,48.8,,,,,,289.0,8478055
 Brayden Schenn,C/LW,NYI,393.0,237.0,295.4,12,75,16.8,16.9,19.7,-26.2,8.4,111.6,38.4,168.8,,,,,,237.0,8475170
 Jordan Martinook,LW,CAR,394.0,746.0,295.2,12,73,14.8,11.4,16.1,5.7,0.0,103.3,47.4,106.2,,,,,,,8476921
-Jordan Martinook,LW,CAR,395.0,747.0,295.2,12,73,14.8,11.4,16.1,5.7,0.0,103.3,47.4,106.2,,,,,,,8476921
 Ross Colton,C,COL,396.0,748.0,295.0,12,71,12.5,8.8,14.6,8.8,0.0,148.8,24.3,154.6,,,,,,,8479525
 Jaden Schwartz,LW,SEA,397.0,749.0,294.9,12,59,16.1,13.0,17.7,5.9,3.5,96.8,49.6,37.8,,,,,,,8475768
 `;
@@ -2333,7 +2335,7 @@ const LEAGUES_DEFAULT = {
     owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
     meOwner:'Me',
     ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
-    poolDataRevision:'nhl-2026-09-26-platform-eligibility',
+    poolDataRevision:'nhl-2026-09-28-dedupe-and-position-repair',
     platformEligibility:{yahoo:{...YAHOO_NHL_VERIFIED_ELIGIBILITY}},
     rostersRaw:'',
     playersCsv: PLAYERS_CSV_NHL,
@@ -2360,6 +2362,9 @@ const LEAGUES_DEFAULT = {
     owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
     meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
     rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
+    // Shares PLAYERS_CSV_NHL, so it needs its own revision or a corrected
+    // pool never reaches this profile's already-seeded cloud copy.
+    poolDataRevision:'nhl-2026-09-28-dedupe-and-position-repair',
   },
   'yahoo-nhl-public-categories': {
     id:'yahoo-nhl-public-categories', name:'Yahoo Public Prize NHL — H2H Categories (12-team reference)', sport:'nhl', platform:'yahoo',
@@ -2373,6 +2378,9 @@ const LEAGUES_DEFAULT = {
     owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
     meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
     platformEligibility:{yahoo:{...YAHOO_NHL_VERIFIED_ELIGIBILITY}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
+    // Shares PLAYERS_CSV_NHL, so it needs its own revision or a corrected
+    // pool never reaches this profile's already-seeded cloud copy.
+    poolDataRevision:'nhl-2026-09-28-dedupe-and-position-repair',
   },
   'yahoo-nhl-public-roto': {
     id:'yahoo-nhl-public-roto', name:'Yahoo Public Prize NHL — Rotisserie (12-team reference)', sport:'nhl', platform:'yahoo',
@@ -2389,6 +2397,9 @@ const LEAGUES_DEFAULT = {
       'The 82-game cap applies by active roster position. Confirm the exact selected league before drafting.'
     ],
     platformEligibility:{yahoo:{...YAHOO_NHL_VERIFIED_ELIGIBILITY}}, rostersRaw:'', playersCsv:PLAYERS_CSV_NHL,
+    // Shares PLAYERS_CSV_NHL, so it needs its own revision or a corrected
+    // pool never reaches this profile's already-seeded cloud copy.
+    poolDataRevision:'nhl-2026-09-28-dedupe-and-position-repair',
   },
   'fantastic-auction': {
     id:'fantastic-auction', name:'Fantastic Keeper Auction', leagueType:'keeper',
@@ -4808,9 +4819,15 @@ function eligibilitySourceNote(){
   else if(SPORT.id==='nhl')market='market: Yahoo ADP';
   return [pos,market].filter(Boolean).join(' · ');
 }
+// Show the positions as THIS league rosters them. In a Fantrax Classic league that
+// rosters F/D/G there is no centre/wing distinction to act on — every lineup, waiver
+// and trade decision is about forwards — so showing "C/LW" there would be a
+// distinction the league cannot honour. rosterEligiblePositions() projects the
+// underlying eligibility onto the league's own slots; elsewhere it is a no-op.
 function posCell(p){
-  const elig=eligiblePositions(p);
-  return '<span class="pos '+p.pos+'">'+elig.join('/')+'</span>';
+  const elig=rosterEligiblePositions(p);
+  const primary=elig.includes(p.pos)?p.pos:(elig[0]||p.pos);
+  return '<span class="pos '+primary+'">'+elig.join('/')+'</span>';
 }
 function rookieBadge(p){ return p.rookie ? '<span class="rkchip" title="Rookie">RK</span>' : ''; }
 function loadPlayersData(txt){const arr=parsePlayers(txt); if(arr.length){PLAYERS=arr; const w=el('seedWarn'); if(w)w.style.display='none';} return arr.length;}
@@ -5148,7 +5165,7 @@ async function importFromFantrax(){
     const r=await fetch('/api/import/fantrax/'+encodeURIComponent(fid));
     const data=await r.json();
     if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
-    ['platform','sport','platformEligibility','scoringMode','scoring','categoryStats','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'].forEach(k=>{if(data[k]!==undefined)PENDING_LEAGUE_META[k]=data[k];});
+    ['platform','sport','platformEligibility','rosterPositions','scoringMode','scoring','categoryStats','maxAcquisitionsPerWeek','minGoalieGamesPerWeek'].forEach(k=>{if(data[k]!==undefined)PENDING_LEAGUE_META[k]=data[k];});
     el('lgName').value=data.name||'';
     el('lgTeams').value=data.teams||12;
     el('lgOwners').value=(data.owners||[]).join(', ');

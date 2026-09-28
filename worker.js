@@ -1407,6 +1407,25 @@ var worker_default = {
           if (draftType) notes.push(`Fantrax reports a ${draftType} draft.`);
           if (unresolved) notes.push(`${unresolved} roster entries kept their Fantrax player id because the player dictionary did not name them.`);
           notes.push("Fantrax roster data carries no drafted round or keeper flag, so players are marked FA/NONE.");
+          // A Fantrax league declares the slots it actually rosters, and hockey leagues
+          // there commonly use one combined forward slot (F) rather than C/LW/RW. Read
+          // that from the league's own constraints rather than assuming either shape —
+          // the built-in Fantrax profile hardcodes F/D/G, but a real league may differ.
+          // rosterPositions is the field the app already resolves positions through.
+          const constraintCodes = (() => {
+            const pc = info && info.rosterInfo && info.rosterInfo.positionConstraints;
+            if (!pc) return [];
+            const raw = Array.isArray(pc) ? pc.map((x) => x && (x.position || x.posId || x.code || x.id)) : Object.keys(pc);
+            const known = ["C", "LW", "RW", "F", "W", "D", "G"];
+            return [...new Set(raw.map((x) => String(x || "").toUpperCase().trim()))].filter((x) => known.includes(x));
+          })();
+          let rosterPositions = null;
+          if (constraintCodes.includes("F") && !constraintCodes.includes("C")) {
+            rosterPositions = ["F", "D", "G"].filter((x) => constraintCodes.includes(x));
+            notes.push("This league rosters one combined forward slot (F), so forwards are treated as F and nobody is multi-eligible.");
+          } else if (constraintCodes.length) {
+            rosterPositions = ["C", "LW", "RW", "D", "G"].filter((x) => constraintCodes.includes(x));
+          }
           return J({
             name: info && info.leagueName || "Imported Fantrax League",
             teams: teamIds.length || 12,
@@ -1418,6 +1437,7 @@ var worker_default = {
             sport: "nhl",
             platform: "fantrax",
             platformEligibility: { fantrax: platformEligibility },
+            rosterPositions,
             _source: "fantrax",
             _fantraxLeagueId: fxId,
             _note: notes.join(" ")

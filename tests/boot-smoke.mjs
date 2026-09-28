@@ -104,10 +104,23 @@ ok &= check('fourth slot applied to board and roster owner',
   'mySlot===4 && LEAGUE.mySlot===4 && OWNER_SLOT.Me===4 && overall(1,mySlot)===4', true);
 w.document.getElementById('draftSlotInput').value = '1';
 await ev('setNhlDraftSlot()');
-ok &= check('NHL pool loaded', 'PLAYERS.length', 400);
+ok &= check('NHL pool loaded', 'PLAYERS.length', 398);
 ok &= check('top NHL player is a real skater', 'PLAYERS[0].name', v => /MacKinnon|McDavid|Kucherov/.test(v));
 ok &= check('fantasy points per game computed', 'PLAYERS[0].fppg', v => v > 5);
 ok &= check('projected category totals parsed', 'PLAYERS[0].st.sog', v => v > 100);
+ok &= check('no player appears twice in the pool', () => {
+  const ids = JSON.parse(ev('JSON.stringify(PLAYERS.map(p=>p.nhlId).filter(Boolean))'));
+  const dupes = [...new Set(ids.filter((x, i) => ids.indexOf(x) !== i))];
+  return dupes.length ? 'duplicate nhl_id: ' + dupes : true;
+}, true);
+ok &= check('no impossible eligibility (a skater cannot be D and a forward)', () => {
+  const bad = JSON.parse(ev(`JSON.stringify(PLAYERS.filter(p=>p.posEligible.includes('D')&&p.posEligible.some(x=>['C','LW','RW'].includes(x))).map(p=>p.name+':'+p.posEligible.join('/')))`));
+  return bad.length ? bad.join(', ') : true;
+}, true);
+ok &= check('no goalie is eligible anywhere else', () => {
+  const bad = JSON.parse(ev(`JSON.stringify(PLAYERS.filter(p=>p.posEligible.includes('G')&&p.posEligible.length>1).map(p=>p.name))`));
+  return bad.length ? bad.join(', ') : true;
+}, true);
 ok &= check('only hockey positions in pool', '[...new Set(PLAYERS.map(p=>p.pos))].sort().join(",")', 'C,D,G,LW,RW');
 ok &= check('goalies present', 'PLAYERS.filter(p=>p.pos==="G").length', v => v > 10);
 ok &= check('NHL starting slots', slots, 'C,C,LW,LW,RW,RW,D,D,D,D,G,G');
@@ -162,7 +175,7 @@ ok &= check('large projection disagreements are visible and explained',
   'PLAYERS.filter(p=>p.projectionDisagreement&&/raw one-season model rank/.test(p.myRankWhy||"")).length', v => v > 0);
 ok &= check('Yahoo reference eligibility gives Jason Robertson both wings',
   'JSON.stringify(eligiblePositions(PLAYERS.find(p=>p.name==="Jason Robertson")))', '["LW","RW"]');
-ok &= check('every ranked player carries an explanation', 'PLAYERS.filter(p=>p.myRankWhy!=null).length', 400);
+ok &= check('every ranked player carries an explanation', 'PLAYERS.filter(p=>p.myRankWhy!=null).length', 398);
 ok &= check('football My Rank model is untouched', () => ev('SPORTS.nfl.myRankModel') + '/' + ev('SPORTS.nhl.myRankModel'), 'nfl/nhl');
 
 const oldFetch = w.fetch;
@@ -237,11 +250,15 @@ ok &= check('multi-position matching reroutes flexible player', () => ev(`(funct
   return fit.starterSlots.every(x=>x.player)&&fit.starterSlots.find(x=>x.label==='LW').player.name==='Leon Draisaitl';
 })()`), true);
 
-ok &= check('position colours: G red, C blue, LW green, RW purple, D yellow', () => {
+ok &= check('position colours: C green, LW blue, RW purple, D yellow, G red', () => {
   const css = fs.readFileSync('public/index.html','utf8');
   const m = css.match(/--posc:(#\w+); --poslw:(#\w+); --posrw:(#\w+); --posd:(#\w+); --posg:(#\w+);/);
   return m ? m.slice(1).join(',') : 'vars not found';
-}, '#60a5fa,#34d399,#c084fc,#fbbf24,#f97066');
+}, '#34d399,#60a5fa,#c084fc,#fbbf24,#f97066');
+ok &= check('F shares LW blue and has its own class', () => {
+  const css = fs.readFileSync('public/index.html','utf8');
+  return /--posf:#60a5fa;/.test(css) && /\.pos\.F\{background:var\(--posf\)\}/.test(css) ? true : 'F styling missing';
+}, true);
 ok &= check('no F chip on the board', () => {
   const cell = ev('posCell(PLAYERS.find(p=>p.posEligible.length>1)||PLAYERS[0])');
   return /fchip/.test(cell) || />F</.test(cell) ? cell : true;
@@ -396,6 +413,12 @@ ok &= check('Fantrax weekly points profile uses Classic roster and scoring',
 ok &= check('Fantrax generic forward roster slots are 5F/3D/2G', slots, 'F,F,F,F,F,D,D,D,G,G');
 ok &= check('Fantrax forwards fill generic F without inventing an F display position',
   'playerFillsPos(findPlayer("Connor McDavid"),"F") && eligiblePositions(findPlayer("Connor McDavid")).every(p=>p!=="F")', true);
+ok &= check('Fantrax board displays F, coloured as F', () => {
+  const cell = ev('posCell(findPlayer("Connor McDavid"))');
+  return /class="pos F">F</.test(cell) ? true : cell;
+}, true);
+ok &= check('Fantrax display shows F without rewriting the underlying eligibility',
+  'eligiblePositions(findPlayer("Connor McDavid")).join("/")', v => v !== 'F' && v.length > 0);
 ok &= check('Fantrax My Rank uses Fantrax scoring and F replacement',
   'PLAYERS.filter(p=>p.pos!=="D"&&p.pos!=="G"&&p.myReplacementPos==="F"&&/league proj/.test(p.myRankWhy||"")).length', v => v > 200);
 ok &= check('Fantrax live ADP overrides Yahoo market timing',

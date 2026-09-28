@@ -159,6 +159,27 @@ A **Fantrax import** (`GET /api/import/fantrax/:leagueId`) is the recommended
 integration path over Yahoo: league-ID keyed, no OAuth, no approval queue. Note
 Fantrax returns HTTP 200 with an `error` body on a bad id.
 
+**A Fantrax NHL league rosters F/D/G rather than C/LW/RW** (the user's confirmed
+2026-27 league does). Positions resolve per league through `rosterPositionOrder()`
+(a profile's `rosterPositions` beats the sport pack), and `rosterEligiblePositions()`
+projects a player's eligibility onto those slots rather than rewriting the pool — so
+a C/LW shows and counts as F there, and switching leagues restores C/LW. `posCell()`
+renders that projection, so the board shows what the league can actually honour. The
+Fantrax importer derives `rosterPositions` from
+`rosterInfo.positionConstraints`, staying null when no constraints are reported.
+
+**Pool data integrity — three defects found and fixed 2026-09-28, worth not
+reintroducing.** The NHL stats feed lists a traded player once per team, and the
+original build never deduped by id, so Tarasenko and Martinook each appeared as two
+rows and could be drafted twice in one mock. Separately, the ADP/ECR merge is keyed
+on **name**, and two different Elias Petterssons play for Vancouver — the defenceman
+inherited the forward's market rank and his C eligibility, producing an impossible
+`D/C`. On any future pool refresh: **dedupe by `nhl_id`, and require position
+compatibility before accepting a name match.** `tests/boot-smoke.mjs` now asserts no
+duplicate id, no D-plus-forward eligibility, and no multi-eligible goalie. Note
+`findPlayer()` is still name-keyed app-wide, so the two Petterssons remain
+indistinguishable to keeper/trade/queue lookups.
+
 **Fantrax public feeds, verified 2026-09-27** (no auth, no league ID needed):
 `getPlayerIds?sport=NHL` returns 9045 players as `{fantraxId,name,team,position}`
 and `getAdp?sport=NHL` returns 926 rows of real Fantrax ADP. Both carry **exactly one
