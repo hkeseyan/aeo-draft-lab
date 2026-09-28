@@ -206,6 +206,14 @@ position, so filtering to LW surfaces every C/LW too.
 Hockey position colours: **C green, LW blue, RW purple, D yellow, G red**, plus
 **F blue** — F shares LW's blue because a league uses one or the other, never both.
 
+**Same-name players are told apart by position.** Two different real players can
+share a name — both Elias Petterssons play for Vancouver, one a forward and one a
+defenceman. Saved data references players by name, so `findPlayer(name, pos)` takes an
+optional position, and a qualifier can also be written into the name itself
+(`Elias Pettersson (D)`). With no qualifier an ambiguous name resolves to the
+better-ranked player, deterministically, rather than to whichever pool row happens to
+come first.
+
 **Positions are a league question, not only a sport one.** Platforms differ: a Fantrax
 Classic hockey league rosters **F/D/G** and never splits forwards into C/LW/RW. A
 league profile declares `rosterPositions`, and `rosterPositionOrder()` resolves

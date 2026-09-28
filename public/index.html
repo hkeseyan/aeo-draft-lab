@@ -3446,16 +3446,39 @@ function playerMatchesSearch(p,query){
   const words=n.split(' '), initials=words.slice(0,-1).map(x=>x[0]).join('');
   return q===`${initials} ${words.at(-1)}` || q===`${initials}${words.at(-1)}`;
 }
-function findPlayer(name){
-  const raw=(name||'').trim();
+// Two different real players can share a name — both Elias Petterssons play for
+// Vancouver, one a forward and one a defenceman. Saved data (keepers, trades, the
+// queue) references players by name, so position is what breaks the tie: pass it in,
+// or write it into the name as "Elias Pettersson (D)". With no qualifier, prefer the
+// better-ranked player rather than whichever row happens to sit first in the pool,
+// so the same name always resolves to the same player.
+function findPlayer(name,pos){
+  let raw=(name||'').trim();
+  let want=String(pos||'').toUpperCase().trim();
+  const qualified=raw.match(/^(.*?)\s*\(([A-Za-z]{1,4}(?:\s*\/\s*[A-Za-z]{1,4})*)\)\s*$/);
+  if(qualified){ raw=qualified[1].trim(); if(!want)want=qualified[2].toUpperCase().replace(/\s+/g,''); }
+  const wanted=want?want.split('/').filter(Boolean):[];
   const aliased=NAME_ALIASES[normName(raw)] || PLAYER_NAME_ALIASES[raw] || raw;
   const n=aliased.toLowerCase(), nn=normName(aliased);
-  return PLAYERS.find(p=>p.name.toLowerCase()===n) ||
-         PLAYERS.find(p=>normName(p.name)===nn) ||
-         PLAYERS.find(p=>playerMatchesSearch(p,nn)) ||
+  const pick=(list)=>{
+    if(list.length<2)return list[0];
+    if(wanted.length){
+      const hit=list.find(p=>{
+        const elig=eligiblePositions(p);
+        return wanted.some(w=>elig.includes(w)||p.pos===w);
+      });
+      if(hit)return hit;
+    }
+    // Deterministic tie-break: the player the market rates higher is the one a bare
+    // name almost always means.
+    return list.slice().sort((a,b)=>(+a.adp||9999)-(+b.adp||9999))[0];
+  };
+  return pick(PLAYERS.filter(p=>p.name.toLowerCase()===n)) ||
+         pick(PLAYERS.filter(p=>normName(p.name)===nn)) ||
+         pick(PLAYERS.filter(p=>playerMatchesSearch(p,nn))) ||
          // Fallback for any defense the table above doesn't name. Restricted to
          // DEF/DST so this can never latch onto a surname.
-         PLAYERS.find(p=>(p.pos==='DEF'||p.pos==='DST') && normName(p.name).endsWith(' '+nn));
+         pick(PLAYERS.filter(p=>(p.pos==='DEF'||p.pos==='DST') && normName(p.name).endsWith(' '+nn)));
 }
 
 // ---------- KEEPER SETUP ----------

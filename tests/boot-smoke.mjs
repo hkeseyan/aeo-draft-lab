@@ -108,6 +108,25 @@ ok &= check('NHL pool loaded', 'PLAYERS.length', 398);
 ok &= check('top NHL player is a real skater', 'PLAYERS[0].name', v => /MacKinnon|McDavid|Kucherov/.test(v));
 ok &= check('fantasy points per game computed', 'PLAYERS[0].fppg', v => v > 5);
 ok &= check('projected category totals parsed', 'PLAYERS[0].st.sog', v => v > 100);
+// Two real players share the name Elias Pettersson (Vancouver forward and
+// defenceman). Position is what tells them apart.
+ok &= check('same-name players resolve by position', () => ev(`(function(){
+  const f=findPlayer('Elias Pettersson','C'), d=findPlayer('Elias Pettersson','D');
+  if(!f||!d) return 'not found';
+  return [f.nhlId,f.pos,d.nhlId,d.pos].join('|');
+})()`), '8480012|C|8483678|D');
+ok &= check('a position qualifier written into the name works too', () => ev(`(function(){
+  const d=findPlayer('Elias Pettersson (D)');
+  return d ? d.nhlId+'|'+d.pos : 'not found';
+})()`), '8483678|D');
+ok &= check('a bare ambiguous name resolves to the better-ranked player, every time', () => ev(`(function(){
+  const a=findPlayer('Elias Pettersson'), b=findPlayer('Elias Pettersson');
+  return a&&b&&a.nhlId===b.nhlId ? a.nhlId+'|'+a.pos : 'unstable';
+})()`), '8480012|C');
+ok &= check('unambiguous lookups are unaffected', () => ev(`(function(){
+  const m=findPlayer('Connor McDavid'), k=findPlayer('Cale Makar','D');
+  return m&&k ? m.name+'|'+k.name : 'not found';
+})()`), 'Connor McDavid|Cale Makar');
 ok &= check('no player appears twice in the pool', () => {
   const ids = JSON.parse(ev('JSON.stringify(PLAYERS.map(p=>p.nhlId).filter(Boolean))'));
   const dupes = [...new Set(ids.filter((x, i) => ids.indexOf(x) !== i))];
