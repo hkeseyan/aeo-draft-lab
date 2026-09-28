@@ -1199,6 +1199,60 @@ var worker_default = {
           return J({ error: "Fantrax ADP fetch failed: " + e.message }, 502);
         }
       }
+      if (path === "/api/nhl/preseason-projections") {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        // This is deliberately raw-stat data, not another provider's fantasy-point
+        // ranking. The browser owns the league scoring conversion and blends this
+        // feed with the other configured preseason sources.
+        const cacheKey = "nhl:preseason-projections:nhl-fantasy-data:v1";
+        const cached = await kv.get(cacheKey, { type: "json" });
+        if (cached) return J(cached);
+        try {
+          const [r, hashtagResponse] = await Promise.all([
+            fetch("https://nhlfantasydata.com/data/preseason.json"),
+            fetch("https://hashtaghockey.com/fantasy-hockey-projections")
+          ]);
+          if (!r.ok) return J({ error: "NHL Fantasy Data returned " + r.status }, 502);
+          const raw = await r.json();
+          const rows = (raw.players || []).map((p) => ({
+            id: String(p.id || ""), name: p.n || "", gp: Number(p.gp),
+            g: Number(p.g), a: Number(p.a), pm: Number(p.pm), ppp: Number(p.ppp),
+            sog: Number(p.sog), hit: Number(p.hit), blk: Number(p.blk),
+            w: Number(p.w), sv: Number(p.sv), ga: Number(p.ga), sho: Number(p.so)
+          })).filter((p) => p.name && Object.values(p).some((v) => typeof v === "number" && Number.isFinite(v)));
+          // Hashtag publishes projected rate stats in its public table. Keep this
+          // adapter deliberately conservative: only a row with name + projected
+          // games is admitted, and all rate stats are converted back to seasonal
+          // raw totals before the browser blends/scales them.
+          let hashtagRows = [];
+          if (hashtagResponse.ok) {
+            const html = await hashtagResponse.text();
+            const value = (row, key) => {
+              const m = row.match(new RegExp(`id=["'][^"']*L${key}_[^"']*["'][^>]*>\\s*([-+]?\\d+(?:\\.\\d+)?)`, "i"));
+              return m ? Number(m[1]) : NaN;
+            };
+            hashtagRows = html.split(/<tr[^>]*>/i).map((row) => {
+              const nameMatch = row.match(/Label2_\d+[^>]*>\s*([^<]+?)\s*<\/span>/i);
+              const plain = row.replace(/<[^>]*>/g, " ").replace(/&[^;]+;/g, " ").replace(/\s+/g, " ");
+              const detail = plain.match(/\s([-+]?\d+(?:\.\d+)?)\s+(?:C|LW|RW|D|G|F)(?:\/[A-Z]+)?\s+[A-Z]{2,3}\s+(\d+(?:\.\d+)?)/);
+              const gp = detail ? Number(detail[2]) : NaN;
+              const total = (key) => { const n = value(row, key); return Number.isFinite(n) && Number.isFinite(gp) ? n * gp : NaN; };
+              return { name: nameMatch && nameMatch[1].trim(), gp, g: total("GOALS"), a: total("ASSISTS"), pm: total("PLUS_MINUS"), ppp: total("PP_POINTS"), sog: total("SHOTS_ON_GOAL"), hit: total("HITS"), blk: total("BLOCKED_SHOTS"), w: total("WIN") };
+            }).filter((row) => row.name && Number.isFinite(row.gp));
+          }
+          const out = {
+            generatedAt: raw.generated_at || null,
+            sources: [
+              { id: "nhl-fantasy-data", label: "NHL Fantasy Data", weight: 1, rows },
+              { id: "hashtag-hockey", label: "Hashtag Hockey", weight: 1, rows: hashtagRows }
+            ]
+          };
+          await kv.put(cacheKey, JSON.stringify(out), { expirationTtl: 6 * 60 * 60 });
+          return J(out);
+        } catch (e) {
+          return J({ error: "Preseason projection fetch failed: " + e.message }, 502);
+        }
+      }
       if (path === "/api/nhl/schedule") {
         if (request.method !== "GET") return J({ error: "method" }, 405);
         const start = url.searchParams.get("start") || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);

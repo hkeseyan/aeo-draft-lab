@@ -1,7 +1,7 @@
 # NHL mock format profiles
 
-As of September 27, 2026, Draft Lab ships three target mock formats plus the
-existing Yahoo H2H Categories fallback profile.
+As of September 28, 2026, Draft Lab ships the live TRAX50 profile, its Yahoo
+counterparts, and reference category formats.
 
 ## Yahoo Public Prize H2H Points — daily
 
@@ -13,13 +13,15 @@ existing Yahoo H2H Categories fallback profile.
   and uses position-specific replacement value. The displayed My Rank is temporarily
   anchored to Yahoo ADP with maximum moves of 5 picks in the top 25, 10 through
   pick 100 and 15 thereafter. Its tooltip retains the raw rank and marks capped
-  disagreements. The projection column is labeled `2025 Proj`.
-- Joined leagues: 135526 (completed canonical board) and 141304 (slot 4, blank
-  board pending the draft and actual opponent names).
+  disagreements. The projection column is labeled `Preseason Proj`.
+- Joined leagues: 135526 and 141304, each with the completed 192-pick board.
+  141304 is assigned to **Sid the Mid** from the existing slot-four / R3 Dahlin
+  context; if that inference is wrong, edit only that owner assignment.
 
-## Fantrax Classic H2H Points — weekly mock
+## TRAX50 Classic Draft (76) — Fantrax weekly H2H Points
 
-- 12 teams; 5 generic F, 3 D, 2 G; six reserves and no IR.
+- Fantrax league ID `bdd8aa7jmtjj0e84`; 12 teams; 16-round snake; 45 seconds/pick.
+- 5 generic F, 3 D, 2 G; six reserves and no IR.
 - Skaters: G 4, A 3, +/- 1, PPP 1, SOG 0.5, HIT 0.25.
 - Goalies: W 5, GA -1, SV 0.25, SHO 5. Goalie assists inherit A 3.
 - The raw model rank uses Fantrax scoring and replacement levels for the actual F/D/G
@@ -34,6 +36,9 @@ existing Yahoo H2H Categories fallback profile.
   rewrite intrinsic My Rank or overwhelm player quality.
 - Weekly-lineup streaming confidence defaults low, and the daily Add Radar is
   hidden because intra-week lineup churn is not the management model.
+- Each player locks five minutes before his team’s first game of the Monday
+  scoring period. There are no trades, waiver claims are unlimited with rotating
+  two-day priority, and undrafted players are FCFS free agents.
 
 Reference: [Fantrax Classic Draft rules example](https://www.fantrax.com/newui/fantasy/leagueRulesSummary.go?leagueId=t58uewealmbjijck).
 
@@ -59,11 +64,18 @@ Reference: [Yahoo default fantasy hockey settings](https://help.yahoo.com/kb/SLN
 ## Data-source boundary
 
 The installed FantasyPros connector currently exposes NFL and MLB only, so it
-cannot supply NHL projections or league sync. The embedded NHL pool continues to
-use FantasyPros-derived Yahoo ADP/ECR captured by the project's existing refresh
-workflow, NHL public-stat component projections, and the new live Fantrax ADP feed
-for Fantrax market behavior. ECR remains a visible sanity check and is not an
-input to hockey My Rank because the available consensus is thin and roto-oriented.
+cannot supply NHL projections or league sync. NHL now fetches current raw-stat
+preseason totals from NHL Fantasy Data and Hashtag Hockey, then converts them
+through each active league’s scoring table. Optional Yahoo profile rows are
+blended in when available, and weights are renormalized only among sources that
+provide the stat. Fantrax ADP remains market timing, not a projection source. ECR remains
+a visible sanity check and is not an input to hockey My Rank because the available
+consensus is thin and roto-oriented.
+
+TODO: connect an authorized Yahoo raw-projection export (or another independently
+licensed current source) to `projectionSources` to complete the intended
+three-source blend. Until then, the UI labels every player with its actual source
+count and never disguises the offline historical CSV as a preseason projection.
 
 ## Confirm after the live leagues are selected
 
@@ -75,8 +87,8 @@ These reference profiles are intentionally editable mocks. Before the real draft
    from `getLeagueInfo.playerInfo` where available.
 3. Confirm whether the Yahoo category league is Roto or H2H Categories and compare
    its returned categories, team count, roster, game cap and goalie minimum.
-4. Refresh role, injury, line/power-play and goalie-workload inputs. The current
-   component projection is still primarily a prior-season-rate model and should
-   not be treated as current role news.
+4. Refresh role, injury, line/power-play and goalie-workload inputs. Current
+   availability is a configurable value discount/flag, never a reason to remove
+   an elite player from the pool; verify each player’s return date before drafting.
 5. Revisit category weights after real standings/roster context exists; deliberate
    punts should be an explicit strategy control, not an accidental model artifact.

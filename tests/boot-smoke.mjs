@@ -170,7 +170,7 @@ ok &= check('scoring values carried onto LEAGUE', 'LEAGUE.scoring.sog', 0.9);
 ok &= check('weekly acquisition cap carried', 'LEAGUE.maxAcquisitionsPerWeek', 4);
 ok &= check('sport bar shows both sports', () => w.document.getElementById('sportBar').children.length, 2);
 ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','),
-  'yahoo-nhl-public,fantrax-nhl-weekly-points,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1,public-points-league-2');
+  'yahoo-nhl-public,fantrax-nhl-weekly-points,trax50-classic-draft-76,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1,public-points-league-2');
 ok &= check('position filter is hockey', () => [...w.document.getElementById('posFilter').options].map(o => o.value).join(','), 'ALL,C,LW,RW,D,G');
 ok &= check('tendency columns are hockey', () => [...w.document.getElementById('tendHead').children].map(x => x.textContent).join(','), 'Use,Owner,C,LW,RW,D,G');
 
@@ -227,7 +227,7 @@ ok &= check('NHL live pick panel has six available candidates',
 ok &= check('NHL live panel rendered separately from the rank table',
   () => w.document.querySelectorAll('#nhlLivePicks .live-pick').length, 6);
 ok &= check('projection and exposure sit beside ADP, ECR and My Rank',
-  () => [...w.document.querySelectorAll('#poolTable th')].slice(1,6).map(x=>x.textContent).join(','), 'ADP,ECR,My,2025 Proj,Exp');
+  () => [...w.document.querySelectorAll('#poolTable th')].slice(1,6).map(x=>x.textContent).join(','), 'ADP,ECR,My,Preseason Proj,Exp');
 ok &= check('exposure shows prior-league fraction',
   'exposureText(PLAYERS.find(p=>p.name==="Jason Robertson"))', '2/4');
 ok &= check('NHL portraits and team logos use NHL assets',
@@ -362,10 +362,10 @@ ev('switchLeague("public-points-league-2")');
 await new Promise(r => setTimeout(r, 250));
 ok &= check('Yahoo Prize league 141304 inherits the points reference',
   'CURRENT_LEAGUE_ID==="public-points-league-2" && LEAGUE.teams===12 && LEAGUE.scoringMode==="points" && LEAGUE.scoring.g===6 && LEAGUE.scoring.sv===0.6', true);
-ok &= check('Yahoo Prize league 141304 is attached at draft slot four',
-  'LEAGUES[CURRENT_LEAGUE_ID].yahooLeagueId==="141304" && mySlot===4 && ME_OWNER==="Me" && OWNER_SLOT.Me===4', true);
-ok &= check('Yahoo Prize league 141304 starts with a blank 192-pick board',
-  'totalPicks===192 && picks.length===0 && curPick===1', true);
+ok &= check('Yahoo Prize league 141304 keeps the inferred slot-four team',
+  'LEAGUES[CURRENT_LEAGUE_ID].yahooLeagueId==="141304" && mySlot===4 && ME_OWNER==="Sid the Mid" && OWNER_SLOT["Sid the Mid"]===4', true);
+ok &= check('Yahoo Prize league 141304 imports its completed 192-pick board',
+  'totalPicks===192 && picks.length===192 && curPick===193 && pickTakenAt(28)&&PLAYERS.find(p=>p.id===pickTakenAt(28).playerId).name==="Rasmus Dahlin"', true);
 
 ev('switchLeague("public-points-league-1")');
 await new Promise(r => setTimeout(r, 400));
@@ -455,6 +455,12 @@ ok &= check('Fantrax weekly game count changes live recommendation value', () =>
   DRAFT_SCHEDULE=original;
   return four>one;
 })()`), true);
+ev('switchLeague("trax50-classic-draft-76")');
+await new Promise(r => setTimeout(r, 300));
+ok &= check('TRAX50 profile keeps its exact Fantrax ID, scoring, and weekly generic-F setup',
+  'LEAGUES[CURRENT_LEAGUE_ID].fantraxLeagueId+":"+LEAGUE.scoring.hit+":"+LEAGUE.starters.F+":"+LEAGUE.irSlots+":"+LEAGUE.lineupPeriod', 'bdd8aa7jmtjj0e84:0.25:5:0:weekly');
+ok &= check('TRAX50 profile uses Fantrax market ADP and has no trade route',
+  'LEAGUE.marketAdpSource+":"+LEAGUES[CURRENT_LEAGUE_ID].waiverRules.trades+":"+LEAGUES[CURRENT_LEAGUE_ID].waiverRules.waiverDays', 'fantrax:false:2');
 ev('switchLeague("aeo-keepers")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('football unaffected after switching back', () => ev('SPORT.id') + ' ' + slots(), 'nfl QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');
