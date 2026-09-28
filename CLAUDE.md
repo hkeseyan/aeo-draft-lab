@@ -46,6 +46,16 @@ in-app (see "Multi-league support" below) — no code change needed to add a lea
   build status). Ship changes via a PR against `main`, not a force-push — this repo
   uses PRs (see closed PR history) and other sessions/devices may be working from
   the same `main`.
+- **⚠️ It deploys production on a push to *any* branch — there is no environment
+  gating.** Confirmed 2026-08-26 after a stale-branch push (from a session unaware
+  of newer work already on `main`) silently reverted the live site to older code —
+  no PR, no merge, just a push. **Always `git fetch`/sync with `origin/main`
+  immediately before pushing anything**, even a throwaway or exploratory branch —
+  every push is a live deploy regardless of branch name or PR state. If you're
+  ever unsure whether your branch reflects current `main`, check before pushing,
+  not after. (The real fix — restricting Workers Build to deploy only from `main`
+  — needs the Cloudflare dashboard, which Claude can't reach; flag to the user if
+  this keeps recurring.)
 - `functions/` is a leftover Cloudflare Pages Functions implementation, superseded
   by `worker.js`. Left in place for reference only; unused by the current deploy.
   Don't touch it.
