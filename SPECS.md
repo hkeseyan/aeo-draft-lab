@@ -67,8 +67,23 @@ category value before positional replacement. The Yahoo **Public Prize** referen
 are 12-team: H2H uses skater G/A/+/-/PPP/SOG/HIT and goalie W/GAA/SV%/SHO; Roto
 changes HIT to BLK and records the 82-game position cap. Yahoo Public Free is a
 separate product and may use a different league size, so imported leagues trust
-Yahoo's reported team count rather than inheriting the Prize size. Goalie GAA is currently approximated from
-projected GA/game because the embedded projection does not carry goalie TOI.
+Yahoo's reported team count rather than inheriting the Prize size. The board shows
+`Cat`, not a fantasy-points projection, and retains each category z-score. Intrinsic
+value rewards broad contribution, applies a modest penalty for a severe category
+hole, and then subtracts positional replacement. The live layer weights candidates
+toward the current roster's weak categories and treats goalie construction
+separately because four of the ten categories are goalie categories. Goalie GAA is
+currently approximated from projected GA/game because the embedded projection does
+not carry goalie TOI.
+
+The built-in **Fantrax Classic weekly points** mock is 12 teams, 5 F / 3 D / 2 G,
+six reserves and no IR. It scores skaters G 4, A 3, +/- 1, PPP 1, SOG 0.5 and HIT
+0.25; goalies W 5, GA -1, SV 0.25 and SHO 5. My Rank uses generic-F replacement
+rather than Yahoo's C/LW/RW scarcity. Market timing comes from Fantrax's public NHL
+ADP feed, with an explicit Yahoo-ADP fallback warning. The live shortlist adds a
+bounded seven-day game-count modifier and low weekly-lineup streaming priors; the
+daily Add Radar is hidden. Exact live-league rules and league-scoped eligibility
+remain confirmation TODOs. See `docs/NHL_FORMAT_PROFILES.md`.
 
 **Live pick recommendations are separate from My Rank.** The existing NHL live
 shortlist starts from intrinsic rank, then adds draft-state inputs: ADP/VONA timing

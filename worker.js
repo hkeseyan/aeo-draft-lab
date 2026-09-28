@@ -1177,6 +1177,28 @@ var worker_default = {
         }
         return J({ error: "method" }, 405);
       }
+      if (path === "/api/nhl/fantrax-adp") {
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const cacheKey = "nhl:fantrax-adp:v1";
+        const cached = await kv.get(cacheKey, { type: "json" });
+        if (cached) return J(cached);
+        try {
+          const r = await fetch("https://www.fantrax.com/fxea/general/getAdp?sport=NHL");
+          if (!r.ok) return J({ error: "Fantrax ADP returned " + r.status }, 502);
+          const raw = await r.json();
+          if (!Array.isArray(raw)) return J({ error: "Fantrax ADP response was not a list" }, 502);
+          const out = raw.map((row) => ({
+            name: row && row.name || "",
+            adp: Number(row && (row.ADP != null ? row.ADP : row.adp)),
+            pos: row && row.pos || "",
+            id: row && (row.id || row.fantraxId) || ""
+          })).filter((row) => row.name && Number.isFinite(row.adp) && row.adp > 0);
+          await kv.put(cacheKey, JSON.stringify(out), { expirationTtl: 6 * 60 * 60 });
+          return J(out);
+        } catch (e) {
+          return J({ error: "Fantrax ADP fetch failed: " + e.message }, 502);
+        }
+      }
       if (path === "/api/nhl/schedule") {
         if (request.method !== "GET") return J({ error: "method" }, 405);
         const start = url.searchParams.get("start") || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);

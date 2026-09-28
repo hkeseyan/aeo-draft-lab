@@ -182,10 +182,16 @@ change, or line/PP context, so it overrates declining veterans and underrates
 prospects and role-changers — a large `adp` vs `proj` gap on an older player is a
 flag on our projection, not a bargain. It also has **no mean reversion**: a star
 coming off a bad year (Hellebuyck 2025-26: .895, 0 shutouts) projects on that year
-alone, while the market correctly bets on a bounce-back. Category
-(roto/H2H-cat) scoring is not built — Yahoo's default public league is points, so it
-wasn't needed for the first leagues; it lands in the NBA month, where 9-cat makes it
-unavoidable.
+alone, while the market correctly bets on a bounce-back.
+
+**NHL format profiles (2026-09-27):** the three target mocks are Yahoo Public
+Prize daily H2H Points, Fantrax Classic weekly H2H Points, and Yahoo Public Prize
+Rotisserie; the H2H Categories fallback remains available. Fantrax uses 5F/3D/2G,
+Fantrax scoring, public Fantrax ADP, weekly game-count context and low streaming
+priors. Categories keep per-stat z-scores, category breadth/floor, positional
+replacement, roster-balance fit and goalie-category construction; they do not show
+or optimize Yahoo fantasy points. Exact assumptions and live-league TODOs are in
+`docs/NHL_FORMAT_PROFILES.md`.
 
 Testing, before any push: `node tests/boot-smoke.mjs` (boots the whole page in
 jsdom, 45 assertions across both sports; needs `npm install --no-save jsdom`),
