@@ -21,6 +21,9 @@ counterparts, and reference category formats.
 ## TRAX50 Classic Draft (76) — Fantrax weekly H2H Points
 
 - Fantrax league ID `bdd8aa7jmtjj0e84`; 12 teams; 16-round snake; 45 seconds/pick.
+- Drafted Sep 28: the full 192-pick board is embedded from the Fantrax results CSV.
+  The user is **Tkachuk Norris**, slot 8 (Kaprizov, Sorokin, Kempe); it counts
+  toward exposure in the other NHL leagues.
 - 5 generic F, 3 D, 2 G; six reserves and no IR.
 - Skaters: G 4, A 3, +/- 1, PPP 1, SOG 0.5, HIT 0.25.
 - Goalies: W 5, GA -1, SV 0.25, SHO 5. Goalie assists inherit A 3.

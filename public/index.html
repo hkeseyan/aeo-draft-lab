@@ -2818,6 +2818,37 @@ LEAGUES_DEFAULT['public-points-league-2']={
   // source rows replace the blank components where a matching player is present.
   rostersRaw:'',playersCsv:PLAYERS_CSV_NHL+'\nAleksander Barkov,C,FLA,63,63,0,5'+'\nGavin McKenna,LW,TOR,,,,'+'\nQuinton Byfield,C,LAK,,,,'+'\nIvar Stenberg,LW,SJS,,,,'+'\nJacob Fowler,G,MTL,,,,'+'\nAlexander Nikishin,D,CAR,,,,'+'\nEgor Chinakhov,LW,CBJ,,,,'+'\nJackson Blake,RW,CAR,,,,',
 };
+// Completed TRAX50 Classic Draft (76) board from the Fantrax draft-results CSV
+// supplied Sep 28. The user is Tkachuk Norris in slot 8 (Kaprizov 1.08, Sorokin
+// 5.08, Kempe 6.05). Names are written in pool spelling; the forward Elias
+// Pettersson is qualified so he can't resolve to Vancouver's defenceman.
+Object.assign(LEAGUES_DEFAULT['trax50-classic-draft-76'],{
+  mySlot:8, officialDraft:true, draftSource:'Fantrax draft results CSV supplied Sep 28',
+  draftDateLabel:'Sep 28 · complete', liveDraftRevision:'trax50-2026-09-28-p192-csv',
+  owners:["Malkin In The Middle", "Just the Tip-In", "Cal Vulcans", "Le gulleur", "Adam Fox News", "Two Minute Misfits", "The Iceman", "Tkachuk Norris", "Motor City Magic", "1Shot 1 Kill", "Buncha Aho's", "Comfortably Dumb"],
+  meOwner:'Tkachuk Norris', ownerSlot:{"Malkin In The Middle":1,"Just the Tip-In":2,"Cal Vulcans":3,"Le gulleur":4,"Adam Fox News":5,"Two Minute Misfits":6,"The Iceman":7,"Tkachuk Norris":8,"Motor City Magic":9,"1Shot 1 Kill":10,"Buncha Aho's":11,"Comfortably Dumb":12},
+  poolDataRevision:'trax50-2026-09-28-p192-fallbacks',
+  // Board-only rows so every reported pick occupies its real cell.
+  playersCsv:PLAYERS_CSV_NHL+'\nAleksander Barkov,C,FLA,63,63,0,5'+'\nGavin McKenna,LW,TOR,,,,'+'\nIvar Stenberg,LW,SJS,,,,'+'\nDomenic DiVincentiis,G,WPG,,,,',
+  initialPickNames:[
+    'Nathan MacKinnon','Connor McDavid','Macklin Celebrini','Nikita Kucherov','Leon Draisaitl','Cale Makar','David Pastrnak','Kirill Kaprizov','Jason Robertson','Evan Bouchard','Jack Hughes','Auston Matthews',
+    'Nick Suzuki','Martin Necas','Zach Werenski','Jack Eichel','Quinn Hughes','Matt Boldy','Rasmus Dahlin','Wyatt Johnston','Mikko Rantanen','Lane Hutson','Cole Caufield','Matthew Schaefer',
+    'William Nylander','Kyle Connor','Brady Tkachuk','Darren Raddysh','Tage Thompson','Andrei Vasilevskiy','Moritz Seider','Jake Guentzel','Mark Scheifele','Matthew Tkachuk','Mitch Marner','Artemi Panarin',
+    'Alex DeBrincat','Brandon Hagel','Filip Forsberg','Cutter Gauthier','Adam Fox','Logan Thompson','Jakob Chychrun','Tim Stützle','Roman Josi','Clayton Keller','Erik Karlsson','Jake Sanderson',
+    'Sidney Crosby','Jake Oettinger','Jackson LaCombe','Miro Heiskanen','Porter Martone','Dylan Guenther','Sam Reinhart','Ilya Sorokin','John Carlson','Charlie McAvoy','Mark Stone','Igor Shesterkin',
+    'Jeremy Swayman','Josh Morrissey','Connor Hellebuyck','Karel Vejmelka','Adrian Kempe','Aleksander Barkov','Jet Greaves','Mikhail Sergachev','Kirill Marchenko','Leo Carlsson','Sebastian Aho','Jakub Dobes',
+    'Noah Dobson','Rasmus Andersson','Jesper Wallstedt','Yaroslav Askarov','Juraj Slafkovský','Juuse Saros','Shayne Gostisbehere','Connor Bedard','Mika Zibanejad','Jesper Bratt','Scott Wedgewood','Shea Theodore',
+    'Zach Hyman','Brandon Bussi','Andrei Svechnikov','Jacob Markstrom','Sergei Bobrovsky','Lukas Dostal','Lucas Raymond','Bowen Byram','Joel Hofer','Robert Thomas','Drake Batherson','Brayden Point',
+    'Tom Wilson','Seth Jarvis','Dan Vladar','Dylan Holloway','John Gibson','Dylan Larkin','Brandt Clarke','Alex Ovechkin','Brock Faber','Mackenzie Blackwood','Gavin McKenna','Victor Hedman',
+    'Cole Hutson','Carter Hart','Pavel Dorofeyev','Thomas Harley','Dougie Hamilton','Nico Hischier','Nikolaj Ehlers','Will Smith','Linus Ullmark','Ivan Demidov','MacKenzie Weegar','Ukko-Pekka Luukkonen',
+    'Seth Jones','Darcy Kuemper','Luke Hughes','John Tavares','Dustin Wolf','Bo Horvat','J.T. Miller','Spencer Knight','Travis Konecny','Alex Tuch','Aaron Ekblad','Vince Dunn',
+    'Brandon Montour','Jacob Trouba','Filip Gustavsson','Filip Hronek','Adam Fantilli','Tristan Jarry','Morgan Geekie','Joey Daccord','Thomas Chabot','Philip Broberg','Sam Bennett','Logan Cooley',
+    'Frederik Andersen','Mattias Ekholm','Jimmy Snuggerud','Beckett Sennecke','Nick Schmaltz','Dylan Cozens','Alexis Lafrenière','Timo Meier','Jake Allen','Mattias Samuelsson','Evgeni Malkin','Stuart Skinner',
+    'Domenic DiVincentiis','Noah Hanifin','Sergei Murashov','Steven Stamkos','Roope Hintz','Rickard Rakell','Matthew Knies','Sam Malinski','Matvei Michkov','Anton Frondell','Brock Nelson','Mathew Barzal',
+    'Bryan Rust','Mike Matheson','Jamie Drysdale','Joel Eriksson Ek','Vladislav Gavrikov','Tomas Hertl','Trevor Zegras','Kevin Lankinen','Morgan Rielly','Vincent Trocheck','Elias Pettersson (C)','Brad Marchand',
+    'Dylan Strome','Ivar Stenberg','Darnell Nurse','Ryan Nugent-Hopkins',"K'Andre Miller",'William Eklund','Justin Faulk','Ivan Provorov','Devon Toews','Anton Forsberg',"Ryan O'Reilly",'Sean Walker',
+  ],
+});
 // Yahoo Public Prize H2H Categories league 3175 (PRIZE 50), joined Sep 28. Settings
 // copied from the league's own Scoring & Settings page: 12 teams, live standard
 // draft Mon Sep 28 10:00pm PDT, 1-minute picks, daily lineups, 4 adds/week, a
@@ -6422,7 +6453,11 @@ async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||
   pickOwnerOverride=s.pickOwnerOverride||{}; playerTrades=s.playerTrades||{};
   applyTendencies(s.tendencies);
   rebuildKeepers(); applyKeepers();
-  if((Array.isArray(s.picks)&&s.picks.length)||(LEAGUE.draftType==='auction'&&auctionPicks.length)){
+  // A completed official board beats picks saved before it existed (mocks run in
+  // the same league): keep the board switchLeague() just seeded and save it.
+  const officialBoard=LEAGUES[CURRENT_LEAGUE_ID]?.officialDraft===true&&(LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames||[]).length>=totalPicks&&!s.seededLiveSnapshot;
+  if(officialBoard){ render(); saveSetup(); }
+  else if((Array.isArray(s.picks)&&s.picks.length)||(LEAGUE.draftType==='auction'&&auctionPicks.length)){
     picks=Array.isArray(s.picks)?s.picks.slice():[]; curPick=s.curPick||1;
     PLAYERS.forEach(p=>p.drafted=false);
     picks.forEach(pk=>{const pl=PLAYERS.find(x=>x.id===pk.playerId); if(pl)pl.drafted=true;});
@@ -6649,7 +6684,7 @@ async function fetchCloudLeagues(){
             .forEach(f=>{if(def[f]!==undefined)add[f]=def[f];});
         }
         if(def.liveDraftRevision && cur.liveDraftRevision!==def.liveDraftRevision){
-          ['liveDraftRevision','initialPickNames','name','teams','owners','meOwner','ownerSlot','draftDateLabel','yahooLeagueId','yahooLeagueUrl','officialDraft','draftSource','platform','platformEligibility']
+          ['liveDraftRevision','initialPickNames','name','teams','owners','meOwner','ownerSlot','mySlot','draftDateLabel','yahooLeagueId','yahooLeagueUrl','officialDraft','draftSource','platform','platformEligibility']
             .forEach(f=>{if(def[f]!==undefined)add[f]=def[f];});
         }
         if(def.auctionDataRevision && cur.auctionDataRevision!==def.auctionDataRevision){
