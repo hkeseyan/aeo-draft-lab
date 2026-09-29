@@ -82,12 +82,17 @@ ok &= check('football pool loaded', 'PLAYERS.length', v => v > 100);
 ok &= check('football roster slots unchanged', slots, 'QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');
 ok &= check('football flex intact', 'LEAGUE.flexEligible.join(",")', 'RB,WR,TE');
 ok &= check('Waiver Lab exposes its decision context and ticket workflow', () =>
-  ['waiverTeamDirection','waiverMethod','waiverDeadline','waiverDraftOrderRule','waiverTrigger','waiverTickets']
+  ['waiverTeamDirection','waiverProcessing','waiverMethod','waiverPriorityBehavior','waiverZeroBidAllowed','waiverDeadline','waiverDraftOrderRule','waiverTrigger','waiverTickets']
     .every(id => !!w.document.getElementById(id)) &&
   [...w.document.querySelectorAll('nav button')].some(button => button.textContent === 'Waiver Lab'), true);
-ev(`applyFaabState({teamDirection:'contend',waiverMethod:'waiver_priority',waiverDeadline:'2026-09-29T01:00',draftOrderRule:'max points for',waiverTrigger:'Starter injured'})`);
+ev(`applyFaabState({teamDirection:'contend',waiverProcessing:'continuous_waivers',waiverMethod:'waiver_priority',waiverPriorityBehavior:'persistent_to_back',zeroBidAllowed:false,waiverDeadline:'2026-09-29T01:00',draftOrderRule:'max points for',waiverTrigger:'Starter injured'})`);
 ok &= check('Waiver Lab persists explicit non-FAAB context', () => JSON.stringify(ev('faabStateFromForm()')), value =>
-  value.includes('"teamDirection":"contend"') && value.includes('"waiverMethod":"waiver_priority"') && value.includes('"draftOrderRule":"max points for"'));
+  value.includes('"teamDirection":"contend"') &&
+  value.includes('"waiverProcessing":"continuous_waivers"') &&
+  value.includes('"waiverMethod":"waiver_priority"') &&
+  value.includes('"waiverPriorityBehavior":"persistent_to_back"') &&
+  value.includes('"zeroBidAllowed":false') &&
+  value.includes('"draftOrderRule":"max points for"'));
 
 ev('switchLeague("yahoo-nhl-public")');
 await new Promise(r => setTimeout(r, 400));
