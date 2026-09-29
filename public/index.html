@@ -6151,6 +6151,9 @@ function fillLeagueSelect(){
   // is unusable, and the sport bar is what switches between them.
   const list=leaguesForSport(ACTIVE_SPORT);
   sel.innerHTML=(list.length?list:Object.values(LEAGUES)).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  // Rebuilding options resets a native select to its first entry. Apply the
+  // active profile after the rebuild so the header never claims another league.
+  if([...sel.options].some(option=>option.value===CURRENT_LEAGUE_ID))sel.value=CURRENT_LEAGUE_ID;
   sel.onchange=()=>switchLeague(sel.value);
 }
 function renderSportBar(){
