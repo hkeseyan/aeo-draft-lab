@@ -76,7 +76,8 @@ response = await worker.fetch(new Request(`https://draft.test/api/inseason/ticke
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     action: 'add', player: 'Puka Nacua', pos: 'WR', team: 'LAR', suggestedDrop: 'Courtland Sutton',
-    recommendedBid: 127, projectedWinningBid: 115, stretchBid: 160, waiverMethod: 'faab',
+    recommendedBid: 127, projectedWinningBid: 115, stretchBid: 160,
+    waiverProcessing: 'continuous_waivers', waiverMethod: 'faab', waiverPriorityBehavior: 'not_applicable', zeroBidAllowed: true,
     deadline: '2026-09-29T01:00', teamDirection: 'survive', draftOrderRule: 'highest score is eliminated',
     trigger: 'A weekly starter was lost', rationale: 'Immediate lineup upgrade', reportId: 'report-1', snapshotAt: 1760000000000
   })
@@ -85,6 +86,10 @@ assert.equal(response.status, 201);
 const draftedTicket = await response.json();
 assert.equal(draftedTicket.status, 'draft');
 assert.equal(draftedTicket.player, 'Puka Nacua');
+assert.equal(draftedTicket.waiverProcessing, 'continuous_waivers');
+assert.equal(draftedTicket.waiverMethod, 'faab');
+assert.equal(draftedTicket.waiverPriorityBehavior, 'not_applicable');
+assert.equal(draftedTicket.zeroBidAllowed, true);
 assert.equal(draftedTicket.draftOrderRule, 'highest score is eliminated');
 
 response = await worker.fetch(new Request(`https://draft.test/api/inseason/tickets?league=${leagueId}`), env, {});
@@ -93,6 +98,8 @@ const ticketList = await response.json();
 assert.equal(ticketList.length, 1);
 assert.equal(ticketList[0].trigger, 'A weekly starter was lost');
 assert.equal(ticketList[0].rationale, 'Immediate lineup upgrade');
+assert.equal(ticketList[0].waiverProcessing, 'continuous_waivers');
+assert.equal(ticketList[0].zeroBidAllowed, true);
 
 response = await worker.fetch(new Request(`https://draft.test/api/inseason/tickets/${encodeURIComponent(draftedTicket.id)}?league=${leagueId}`, {
   method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'submitted' })
