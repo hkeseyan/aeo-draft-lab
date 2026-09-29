@@ -1179,11 +1179,19 @@ var worker_default = {
       }
       if (path === "/api/nhl/fantrax-adp") {
         if (request.method !== "GET") return J({ error: "method" }, 405);
-        const cacheKey = "nhl:fantrax-adp:v1";
+        // Draft-room ADP moves quickly before a contest starts. Keep this cache
+        // short and version it so a prior failed/stale response is never reused.
+        const cacheKey = "nhl:fantrax-adp:v2";
         const cached = await kv.get(cacheKey, { type: "json" });
         if (cached) return J(cached);
         try {
-          const r = await fetch("https://www.fantrax.com/fxea/general/getAdp?sport=NHL");
+          const r = await fetch("https://www.fantrax.com/fxea/general/getAdp?sport=NHL&start=1&limit=2000&order=ADP&showAllPositions=true", {
+            headers: {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "Mozilla/5.0 (compatible; AEO-Draft-Lab/1.0)",
+              "referer": "https://www.fantrax.com/"
+            }
+          });
           if (!r.ok) return J({ error: "Fantrax ADP returned " + r.status }, 502);
           const raw = await r.json();
           if (!Array.isArray(raw)) return J({ error: "Fantrax ADP response was not a list" }, 502);
@@ -1193,7 +1201,7 @@ var worker_default = {
             pos: row && row.pos || "",
             id: row && (row.id || row.fantraxId) || ""
           })).filter((row) => row.name && Number.isFinite(row.adp) && row.adp > 0);
-          await kv.put(cacheKey, JSON.stringify(out), { expirationTtl: 6 * 60 * 60 });
+          await kv.put(cacheKey, JSON.stringify(out), { expirationTtl: 10 * 60 });
           return J(out);
         } catch (e) {
           return J({ error: "Fantrax ADP fetch failed: " + e.message }, 502);
