@@ -396,6 +396,22 @@ Projection/news requirements for the future engine:
 
 For the current first version, projections remain useful context, but market discovery + roster/drop logic + current news can outrank a stale platform point projection.
 
+
+#### Weekly calibration loop
+
+The first working Waiver Lab does not need to be fully autonomous to be useful. Its immediate purpose is to produce a **reviewable candidate set and transaction hypothesis** that the user can critique against the claims they already made manually.
+
+The report supports alternative inspection sorts:
+- model recommendation order;
+- market-discovery order;
+- roster percentage;
+- recent host-platform trend;
+- ROS rank.
+
+Market-discovery order is calculated from roster percentage plus a **source + metric-local trend percentile**. That normalization exists only to prioritize review within the current candidate pool; it is not a fantasy-value score and must not be used as a universal comparison across providers.
+
+Each report row accepts one persistent calibration verdict: `agree`, `too_high`, `too_low`, `wrong_drop`, `would_not_claim`, or `needs_context`. Feedback is stored in the league's in-season state keyed to the report and player so future sessions can compare the model's hypothesis to the user's actual decision. The purpose is to accumulate concrete disagreement labels before adding more complexity to the ranking/bid model.
+
 The current FantasyPros direct feed covers the user's roster/matchup and decision context but not the complete free-agent pool. Therefore the normalized snapshot tracks coverage per field (`roster`, `available`, `projections`) and never presents a partial provider as complete. Yahoo or the last saved/manual pool remains the availability authority until a supported complete FantasyPros availability feed is added.
 
 ### Strategy Lab
