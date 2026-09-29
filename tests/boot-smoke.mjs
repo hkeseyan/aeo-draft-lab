@@ -82,10 +82,10 @@ ok &= check('football pool loaded', 'PLAYERS.length', v => v > 100);
 ok &= check('football roster slots unchanged', slots, 'QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');
 ok &= check('football flex intact', 'LEAGUE.flexEligible.join(",")', 'RB,WR,TE');
 ok &= check('Waiver Lab exposes its decision context and ticket workflow', () =>
-  ['waiverTeamDirection','waiverProcessing','waiverMethod','waiverPriorityBehavior','waiverZeroBidAllowed','waiverDeadline','waiverDraftOrderRule','waiverTrigger','waiverTickets']
+  ['waiverTeamDirection','waiverProcessing','waiverMethod','waiverPriorityBehavior','waiverZeroBidAllowed','waiverDeadline','waiverDraftOrderRule','waiverTrigger','waiverReviewSort','waiverTickets']
     .every(id => !!w.document.getElementById(id)) &&
   [...w.document.querySelectorAll('nav button')].some(button => button.textContent === 'Waiver Lab'), true);
-ev(`applyFaabState({teamDirection:'contend',waiverProcessing:'continuous_waivers',waiverMethod:'waiver_priority',waiverPriorityBehavior:'persistent_to_back',zeroBidAllowed:false,waiverDeadline:'2026-09-29T01:00',draftOrderRule:'max points for',waiverTrigger:'Starter injured'})`);
+ev(`applyFaabState({teamDirection:'contend',waiverProcessing:'continuous_waivers',waiverMethod:'waiver_priority',waiverPriorityBehavior:'persistent_to_back',zeroBidAllowed:false,waiverDeadline:'2026-09-29T01:00',draftOrderRule:'max points for',waiverTrigger:'Starter injured',reviewSort:'discovery',reviewFeedback:{'report|player':'too_low'}})`);
 ok &= check('Waiver Lab persists explicit non-FAAB context', () => JSON.stringify(ev('faabStateFromForm()')), value =>
   value.includes('"teamDirection":"contend"') &&
   value.includes('"waiverProcessing":"continuous_waivers"') &&
