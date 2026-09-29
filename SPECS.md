@@ -331,6 +331,23 @@ A player expected to be cut again before the Sunday slate should normally receiv
 
 IR creates free optionality and must be evaluated before a drop is priced. An open IR slot, a rostered player expected to become IR/OUT eligible, or an expendable IR occupant can make a speculative claim effectively no-drop; those paths should be favored over burning FAAB/priority on a player likely to be churned. Claim waterfalls must be recomputed after each hypothetical success because two claims can compete for the same open slot, IR move, kicker/defense placeholder, or drop candidate.
 
+
+#### Claim execution order and drop disposition
+
+For the user's leagues, treat **bid amount as execution priority whenever claims use a dollar bid**. A $10 claim is processed before a $6 claim; the manager cannot manually promote the $6 claim ahead of it while leaving the amounts unchanged. Therefore price and preference are coupled: the planner must not output a nominal preference order that contradicts its own bids. Recommendations are sorted by descending recommended bid, with any same-dollar ordering treated only as a secondary plan order unless the host's exact tie behavior is known.
+
+Do not confuse **lineup displacement** with **roster cut choice**. The player pushed out of the optimal starting lineup is useful information, but it is not automatically the player to drop. Roster evaluation happens first and assigns a drop disposition:
+- `dead`: safe to drop outright; no meaningful reason to preserve the player on this roster.
+- `replaceable`: a churn/streaming slot that should be replaced when there is a useful opportunity; K and DST may default here when no stronger league-specific reason exists.
+- `conditional`: not an outright cut, but eligible to drop when the incoming player is a meaningful upgrade.
+- `protected`: do not auto-cut from generic waiver logic; dropping this player requires a specific acquisition-driven case.
+
+Unclassified players remain unresolved rather than being silently assigned a cut. Early-season reluctance to churn kickers/defenses or recent speculative draft picks is an observation to monitor, **not yet a model coefficient**.
+
+A player that is truly `dead` can sometimes be dropped **before** entering claims. The main benefit is operational: converting one or more dead rostered players into actual open spots can dramatically reduce duplicate claim construction. Example: with two otherwise-dead roster spots and 15 candidate adds, preserving both players for branch flexibility can force roughly two alternative claim paths per candidate; dropping them first can collapse that into one ordered list filling two open spots. The planner should recommend a pre-drop only when the lost branch optionality is negligible relative to the reduction in claim complexity.
+
+When several claims use the same drop player, they form a mutually exclusive branch: the first successful claim consumes that drop path, and later claims tied to that player should naturally fail/skip rather than cause an additional unrelated cut. Position-specific caps can create another branch rule (for example, "take at most one of these RB claims"); those caps are part of the waterfall, not independent player rankings.
+
 The current FantasyPros direct feed covers the user's roster/matchup and decision context but not the complete free-agent pool. Therefore the normalized snapshot tracks coverage per field (`roster`, `available`, `projections`) and never presents a partial provider as complete. Yahoo or the last saved/manual pool remains the availability authority until a supported complete FantasyPros availability feed is added.
 
 ### Strategy Lab
