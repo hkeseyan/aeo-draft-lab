@@ -5860,6 +5860,7 @@ function faabSourceSummary(d={}){
   if(coverage.roster)parts.push('roster: '+coverage.roster);
   if(coverage.available)parts.push('available pool: '+coverage.available);
   if(coverage.projections)parts.push('projections: '+coverage.projections);
+  if(coverage.marketMetadata)parts.push('market metadata: '+coverage.marketMetadata);
   if(d.fantasyProsConfigured===false)parts.push('FantasyPros not configured');
   const failures=Object.entries(d.sourceStatus||{}).filter(([,s])=>!s.ok).map(([name,s])=>name+' unavailable: '+s.error);
   return parts.concat(failures).join(' · ')||'No source refresh has run yet.';
