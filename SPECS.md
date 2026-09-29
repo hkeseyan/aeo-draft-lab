@@ -72,14 +72,42 @@ category value before positional replacement. The Yahoo **Public Prize** referen
 are 12-team: H2H uses skater G/A/+/-/PPP/SOG/HIT and goalie W/GAA/SV%/SHO; Roto
 changes HIT to BLK and records the 82-game position cap. Yahoo Public Free is a
 separate product and may use a different league size, so imported leagues trust
-Yahoo's reported team count rather than inheriting the Prize size. The board shows
-`Cat`, not a fantasy-points projection, and retains each category z-score. Intrinsic
-value rewards broad contribution, applies a modest penalty for a severe category
-hole, and then subtracts positional replacement. The live layer weights candidates
-toward the current roster's weak categories and treats goalie construction
-separately because four of the ten categories are goalie categories. Goalie GAA is
-currently approximated from projected GA/game because the embedded projection does
-not carry goalie TOI.
+Yahoo's reported team count rather than inheriting the Prize size. The joined
+**Yahoo Prize H2H-Cat 3175** (`yahoo-prize-cat-3175`) carries that league's exact
+settings and starts with no draft slot; the user sets it with "My slot".
+
+- **Category value.** Each category is a z-score against the *draftable
+  population* of its group (skaters, or roughly 2.75 goalies per team), sized first
+  by market ADP and then re-sized by model value. Goalie SV% and GAA are
+  volume-weighted (saves above average, goals prevented), so a backup's small-sample
+  rate cannot beat a workhorse. Goalie z-scores carry a damped team-share weight
+  (`NHL_CAT_MODEL.goalieScale`, 1.15). My Rank is value over replacement at the
+  best eligible position plus a small multi-position bonus, then the same draft-safe
+  ADP guardrail as points leagues with wider caps (±6 inside the top 25, ±15 to 100,
+  ±25 beyond); the tooltip keeps the raw model rank.
+- **Punts.** In category leagues the streaming sliders are replaced by one checkbox
+  per category. A punted category is removed from category value, My Rank, the
+  recommendation fit and the colour scales. Punting every goalie category drops
+  goalies to "roster two bodies late". Punts are saved in the league's setup.
+- **Draft list.** Best Available adds one projected whole-season column per
+  category after Player (counting stats one decimal, GAA two, SV% three), sortable
+  best-first. Cells use the spreadsheet red-white-green scale by percentile within
+  the draftable population: 80% and up dark green, 55-80% light green, 20-55%
+  white, 8-20% light red, below 8% dark red. On the current pool that gives rounds
+  1-3 about 3.9 green / 1.2 white / 0.6 red cells per player, rounds 7-12 an even
+  mix and rounds 13-16 about one green. The positional-rank column is hidden in
+  these leagues.
+- **My projected categories.** A table under the draft board shows my team's
+  average-per-player and team-total projections for every category. White is the
+  league median across all twelve rosters; the scale runs to green at the best team
+  and red at the worst. Team GAA is games-weighted and team SV% pools saves over
+  shots faced. Hover a cell for the median, range and my rank.
+- **Recommendations.** The live list weights a candidate's category z-scores toward
+  categories where my team total trails the league (in league standard deviations)
+  and away from ones I already lead, with a small push toward whichever group
+  (skater or goalie) is weaker overall. Streaming confidence plays no part, the
+  points-tuned D urgency is halved because replacement already prices D scarcity,
+  and each suggestion shows a coloured category strip.
 
 The built-in **Fantrax Classic weekly points** mock is 12 teams, 5 F / 3 D / 2 G,
 six reserves and no IR. It scores skaters G 4, A 3, +/- 1, PPP 1, SOG 0.5 and HIT

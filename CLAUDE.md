@@ -219,6 +219,15 @@ replacement, roster-balance fit and goalie-category construction; they do not sh
 or optimize Yahoo fantasy points. Exact assumptions and live-league TODOs are in
 `docs/NHL_FORMAT_PROFILES.md`.
 
+**Category leagues (2026-09-28):** the joined Yahoo Prize H2H-Cat **3175** has its
+own profile (`yahoo-prize-cat-3175`). Category leagues show one colour-scaled
+projected column per category on Best Available, a "My projected categories" team
+table under the board (white = league median), punt checkboxes instead of the
+streaming sliders, and a category My Rank (draftable-pool z-scores, volume-weighted
+goalie rates, positional VORP, draft-safe ADP caps 6/15/25). Tunables live in
+`NHL_CAT_MODEL` and `NHL_CAT_BUCKETS`; details in `SPECS.md`. Roto reuses all of it
+with BLK; NBA should reuse the same shape.
+
 Testing, before any push: `node tests/boot-smoke.mjs` (boots the whole page in
 jsdom, 45 assertions across both sports; needs `npm install --no-save jsdom`),
 `node tests/fantrax-import.test.mjs` (drives the real worker route with stubbed

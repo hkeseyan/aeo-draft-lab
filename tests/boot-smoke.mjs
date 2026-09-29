@@ -172,7 +172,7 @@ ok &= check('scoring values carried onto LEAGUE', 'LEAGUE.scoring.sog', 0.9);
 ok &= check('weekly acquisition cap carried', 'LEAGUE.maxAcquisitionsPerWeek', 4);
 ok &= check('sport bar shows both sports', () => w.document.getElementById('sportBar').children.length, 2);
 ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','),
-  'yahoo-nhl-public,fantrax-nhl-weekly-points,trax50-classic-draft-76,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1,public-points-league-2');
+  'yahoo-nhl-public,fantrax-nhl-weekly-points,trax50-classic-draft-76,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1,public-points-league-2,yahoo-prize-cat-3175');
 ok &= check('position filter is hockey', () => [...w.document.getElementById('posFilter').options].map(o => o.value).join(','), 'ALL,C,LW,RW,D,G');
 ok &= check('tendency columns are hockey', () => [...w.document.getElementById('tendHead').children].map(x => x.textContent).join(','), 'Use,Owner,C,LW,RW,D,G');
 
@@ -418,7 +418,40 @@ ok &= check('categories profile computes category replacement value',
 ok &= check('categories board does not display Yahoo fantasy points',
   'document.getElementById("projHeader").textContent+":"+(PLAYERS[0].leagueProj===null)', 'Cat:true');
 ok &= check('categories recommendation explains balanced contribution',
-  'nhlLiveRecommendations(30).some(x=>/contributes in|balances /.test(x.reason))', true);
+  'nhlLiveRecommendations(30).some(x=>/contributes in|boosts weak /.test(x.reason))', true);
+ev('switchLeague("yahoo-prize-cat-3175")');
+await new Promise(r => setTimeout(r, 250));
+ok &= check('league 3175 carries its Yahoo H2H Categories settings',
+  'LEAGUES[CURRENT_LEAGUE_ID].yahooLeagueId+":"+LEAGUE.teams+":"+LEAGUE.rounds+":"+LEAGUE.irSlots+":"+LEAGUE.categoryStats.skater.join(",")+":"+LEAGUE.categoryStats.goalie.join(",")+":"+LEAGUE.maxAcquisitionsPerWeek+":"+LEAGUE.minGoalieGamesPerWeek',
+  '3175:12:16:2:G,A,+/-,PPP,SOG,HIT:W,GAA,SV%,SHO:4:3');
+ok &= check('3175 roster is 2C/2LW/2RW/4D/2G', slots, 'C,C,LW,LW,RW,RW,D,D,D,D,G,G');
+ok &= check('category leagues show one draft-list column per category', () =>
+  [...w.document.querySelectorAll('#poolTable th.catcol')].map(t => t.textContent).join(','), 'G,A,+/-,PPP,SOG,HIT,W,GAA,SV%,SHO');
+ok &= check('category cells are colour-scaled whole-season projections', () => {
+  const cells = [...w.document.querySelectorAll('#poolTable td.catcell')].filter(td => td.textContent);
+  const sv = cells.find(td => /^\.\d{3}$/.test(td.textContent));
+  return cells.length > 100 && cells.every(td => /background:rgb/.test(td.getAttribute('style') || '')) && !!sv;
+}, true);
+ok &= check('streaming sliders are replaced by punt checkboxes', () =>
+  w.document.querySelectorAll('#nhlStreamControls [data-punt]').length + ':' + w.document.querySelectorAll('#nhlStreamControls [data-stream]').length, '10:0');
+ok &= check('recommendations wait for a draft slot', () => w.document.getElementById('nhlLivePicks').textContent, v => /draft slot/.test(v));
+ev('el("draftSlotInput").value="6"');
+await ev('setNhlDraftSlot()');
+ok &= check('punting a category removes it from category value', () => ev(`(function(){
+  const p=findPlayer('Brady Tkachuk'), before=p.categoryValue;
+  PUNT_CATS.add('HIT');computeMyRanks();
+  const after=p.categoryValue, z=p.categoryZ.HIT;
+  PUNT_CATS.delete('HIT');computeMyRanks();
+  return Math.abs((before-after)-z)<1e-9 && z>0;
+})()`), true);
+ev('simToMe()');
+ev('makePick(nhlLiveRecommendations(1)[0].player.id,nextOpenPick(curPick));curPick=nextOpenPick(curPick+1);simToMe();render();');
+ok &= check('my-team category table shows average and total rows', () => {
+  const rows = [...w.document.querySelectorAll('#catTeamTable tr')];
+  return rows.length === 3 && /Average per player/.test(rows[1].textContent) && /Team total/.test(rows[2].textContent) && rows[2].children.length === 11;
+}, true);
+ok &= check('team category rank is measured against the league', 'nhlLeagueCategoryState().stats.G.total.teams', 12);
+ok &= check('no errors in the category league', () => errors.slice(0, 3).join(' | '), v => v === '');
 ev('switchLeague("yahoo-nhl-public-roto")');
 await new Promise(r => setTimeout(r, 250));
 ok &= check('Public Prize roto reference is 12 teams with blocks and 82-game cap',
