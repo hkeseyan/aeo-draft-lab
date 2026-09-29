@@ -230,6 +230,16 @@ function playerPoolMap(profile) {
   return map;
 }
 __name(playerPoolMap, "playerPoolMap");
+function normalizeDropClass(value, pos = "") {
+  const raw = String(value || "").trim().toLowerCase().replace(/[ -]+/g, "_");
+  if (["dead", "drop", "drop_now", "outright"].includes(raw)) return "dead";
+  if (["replaceable", "replace_soon", "churn", "streamer"].includes(raw)) return "replaceable";
+  if (["conditional", "upgrade_only"].includes(raw)) return "conditional";
+  if (["protected", "strong_hold", "hold"].includes(raw)) return "protected";
+  if (!raw && (pos === "K" || pos === "DST")) return "replaceable";
+  return "unknown";
+}
+__name(normalizeDropClass, "normalizeDropClass");
 function normalizeFaabPlayer(raw, pool, currentWeek) {
   const named = String(raw.name || raw.player || "").trim();
   const base = pool.get(named.toLowerCase()) || {};
@@ -241,6 +251,14 @@ function normalizeFaabPlayer(raw, pool, currentWeek) {
   const byeWeek = n(raw.bye_week || raw.bye, 0);
   const unavailable = status === "O" || status === "IR" || status === "SUSP" || status === "NA" || byeWeek === currentWeek;
   const injuryRisk = raw.injury === "" || raw.injury == null ? status === "Q" || status === "D" ? 0.45 : unavailable ? 1 : 0.08 : ratio(raw.injury);
+  const rosterPctRaw = raw.roster_pct ?? raw.roster_percent ?? raw.percent_owned ?? raw.ownership_pct;
+  const rosterPct = rosterPctRaw === "" || rosterPctRaw == null ? null : clamp(n(rosterPctRaw, 0), 0, 100);
+  const trendRaw = raw.roster_trend ?? raw.trend ?? raw.adds ?? raw.add_count ?? raw.percent_change ?? raw.roster_pct_delta;
+  const rosterTrend = trendRaw === "" || trendRaw == null ? null : n(trendRaw, 0);
+  const trendMetric = String(raw.trend_metric || (raw.adds !== "" && raw.adds != null ? "adds" : raw.add_count !== "" && raw.add_count != null ? "adds" : raw.percent_change !== "" && raw.percent_change != null ? "roster_pct_delta" : raw.roster_pct_delta !== "" && raw.roster_pct_delta != null ? "roster_pct_delta" : "")).trim().toLowerCase();
+  const trendWindowHours = Math.max(0, n(raw.trend_window_hours || raw.lookback_hours, 0)) || null;
+  const trendSource = String(raw.trend_source || raw.market_source || "").trim().toLowerCase();
+  const metadataUpdatedAt = String(raw.metadata_updated_at || raw.market_updated_at || "").trim();
   let derivedEndgame = rank <= 5 ? 0.95 : rank <= 12 ? 0.75 : rank <= 30 ? 0.5 : rank <= 60 ? 0.25 : 0.08;
   if (pos === "QB" || pos === "TE") derivedEndgame *= 0.75;
   return {
@@ -254,9 +272,17 @@ function normalizeFaabPlayer(raw, pool, currentWeek) {
     schedule: clamp(n(raw.schedule || raw.schedule_grade, 3), 1, 5),
     injuryRisk,
     teammateOpportunity: raw.teammate === "" || raw.teammate == null ? ratio(raw.teammate_opportunity, 0) : ratio(raw.teammate),
+    rosterPct,
+    rosterTrend,
+    trendMetric,
+    trendWindowHours,
+    trendSource,
+    metadataUpdatedAt,
     byeWeek,
     status,
     unavailable,
+    dropClass: normalizeDropClass(raw.drop_class || raw.drop_disposition, pos),
+    dropNotes: String(raw.drop_notes || "").trim(),
     notes: String(raw.notes || "").trim()
   };
 }
@@ -314,6 +340,25 @@ function maxShareFor(player, tier, teamsAlive) {
   return lo + (hi - lo) * t;
 }
 __name(maxShareFor, "maxShareFor");
+function suggestedWaiverDrop(roster, baseLineup, candidate) {
+  const starters = new Set((baseLineup.starters || []).map((p) => p.name));
+  const classOrder = { dead: 0, replaceable: 1, conditional: 2 };
+  const eligible = roster.filter((p) => {
+    if (!(p.dropClass in classOrder)) return false;
+    if (p.dropClass === "conditional") {
+      if (!(candidate.rosRank < 999 && p.rosRank < 999 && candidate.rosRank < p.rosRank)) return false;
+    }
+    return true;
+  });
+  eligible.sort((a, b) =>
+    classOrder[a.dropClass] - classOrder[b.dropClass] ||
+    Number(starters.has(a.name)) - Number(starters.has(b.name)) ||
+    b.rosRank - a.rosRank ||
+    a.adjustedWeek - b.adjustedWeek
+  );
+  return eligible[0] || null;
+}
+__name(suggestedWaiverDrop, "suggestedWaiverDrop");
 function analyzeFaab(input, profile = {}) {
   const currentWeek = Math.max(1, n(input.week, 1));
   const startingBudget = Math.max(1, n(input.startingBudget || input.starting_budget, 1e3));
@@ -332,6 +377,7 @@ function analyzeFaab(input, profile = {}) {
     const withPlayer = starterLineup([...roster, { ...p, adjustedWeek }], profile);
     const upgrade = Math.max(0, withPlayer.total - baseLineup.total);
     const displaced = baseLineup.starters.find((x) => !withPlayer.starters.some((y) => y.name === x.name));
+    const suggestedDrop = suggestedWaiverDrop(roster, baseLineup, p);
     const need = clamp(upgrade / 6 + (displaced ? 0.12 : 0));
     const immediate = clamp(adjustedWeek / 18);
     const tier = tierFor(p, upgrade);
@@ -356,12 +402,19 @@ function analyzeFaab(input, profile = {}) {
     if (p.injuryRisk >= 0.45) reasons.push("material injury/availability risk");
     if (p.schedule >= 4) reasons.push("favorable upcoming schedule input");
     if (p.teammateOpportunity >= 0.4) reasons.push("teammate news raises opportunity");
+    if (p.rosterPct != null) reasons.push(`${p.rosterPct.toFixed(1)}% rostered`);
+    if (p.rosterTrend != null) reasons.push(p.trendMetric === "adds" ? `${Math.round(p.rosterTrend)} recent adds` : p.trendMetric === "roster_pct_delta" ? `${p.rosterTrend >= 0 ? "+" : ""}${p.rosterTrend.toFixed(1)} ownership-point trend` : `market trend ${p.rosterTrend}`);
+    if (suggestedDrop) reasons.push(`drop candidate: ${suggestedDrop.name} (${suggestedDrop.dropClass})`);
+    else reasons.push("drop path is unresolved; do not infer a cut from lineup displacement");
     if (!marketReachable) reasons.push("projected market exceeds this roster's disciplined price");
     return {
       ...p,
       tier,
       replacement: displaced ? displaced.name : null,
       replacementProjection: displaced ? Number(displaced.adjustedWeek.toFixed(1)) : null,
+      lineupDisplaced: displaced ? displaced.name : null,
+      suggestedDrop: suggestedDrop ? suggestedDrop.name : null,
+      suggestedDropClass: suggestedDrop ? suggestedDrop.dropClass : null,
       adjustedWeekProjection: Number(adjustedWeek.toFixed(1)),
       lineupUpgrade: Number(upgrade.toFixed(1)),
       projectedWinningBid,
@@ -373,6 +426,40 @@ function analyzeFaab(input, profile = {}) {
       confidence: p.weekProjection && p.rosRank < 999 ? "medium" : "low"
     };
   }).sort((a, b) => b.recommendedBid - a.recommendedBid || b.lineupUpgrade - a.lineupUpgrade);
+
+  // Market-attention is a discovery/triage layer, not player value. Trend counts
+  // are normalized only against candidates with the same source + metric so we
+  // never pretend "Sleeper adds" and "Yahoo ownership delta" share a scale.
+  const trendGroups = new Map();
+  recommendations.forEach((p) => {
+    if (p.rosterTrend == null) return;
+    const key = `${p.trendSource || "unknown"}|${p.trendMetric || "unknown"}`;
+    if (!trendGroups.has(key)) trendGroups.set(key, []);
+    trendGroups.get(key).push(p);
+  });
+  trendGroups.forEach((rows) => {
+    const sorted = rows.slice().sort((a, b) => a.rosterTrend - b.rosterTrend);
+    sorted.forEach((p, i) => {
+      p.trendPercentile = sorted.length <= 1 ? 100 : Number((100 * i / (sorted.length - 1)).toFixed(1));
+    });
+  });
+  recommendations.forEach((p) => {
+    const parts = [];
+    if (p.rosterPct != null) parts.push(clamp(p.rosterPct, 0, 100));
+    if (p.trendPercentile != null) parts.push(p.trendPercentile);
+    p.discoveryScore = parts.length ? Number((parts.reduce((a, b) => a + b, 0) / parts.length).toFixed(1)) : null;
+  });
+  recommendations.slice().sort((a, b) =>
+    (b.discoveryScore ?? -1) - (a.discoveryScore ?? -1) ||
+    (b.rosterPct ?? -1) - (a.rosterPct ?? -1) ||
+    (b.rosterTrend ?? -Infinity) - (a.rosterTrend ?? -Infinity)
+  ).forEach((p, i) => { p.discoveryRank = i + 1; });
+
+  recommendations.forEach((p, i) => {
+    p.claimOrder = i + 1;
+    p.claimOrderRule = "bid_descending";
+    p.bidOrderLocked = true;
+  });
   return {
     id: `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`,
     createdAt: Date.now(),
@@ -382,8 +469,12 @@ function analyzeFaab(input, profile = {}) {
     teamsAlive,
     startingBudget,
     remainingBudget,
+    claimOrderRule: "bid_descending",
+    bidOrderLocked: true,
     calibrationVersion: FAAB_CALIBRATION_VERSION,
     assumptions: [
+      "Market-discovery rank uses roster percentage plus source/metric-local trend percentile only to decide who deserves review; it is not a player-value score.",
+      "For bid-based waivers, higher dollar bids execute before lower dollar bids; a lower bid cannot be manually promoted ahead of a higher bid.",
       "Projected winning bids use the 2025 Off With Their Heads history plus the Sep. 16, 2026 18-team and 12-team bid stacks.",
       "Competitor remaining budgets are not yet modeled; projected market prices use calibrated opening-budget shares with a modest season-phase adjustment.",
       "Schedule, injury, bye, role, and teammate-opportunity inputs are applied when supplied; missing fields use conservative defaults."
@@ -398,7 +489,13 @@ function flattenYahooMeta(value, out = {}) {
     if (v == null || typeof v !== "object") out[k] = v;
     else if (k === "name" && v.full) out.name = v.full;
     else if (k === "bye_weeks" && v.week) out.bye_week = v.week;
-    else flattenYahooMeta(v, out);
+    else if (k === "percent_owned") {
+      const pct = flattenYahooMeta(v, {});
+      if (pct.value != null) out.percent_owned = pct.value;
+      if (pct.delta != null) out.percent_owned_delta = pct.delta;
+      if (pct.coverage_type != null) out.percent_owned_coverage = pct.coverage_type;
+      if (pct.week != null) out.percent_owned_week = pct.week;
+    } else flattenYahooMeta(v, out);
   });
   return out;
 }
@@ -436,10 +533,16 @@ function yahooPlayerRows(raw) {
   const seen = new Set();
   return collectYahooEntities(raw, "player").filter((p) => p.player_key && !seen.has(p.player_key) && seen.add(p.player_key)).map((p) => ({
     name: p.name || "Unknown",
+    player_key: p.player_key || "",
     pos: String(p.display_position || p.position || "").replace(/\s*,\s*/g, "/"),
     team: p.editorial_team_abbr || "",
     status: p.status || "",
     bye_week: p.bye_week || "",
+    roster_pct: p.percent_owned == null ? "" : p.percent_owned,
+    roster_trend: p.percent_owned_delta == null ? "" : p.percent_owned_delta,
+    trend_metric: p.percent_owned_delta == null ? "" : "roster_pct_delta",
+    trend_source: p.percent_owned == null ? "" : "yahoo",
+    metadata_updated_at: p.percent_owned == null ? "" : new Date().toISOString(),
     notes: p.injury_note || ""
   }));
 }
@@ -603,12 +706,18 @@ async function yahooFaabSnapshot(env, kv, originUrl, profile) {
   if (!mine || !mine.team_key) throw new Error("Yahoo league matched, but the current user's team could not be identified.");
   const [rosterRaw, waiversRaw] = await Promise.all([
     yahooJson(token, `team/${mine.team_key}/roster`),
-    yahooJson(token, `league/${key}/players;status=W;sort=OR;count=100`)
+    yahooJson(token, `league/${key}/players;status=W;sort=OR;count=100/percent_owned`)
   ]);
   const roster = yahooPlayerRows(rosterRaw);
   const available = yahooPlayerRows(waiversRaw);
   if (!available.length) throw new Error("Yahoo returned no players currently on waivers; the eliminated roster may not be released yet.");
-  return { yahooLeagueKey: key, syncedAt: Date.now(), roster, available };
+  return {
+    yahooLeagueKey: key,
+    syncedAt: Date.now(),
+    roster,
+    available,
+    marketMetadata: available.some((p) => p.roster_pct !== "" || p.roster_trend !== "") ? "yahoo" : "none"
+  };
 }
 __name(yahooFaabSnapshot, "yahooFaabSnapshot");
 async function syncLeagueSnapshot(env, kv, originUrl, profile) {
@@ -649,7 +758,12 @@ async function syncLeagueSnapshot(env, kv, originUrl, profile) {
     roster,
     available,
     lineup: fantasyPros && fantasyPros.lineup || previous.lineup || null,
-    coverage: { roster: rosterSource, available: availabilitySource, projections: fantasyPros ? "fantasypros" : previous.coverage && previous.coverage.projections || "embedded" },
+    coverage: {
+      roster: rosterSource,
+      available: availabilitySource,
+      projections: fantasyPros ? "fantasypros" : previous.coverage && previous.coverage.projections || "embedded",
+      marketMetadata: yahoo && yahoo.marketMetadata && yahoo.marketMetadata !== "none" ? yahoo.marketMetadata : previous.coverage && previous.coverage.marketMetadata || "none"
+    },
     sourceStatus
   };
   await kv.put(leagueSnapshotKey(profile.id), JSON.stringify(snapshot));
@@ -677,10 +791,17 @@ function waiverTicketSummary(ticket) {
     pos: ticket.pos,
     team: ticket.team,
     suggestedDrop: ticket.suggestedDrop,
+    suggestedDropClass: ticket.suggestedDropClass,
+    claimOrder: ticket.claimOrder,
+    claimOrderRule: ticket.claimOrderRule,
+    bidOrderLocked: ticket.bidOrderLocked,
     recommendedBid: ticket.recommendedBid,
     projectedWinningBid: ticket.projectedWinningBid,
     stretchBid: ticket.stretchBid,
+    waiverProcessing: ticket.waiverProcessing,
     waiverMethod: ticket.waiverMethod,
+    waiverPriorityBehavior: ticket.waiverPriorityBehavior,
+    zeroBidAllowed: ticket.zeroBidAllowed,
     deadline: ticket.deadline,
     teamDirection: ticket.teamDirection,
     draftOrderRule: ticket.draftOrderRule,
@@ -715,10 +836,17 @@ function normalizeWaiverTicket(body = {}, previous = null) {
     pos: ticketText(body.pos == null ? previous && previous.pos : body.pos, 24).toUpperCase(),
     team: ticketText(body.team == null ? previous && previous.team : body.team, 24).toUpperCase(),
     suggestedDrop: ticketText(body.suggestedDrop == null ? previous && previous.suggestedDrop : body.suggestedDrop, 120),
+    suggestedDropClass: ticketText(body.suggestedDropClass == null ? previous && previous.suggestedDropClass : body.suggestedDropClass, 40),
+    claimOrder: Math.max(0, n(body.claimOrder == null ? previous && previous.claimOrder : body.claimOrder, 0)) || null,
+    claimOrderRule: ticketText(body.claimOrderRule == null ? previous && previous.claimOrderRule : body.claimOrderRule, 40) || "bid_descending",
+    bidOrderLocked: body.bidOrderLocked == null ? previous && previous.bidOrderLocked !== false : Boolean(body.bidOrderLocked),
     recommendedBid: Math.max(0, n(body.recommendedBid == null ? previous && previous.recommendedBid : body.recommendedBid, 0)),
     projectedWinningBid: Math.max(0, n(body.projectedWinningBid == null ? previous && previous.projectedWinningBid : body.projectedWinningBid, 0)),
     stretchBid: Math.max(0, n(body.stretchBid == null ? previous && previous.stretchBid : body.stretchBid, 0)),
+    waiverProcessing: ticketText(body.waiverProcessing == null ? previous && previous.waiverProcessing : body.waiverProcessing, 40) || "unknown",
     waiverMethod: ticketText(body.waiverMethod == null ? previous && previous.waiverMethod : body.waiverMethod, 40) || "unknown",
+    waiverPriorityBehavior: ticketText(body.waiverPriorityBehavior == null ? previous && previous.waiverPriorityBehavior : body.waiverPriorityBehavior, 40) || "unknown",
+    zeroBidAllowed: Boolean(body.zeroBidAllowed == null ? previous && previous.zeroBidAllowed : body.zeroBidAllowed),
     deadline: ticketText(body.deadline == null ? previous && previous.deadline : body.deadline, 80),
     teamDirection: ticketText(body.teamDirection == null ? previous && previous.teamDirection : body.teamDirection, 40) || "unspecified",
     draftOrderRule: ticketText(body.draftOrderRule == null ? previous && previous.draftOrderRule : body.draftOrderRule, 160),

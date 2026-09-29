@@ -319,7 +319,98 @@ Inputs live at `GET/PUT /api/inseason/state`; reports are created/listed/read th
 
 The Waiver Lab turns a report recommendation into a user-owned, per-league ticket with the following lifecycle: `draft → approved → submitted → verified`, with `not_won` and `cancelled` terminal outcomes. Tickets are created/listed at `GET/POST /api/inseason/tickets` and read/updated at `GET/PUT /api/inseason/tickets/:id`; the latest 100 are indexed per user and league in KV.
 
-Each ticket retains the candidate, optional suggested drop, bid levels, waiver method, deadline, team direction, draft-order rule, trigger, rationale, originating report, and snapshot timestamp. This makes an in-session recommendation reviewable after the fact rather than turning a one-off chat answer into an untraceable action. The app never submits a transaction to Yahoo, Sleeper, or FantasyPros: the manager performs the actual claim manually, refreshes the host/FantasyPros snapshot, then records `verified` only after that readback. For non-guillotine leagues, team direction and waiver method intentionally default to `unspecified`/`unknown` so dynasty strategy and platform rules are entered explicitly rather than inferred.
+Waiver mechanics are modeled as separate facts because "waivers" is not one transaction type. `waiverProcessing` distinguishes continuous waivers, waivers that later open into free agency, and free-agency-only access. `waiverMethod` separately records FAAB, waiver priority, or no waiver cost. `waiverPriorityBehavior` distinguishes a persistent list where a successful claim moves the manager to the back from systems that reset periodically/by standings, and `zeroBidAllowed` records whether a $0 FAAB claim can be used. These settings live in the per-league in-season state and are copied into every ticket so later claim-order logic can reason from the rules that actually apply.
+
+Each ticket retains the candidate, optional suggested drop, bid levels, waiver mechanics, deadline, team direction, draft-order rule, trigger, rationale, originating report, and snapshot timestamp. This makes an in-session recommendation reviewable after the fact rather than turning a one-off chat answer into an untraceable action. The app never submits a transaction to Yahoo, Sleeper, or FantasyPros: the manager performs the actual claim manually, refreshes the host/FantasyPros snapshot, then records `verified` only after that readback. For non-guillotine leagues, team direction and waiver mechanics intentionally default to unknown unless the league profile/source can establish them.
+
+#### Claim-cost and speculative-add policy
+
+The planner must price the *transaction path*, not just the player. Continuous waivers remove the "wait for free agency" option, while waivers→free agency can make passing on a claim rational when demand is low and the claim currency is valuable. A persistent waiver priority is a scarce season-long asset because a successful claim sends the manager to the back; FAAB has an explicit dollar cost; a $0 claim has low monetary cost but can still carry tie-break/priority consequences depending on the host.
+
+A player expected to be cut again before the Sunday slate should normally receive a $0 recommendation, not a paid speculative bid, especially when the add requires temporarily dropping a kicker/defense and later spending the same roster slot to reacquire one. Small exceptions (often $1, occasionally $2) are defensible only when the contingency payoff is meaningful — for example a backup RB who could inherit a large workload before the manager must decide whether to keep him. A season-long hold or a player the manager actively wants is a different class and may justify real FAAB.
+
+IR creates free optionality and must be evaluated before a drop is priced. An open IR slot, a rostered player expected to become IR/OUT eligible, or an expendable IR occupant can make a speculative claim effectively no-drop; those paths should be favored over burning FAAB/priority on a player likely to be churned. Claim waterfalls must be recomputed after each hypothetical success because two claims can compete for the same open slot, IR move, kicker/defense placeholder, or drop candidate.
+
+
+#### Claim execution order and drop disposition
+
+For the user's leagues, treat **bid amount as execution priority whenever claims use a dollar bid**. A $10 claim is processed before a $6 claim; the manager cannot manually promote the $6 claim ahead of it while leaving the amounts unchanged. Therefore price and preference are coupled: the planner must not output a nominal preference order that contradicts its own bids. Recommendations are sorted by descending recommended bid, with any same-dollar ordering treated only as a secondary plan order unless the host's exact tie behavior is known.
+
+Do not confuse **lineup displacement** with **roster cut choice**. The player pushed out of the optimal starting lineup is useful information, but it is not automatically the player to drop. Roster evaluation happens first and assigns a drop disposition:
+- `dead`: safe to drop outright; no meaningful reason to preserve the player on this roster.
+- `replaceable`: a churn/streaming slot that should be replaced when there is a useful opportunity; K and DST may default here when no stronger league-specific reason exists.
+- `conditional`: not an outright cut, but eligible to drop when the incoming player is a meaningful upgrade.
+- `protected`: do not auto-cut from generic waiver logic; dropping this player requires a specific acquisition-driven case.
+
+Unclassified players remain unresolved rather than being silently assigned a cut. Early-season reluctance to churn kickers/defenses or recent speculative draft picks is an observation to monitor, **not yet a model coefficient**.
+
+A player that is truly `dead` can sometimes be dropped **before** entering claims. The main benefit is operational: converting one or more dead rostered players into actual open spots can dramatically reduce duplicate claim construction. Example: with two otherwise-dead roster spots and 15 candidate adds, preserving both players for branch flexibility can force roughly two alternative claim paths per candidate; dropping them first can collapse that into one ordered list filling two open spots. The planner should recommend a pre-drop only when the lost branch optionality is negligible relative to the reduction in claim complexity.
+
+When several claims use the same drop player, they form a mutually exclusive branch: the first successful claim consumes that drop path, and later claims tied to that player should naturally fail/skip rather than cause an additional unrelated cut. Position-specific caps can create another branch rule (for example, "take at most one of these RB claims"); those caps are part of the waterfall, not independent player rankings.
+
+
+#### Candidate discovery metadata
+
+Waiver Lab separates **discovery/triage** from **valuation**. Before the projection model is trusted enough to drive the entire candidate list, the fastest reliable way to make the pool manageable is to surface the same two market-attention signals the user already uses on host apps:
+
+1. **Roster percentage** — how broadly a player is held.
+2. **Recent trend** — how quickly managers are adding/roster­ing the player now.
+
+These are not player-value inputs by default. They answer "who deserves inspection?" rather than "who is the best player?" A low-rostered breakout with fresh injury-driven opportunity can be more valuable than a highly rostered veteran, and early Tuesday data can lag because many leagues have not processed waivers or reacted to new information yet.
+
+The normalized available-player schema supports:
+- `roster_pct`
+- `roster_trend`
+- `trend_metric` (e.g. `adds` or `roster_pct_delta`)
+- `trend_window_hours`
+- `trend_source`
+- `metadata_updated_at`
+
+Do **not** combine unlike trend metrics into one universal number without source-specific calibration. "134 Sleeper adds in 24h" and "+1.8 Yahoo ownership percentage points this week" are displayed with their source/window intact.
+
+Source plan:
+- **Yahoo:** official Fantasy API `percent_owned`; current responses include ownership value and a delta. The Waiver Lab Yahoo snapshot now requests this sub-resource for its returned waiver pool and stores the metadata on each row.
+- **Sleeper:** official public trending endpoint provides recent add/drop counts with configurable `lookback_hours`; no documented global roster-percentage field should be assumed. Add-count ingestion still needs a stable Sleeper-ID mapping into the Draft Lab player identity layer.
+- **ESPN:** ownership percentage/change are available through the widely used fantasy endpoints, but those endpoints are not officially supported. Treat them as an opportunistic source with health checks and fallbacks, not a contractual dependency.
+- **FantasyPros:** useful for league-specific availability, waiver recommendations, rankings, injury/news context and projections; use as enrichment/fallback rather than pretending its waiver recommendation percentage is the same thing as host-platform roster/add momentum.
+
+The interactive waiver run should explicitly refresh sources before planning. A fetch timestamp proves when Draft Lab retrieved a value, not when the provider last incorporated news, so provider projection freshness must not be inferred merely from a recent HTTP response.
+
+#### Projection freshness and conditional opportunity
+
+Host-platform projections are supplemental until the in-season projection layer is event-aware. They can update slowly and can blur mutually exclusive outcomes. For injury contingencies, do not treat a single blended point projection as the full decision model.
+
+Example pattern: if a starting RB is uncertain, the true useful scenarios may be approximately:
+- starter active → starter projects normally, backup remains a low-volume reserve;
+- starter inactive → starter projects zero, backup inherits a large workload.
+
+A platform may temporarily show both players at middling values while the injury is unresolved. Draft Lab should eventually model the conditional scenarios separately and attach a probability/confidence to the starter's availability, rather than blindly trusting the host's blended projection.
+
+Projection/news requirements for the future engine:
+- incorporate the latest completed game before the next waiver decision;
+- incorporate material role/injury news from the last several hours;
+- track source timestamp and confidence;
+- retain scenario branches when an injury/role outcome is unresolved;
+- prefer authoritative late information for status, while allowing earlier probabilistic assumptions for planning;
+- keep market metadata (roster %, add trend) separate from the football-value projection.
+
+For the current first version, projections remain useful context, but market discovery + roster/drop logic + current news can outrank a stale platform point projection.
+
+
+#### Weekly calibration loop
+
+The first working Waiver Lab does not need to be fully autonomous to be useful. Its immediate purpose is to produce a **reviewable candidate set and transaction hypothesis** that the user can critique against the claims they already made manually.
+
+The report supports alternative inspection sorts:
+- model recommendation order;
+- market-discovery order;
+- roster percentage;
+- recent host-platform trend;
+- ROS rank.
+
+Market-discovery order is calculated from roster percentage plus a **source + metric-local trend percentile**. That normalization exists only to prioritize review within the current candidate pool; it is not a fantasy-value score and must not be used as a universal comparison across providers.
+
+Each report row accepts one persistent calibration verdict: `agree`, `too_high`, `too_low`, `wrong_drop`, `would_not_claim`, or `needs_context`. Feedback is stored in the league's in-season state keyed to the report and player so future sessions can compare the model's hypothesis to the user's actual decision. The purpose is to accumulate concrete disagreement labels before adding more complexity to the ranking/bid model.
 
 The current FantasyPros direct feed covers the user's roster/matchup and decision context but not the complete free-agent pool. Therefore the normalized snapshot tracks coverage per field (`roster`, `available`, `projections`) and never presents a partial provider as complete. Yahoo or the last saved/manual pool remains the availability authority until a supported complete FantasyPros availability feed is added.
 
