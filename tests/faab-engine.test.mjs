@@ -23,15 +23,15 @@ const input = {
   remainingBudget: 1000,
   teamsAlive: 18,
   aggression: 0.8,
-  rosterCsv: `name,pos,team,week_proj,ros_rank
-Josh Allen,QB,BUF,23.5,1
-De'Von Achane,RB,MIA,14.5,11
-Tony Pollard,RB,TEN,8.9,34
-Aaron Jones Sr.,RB,MIN,8.6,42
-Davante Adams,WR,LAR,10.7,23
-Courtland Sutton,WR,DEN,8.9,38
-Keenan Allen,WR,LAC,6.7,59
-Tyler Warren,TE,IND,9.7,4`,
+  rosterCsv: `name,pos,team,week_proj,ros_rank,drop_class,drop_notes
+Josh Allen,QB,BUF,23.5,1,protected,
+De'Von Achane,RB,MIA,14.5,11,protected,
+Tony Pollard,RB,TEN,8.9,34,replaceable,replace when waiver plan has a better use
+Aaron Jones Sr.,RB,MIN,8.6,42,conditional,
+Davante Adams,WR,LAR,10.7,23,protected,
+Courtland Sutton,WR,DEN,8.9,38,conditional,
+Keenan Allen,WR,LAC,6.7,59,conditional,
+Tyler Warren,TE,IND,9.7,4,protected,`,
   availableCsv: `name,pos,team,week_proj,ros_rank,endgame,role,schedule,injury
 Puka Nacua,WR,LAR,16.9,2,100,100,4,10
 Malik Nabers,WR,NYG,11.4,10,75,85,3,25
@@ -74,6 +74,14 @@ assert.ok(byName['Emeka Egbuka'].projectedWinningBid >= 45 && byName['Emeka Egbu
 assert.ok(byName['Tucker Kraft'].projectedWinningBid >= 15 && byName['Tucker Kraft'].projectedWinningBid <= 30);
 assert.ok(byName['Puka Nacua'].lineupUpgrade > byName['Emeka Egbuka'].lineupUpgrade);
 assert.ok(byName['Tucker Kraft'].lineupUpgrade < byName['Emeka Egbuka'].lineupUpgrade);
+
+assert.equal(byName['Puka Nacua'].suggestedDrop, 'Tony Pollard');
+assert.equal(byName['Puka Nacua'].suggestedDropClass, 'replaceable');
+assert.ok(byName['Puka Nacua'].lineupDisplaced);
+assert.equal(report.bidOrderLocked, true);
+assert.equal(report.claimOrderRule, 'bid_descending');
+assert.ok(report.recommendations.every((p, i, rows) => i === 0 || rows[i - 1].recommendedBid >= p.recommendedBid));
+assert.deepEqual(report.recommendations.map(p => p.claimOrder), report.recommendations.map((_, i) => i + 1));
 
 const twelve = analyzeFaab({ ...input, teamsAlive: 12 }, { ...profile, teams: 12 });
 const twelvePuka = twelve.recommendations.find((p) => p.name === 'Puka Nacua');
