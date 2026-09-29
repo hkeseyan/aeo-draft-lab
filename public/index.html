@@ -407,7 +407,10 @@
       <p class="small muted">This is the layer FantasyPros does not know: what this team is trying to do, how this league awards draft position, and which waiver route applies. It is saved with every ticket so our Waiver Lab sessions become reusable history.</p>
       <div class="row">
         <label class="small">Team direction <select id="waiverTeamDirection"><option value="unspecified">Unspecified</option><option value="survive">Survive / guillotine</option><option value="contend">Contend</option><option value="retool">Retool</option><option value="rebuild">Rebuild</option><option value="tank">Deliberate tank</option></select></label>
-        <label class="small">Waiver route <select id="waiverMethod"><option value="unknown">Confirm later</option><option value="faab">FAAB</option><option value="waiver_priority">Waiver priority</option><option value="free_agency">Free agency</option></select></label>
+        <label class="small">Waiver processing <select id="waiverProcessing"><option value="unknown">Confirm later</option><option value="continuous_waivers">Continuous waivers</option><option value="waivers_then_free_agency">Waivers → free agency</option><option value="free_agency_only">Free agency only</option></select></label>
+        <label class="small">Claim mechanism <select id="waiverMethod"><option value="unknown">Confirm later</option><option value="faab">FAAB</option><option value="waiver_priority">Waiver priority</option><option value="free_agency">No waiver cost / free agency</option></select></label>
+        <label class="small">Priority behavior <select id="waiverPriorityBehavior"><option value="unknown">Confirm later</option><option value="persistent_to_back">Persistent — successful claim moves to back</option><option value="periodic_reset">Resets periodically / by standings</option><option value="not_applicable">Not applicable</option></select></label>
+        <label class="small"><input id="waiverZeroBidAllowed" type="checkbox"> $0 FAAB bids allowed</label>
         <label class="small">Decision deadline <input id="waiverDeadline" type="datetime-local"></label>
       </div>
       <div class="row" style="margin-top:8px">
@@ -5907,7 +5910,10 @@ function faabStateFromForm(){return {
   emailEnabled:el('faabEmailEnabled').checked,
   emailTo:el('faabEmail').value.trim(),
   teamDirection:el('waiverTeamDirection').value,
+  waiverProcessing:el('waiverProcessing').value,
   waiverMethod:el('waiverMethod').value,
+  waiverPriorityBehavior:el('waiverPriorityBehavior').value,
+  zeroBidAllowed:el('waiverZeroBidAllowed').checked,
   waiverDeadline:el('waiverDeadline').value,
   draftOrderRule:el('waiverDraftOrderRule').value.trim(),
   waiverTrigger:el('waiverTrigger').value.trim()
@@ -5924,7 +5930,10 @@ function applyFaabState(s={}){
   el('faabEmailEnabled').checked=!!s.emailEnabled;
   el('faabEmail').value=s.emailTo||s.emailDefault||(ME.user&&ME.user.email)||'';
   el('waiverTeamDirection').value=s.teamDirection||(guillotine?'survive':'unspecified');
+  el('waiverProcessing').value=s.waiverProcessing||(s.waiverMethod==='free_agency'?'free_agency_only':'unknown');
   el('waiverMethod').value=s.waiverMethod||(guillotine?'faab':'unknown');
+  el('waiverPriorityBehavior').value=s.waiverPriorityBehavior||'unknown';
+  el('waiverZeroBidAllowed').checked=!!s.zeroBidAllowed;
   el('waiverDeadline').value=s.waiverDeadline||'';
   el('waiverDraftOrderRule').value=s.draftOrderRule||'';
   el('waiverTrigger').value=s.waiverTrigger||'';
@@ -5960,9 +5969,14 @@ function renderWaiverTickets(tickets=WAIVER_TICKETS){
   const body=el('waiverTickets');if(!body)return;
   body.innerHTML=(tickets||[]).map(t=>{
     const action=(t.action||'add').replace(/_/g,' ');
-    const bid=t.waiverMethod==='faab'?`$${t.recommendedBid||0} FAAB`:(t.waiverMethod||'Confirm route').replace(/_/g,' ');
+    const bid=t.waiverMethod==='faab'?`${t.recommendedBid||0} FAAB`:(t.waiverMethod||'Confirm route').replace(/_/g,' ');
     const deadline=t.deadline?new Date(t.deadline).toLocaleString():'No deadline set';
-    const context=[t.teamDirection||'unspecified',t.draftOrderRule||'draft-order rule not set',deadline].map(faabEsc).join(' · ');
+    const mechanics=[
+      t.waiverProcessing&&t.waiverProcessing!=='unknown'?(t.waiverProcessing||'').replace(/_/g,' '):'waiver processing not set',
+      t.waiverMethod==='waiver_priority'&&t.waiverPriorityBehavior&&t.waiverPriorityBehavior!=='unknown'?(t.waiverPriorityBehavior||'').replace(/_/g,' '):'',
+      t.waiverMethod==='faab'?(t.zeroBidAllowed?'$0 bids allowed':'positive bid may be required'):''
+    ].filter(Boolean).join(' · ');
+    const context=[t.teamDirection||'unspecified',mechanics,t.draftOrderRule||'draft-order rule not set',deadline].map(faabEsc).join(' · ');
     const details=[t.trigger,t.rationale].filter(Boolean).map(faabEsc).join(' · ');
     return `<tr><td><span class="ticket-status ${faabEsc(t.status)}">${faabEsc(waiverTicketStatusText(t.status))}</span><div class="small muted" style="margin-top:4px">${new Date(t.updatedAt||t.createdAt).toLocaleString()}</div></td><td><b>${faabEsc(action)} ${faabEsc(t.player||'')}</b>${t.pos?` <span class="muted">${faabEsc(t.pos)}</span>`:''}${t.suggestedDrop?`<div class="small muted">drop ${faabEsc(t.suggestedDrop)}</div>`:''}</td><td><b>${faabEsc(bid)}</b><div class="small muted">${faabEsc((t.waiverMethod||'unknown').replace(/_/g,' '))}</div></td><td class="small">${context}${details?`<div class="muted" style="margin-top:4px">${details}</div>`:''}</td><td><div class="ticket-actions">${waiverTicketActions(t)}</div></td></tr>`;
   }).join('')||'<tr><td colspan="5" class="muted">No tickets yet. Run a report, then create a ticket from a recommendation.</td></tr>';
@@ -5997,7 +6011,8 @@ async function createWaiverTicket(index){
     const payload={
       action:'add',player:player.name,pos:player.pos,team:player.team,suggestedDrop:player.replacement||'',
       recommendedBid:player.recommendedBid,projectedWinningBid:player.projectedWinningBid,stretchBid:player.stretchBid,
-      waiverMethod:context.waiverMethod,deadline:context.waiverDeadline,teamDirection:context.teamDirection,
+      waiverProcessing:context.waiverProcessing,waiverMethod:context.waiverMethod,waiverPriorityBehavior:context.waiverPriorityBehavior,
+      zeroBidAllowed:context.zeroBidAllowed,deadline:context.waiverDeadline,teamDirection:context.teamDirection,
       draftOrderRule:context.draftOrderRule,trigger:context.waiverTrigger,rationale:[...(player.reasons||[]),player.notes||''].filter(Boolean).join(' · '),
       reportId:FAAB_REPORT.id,snapshotAt:INSEASON_STATE.dataSyncedAt||FAAB_REPORT.createdAt
     };
