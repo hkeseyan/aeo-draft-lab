@@ -1179,11 +1179,19 @@ var worker_default = {
       }
       if (path === "/api/nhl/fantrax-adp") {
         if (request.method !== "GET") return J({ error: "method" }, 405);
-        const cacheKey = "nhl:fantrax-adp:v1";
+        // Draft-room ADP moves quickly before a contest starts. Keep this cache
+        // short and version it so a prior failed/stale response is never reused.
+        const cacheKey = "nhl:fantrax-adp:v2";
         const cached = await kv.get(cacheKey, { type: "json" });
         if (cached) return J(cached);
         try {
-          const r = await fetch("https://www.fantrax.com/fxea/general/getAdp?sport=NHL");
+          const r = await fetch("https://www.fantrax.com/fxea/general/getAdp?sport=NHL&start=1&limit=2000&order=ADP&showAllPositions=true", {
+            headers: {
+              "accept": "application/json, text/plain, */*",
+              "user-agent": "Mozilla/5.0 (compatible; AEO-Draft-Lab/1.0)",
+              "referer": "https://www.fantrax.com/"
+            }
+          });
           if (!r.ok) return J({ error: "Fantrax ADP returned " + r.status }, 502);
           const raw = await r.json();
           if (!Array.isArray(raw)) return J({ error: "Fantrax ADP response was not a list" }, 502);
@@ -1193,7 +1201,7 @@ var worker_default = {
             pos: row && row.pos || "",
             id: row && (row.id || row.fantraxId) || ""
           })).filter((row) => row.name && Number.isFinite(row.adp) && row.adp > 0);
-          await kv.put(cacheKey, JSON.stringify(out), { expirationTtl: 6 * 60 * 60 });
+          await kv.put(cacheKey, JSON.stringify(out), { expirationTtl: 10 * 60 });
           return J(out);
         } catch (e) {
           return J({ error: "Fantrax ADP fetch failed: " + e.message }, 502);
@@ -1461,25 +1469,6 @@ var worker_default = {
           if (draftType) notes.push(`Fantrax reports a ${draftType} draft.`);
           if (unresolved) notes.push(`${unresolved} roster entries kept their Fantrax player id because the player dictionary did not name them.`);
           notes.push("Fantrax roster data carries no drafted round or keeper flag, so players are marked FA/NONE.");
-          // A Fantrax league declares the slots it actually rosters, and hockey leagues
-          // there commonly use one combined forward slot (F) rather than C/LW/RW. Read
-          // that from the league's own constraints rather than assuming either shape —
-          // the built-in Fantrax profile hardcodes F/D/G, but a real league may differ.
-          // rosterPositions is the field the app already resolves positions through.
-          const constraintCodes = (() => {
-            const pc = info && info.rosterInfo && info.rosterInfo.positionConstraints;
-            if (!pc) return [];
-            const raw = Array.isArray(pc) ? pc.map((x) => x && (x.position || x.posId || x.code || x.id)) : Object.keys(pc);
-            const known = ["C", "LW", "RW", "F", "W", "D", "G"];
-            return [...new Set(raw.map((x) => String(x || "").toUpperCase().trim()))].filter((x) => known.includes(x));
-          })();
-          let rosterPositions = null;
-          if (constraintCodes.includes("F") && !constraintCodes.includes("C")) {
-            rosterPositions = ["F", "D", "G"].filter((x) => constraintCodes.includes(x));
-            notes.push("This league rosters one combined forward slot (F), so forwards are treated as F and nobody is multi-eligible.");
-          } else if (constraintCodes.length) {
-            rosterPositions = ["C", "LW", "RW", "D", "G"].filter((x) => constraintCodes.includes(x));
-          }
           return J({
             name: info && info.leagueName || "Imported Fantrax League",
             teams: teamIds.length || 12,
@@ -1491,7 +1480,6 @@ var worker_default = {
             sport: "nhl",
             platform: "fantrax",
             platformEligibility: { fantrax: platformEligibility },
-            rosterPositions,
             _source: "fantrax",
             _fantraxLeagueId: fxId,
             _note: notes.join(" ")
