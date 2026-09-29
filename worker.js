@@ -230,6 +230,16 @@ function playerPoolMap(profile) {
   return map;
 }
 __name(playerPoolMap, "playerPoolMap");
+function normalizeDropClass(value, pos = "") {
+  const raw = String(value || "").trim().toLowerCase().replace(/[ -]+/g, "_");
+  if (["dead", "drop", "drop_now", "outright"].includes(raw)) return "dead";
+  if (["replaceable", "replace_soon", "churn", "streamer"].includes(raw)) return "replaceable";
+  if (["conditional", "upgrade_only"].includes(raw)) return "conditional";
+  if (["protected", "strong_hold", "hold"].includes(raw)) return "protected";
+  if (!raw && (pos === "K" || pos === "DST")) return "replaceable";
+  return "unknown";
+}
+__name(normalizeDropClass, "normalizeDropClass");
 function normalizeFaabPlayer(raw, pool, currentWeek) {
   const named = String(raw.name || raw.player || "").trim();
   const base = pool.get(named.toLowerCase()) || {};
@@ -257,6 +267,8 @@ function normalizeFaabPlayer(raw, pool, currentWeek) {
     byeWeek,
     status,
     unavailable,
+    dropClass: normalizeDropClass(raw.drop_class || raw.drop_disposition, pos),
+    dropNotes: String(raw.drop_notes || "").trim(),
     notes: String(raw.notes || "").trim()
   };
 }
@@ -314,6 +326,25 @@ function maxShareFor(player, tier, teamsAlive) {
   return lo + (hi - lo) * t;
 }
 __name(maxShareFor, "maxShareFor");
+function suggestedWaiverDrop(roster, baseLineup, candidate) {
+  const starters = new Set((baseLineup.starters || []).map((p) => p.name));
+  const classOrder = { dead: 0, replaceable: 1, conditional: 2 };
+  const eligible = roster.filter((p) => {
+    if (!(p.dropClass in classOrder)) return false;
+    if (p.dropClass === "conditional") {
+      if (!(candidate.rosRank < 999 && p.rosRank < 999 && candidate.rosRank < p.rosRank)) return false;
+    }
+    return true;
+  });
+  eligible.sort((a, b) =>
+    classOrder[a.dropClass] - classOrder[b.dropClass] ||
+    Number(starters.has(a.name)) - Number(starters.has(b.name)) ||
+    b.rosRank - a.rosRank ||
+    a.adjustedWeek - b.adjustedWeek
+  );
+  return eligible[0] || null;
+}
+__name(suggestedWaiverDrop, "suggestedWaiverDrop");
 function analyzeFaab(input, profile = {}) {
   const currentWeek = Math.max(1, n(input.week, 1));
   const startingBudget = Math.max(1, n(input.startingBudget || input.starting_budget, 1e3));
@@ -332,6 +363,7 @@ function analyzeFaab(input, profile = {}) {
     const withPlayer = starterLineup([...roster, { ...p, adjustedWeek }], profile);
     const upgrade = Math.max(0, withPlayer.total - baseLineup.total);
     const displaced = baseLineup.starters.find((x) => !withPlayer.starters.some((y) => y.name === x.name));
+    const suggestedDrop = suggestedWaiverDrop(roster, baseLineup, p);
     const need = clamp(upgrade / 6 + (displaced ? 0.12 : 0));
     const immediate = clamp(adjustedWeek / 18);
     const tier = tierFor(p, upgrade);
@@ -356,12 +388,17 @@ function analyzeFaab(input, profile = {}) {
     if (p.injuryRisk >= 0.45) reasons.push("material injury/availability risk");
     if (p.schedule >= 4) reasons.push("favorable upcoming schedule input");
     if (p.teammateOpportunity >= 0.4) reasons.push("teammate news raises opportunity");
+    if (suggestedDrop) reasons.push(`drop candidate: ${suggestedDrop.name} (${suggestedDrop.dropClass})`);
+    else reasons.push("drop path is unresolved; do not infer a cut from lineup displacement");
     if (!marketReachable) reasons.push("projected market exceeds this roster's disciplined price");
     return {
       ...p,
       tier,
       replacement: displaced ? displaced.name : null,
       replacementProjection: displaced ? Number(displaced.adjustedWeek.toFixed(1)) : null,
+      lineupDisplaced: displaced ? displaced.name : null,
+      suggestedDrop: suggestedDrop ? suggestedDrop.name : null,
+      suggestedDropClass: suggestedDrop ? suggestedDrop.dropClass : null,
       adjustedWeekProjection: Number(adjustedWeek.toFixed(1)),
       lineupUpgrade: Number(upgrade.toFixed(1)),
       projectedWinningBid,
@@ -373,6 +410,11 @@ function analyzeFaab(input, profile = {}) {
       confidence: p.weekProjection && p.rosRank < 999 ? "medium" : "low"
     };
   }).sort((a, b) => b.recommendedBid - a.recommendedBid || b.lineupUpgrade - a.lineupUpgrade);
+  recommendations.forEach((p, i) => {
+    p.claimOrder = i + 1;
+    p.claimOrderRule = "bid_descending";
+    p.bidOrderLocked = true;
+  });
   return {
     id: `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`,
     createdAt: Date.now(),
@@ -382,8 +424,11 @@ function analyzeFaab(input, profile = {}) {
     teamsAlive,
     startingBudget,
     remainingBudget,
+    claimOrderRule: "bid_descending",
+    bidOrderLocked: true,
     calibrationVersion: FAAB_CALIBRATION_VERSION,
     assumptions: [
+      "For bid-based waivers, higher dollar bids execute before lower dollar bids; a lower bid cannot be manually promoted ahead of a higher bid.",
       "Projected winning bids use the 2025 Off With Their Heads history plus the Sep. 16, 2026 18-team and 12-team bid stacks.",
       "Competitor remaining budgets are not yet modeled; projected market prices use calibrated opening-budget shares with a modest season-phase adjustment.",
       "Schedule, injury, bye, role, and teammate-opportunity inputs are applied when supplied; missing fields use conservative defaults."
