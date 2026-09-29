@@ -1212,7 +1212,7 @@ var worker_default = {
         // This is deliberately raw-stat data, not another provider's fantasy-point
         // ranking. The browser owns the league scoring conversion and blends this
         // feed with the other configured preseason sources.
-        const cacheKey = "nhl:preseason-projections:nhl-fantasy-data:v1";
+        const cacheKey = "nhl:preseason-projections:nhl-fantasy-data:v2";
         const cached = await kv.get(cacheKey, { type: "json" });
         if (cached) return J(cached);
         try {
@@ -1226,7 +1226,9 @@ var worker_default = {
             id: String(p.id || ""), name: p.n || "", gp: Number(p.gp),
             g: Number(p.g), a: Number(p.a), pm: Number(p.pm), ppp: Number(p.ppp),
             sog: Number(p.sog), hit: Number(p.hit), blk: Number(p.blk),
-            w: Number(p.w), sv: Number(p.sv), ga: Number(p.ga), sho: Number(p.so)
+            w: Number(p.w), sv: Number(p.sv), ga: Number(p.ga), sho: Number(p.so),
+            // Goalie GAA per 60 minutes, for the categories GAA column.
+            gaa: Number(p.gaa)
           })).filter((p) => p.name && Object.values(p).some((v) => typeof v === "number" && Number.isFinite(v)));
           // Hashtag publishes projected rate stats in its public table. Keep this
           // adapter deliberately conservative: only a row with name + projected

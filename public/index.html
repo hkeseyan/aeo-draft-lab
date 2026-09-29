@@ -62,6 +62,19 @@
   .sportbar button{background:transparent;border:none;color:var(--muted);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600}
   .sportbar button.active{background:var(--accent);color:#fff}
   .val-good{color:var(--accent2);font-weight:700} .val-bad{color:var(--bad)}
+  /* Category leagues: projected-stat heat-map cells and the my-team table. */
+  #poolTable td.catcell{font-variant-numeric:tabular-nums;text-align:right;font-size:12px;padding-left:5px;padding-right:5px}
+  #poolTable th.catcol{text-align:right;padding-left:5px;padding-right:5px}
+  .catsplit{border-left:2px solid var(--line)}
+  /* Ten stat columns need room: tighter cells, and the positional-rank column
+     (already implied by the Pos chip) is dropped in category leagues. */
+  #poolTable.catmode th,#poolTable.catmode td{padding-left:4px;padding-right:4px}
+  #poolTable.catmode .prkcol{display:none}
+  th.punted{text-decoration:line-through;opacity:.55} td.catcell.punted{opacity:.45}
+  .cat-team-table{border-collapse:collapse;width:100%}
+  .cat-team-table th,.cat-team-table td{text-align:right;padding:5px 8px;font-variant-numeric:tabular-nums;border-bottom:1px solid var(--line)}
+  .cat-team-table th:first-child,.cat-team-table td:first-child{text-align:left}
+  .cat-team-table td.muted-cell{color:var(--muted)}
   /* Auction scarcity tiers: how much of the position that is left is still worth
      real money. Boundaries are detected from the remaining pool, never fixed
      dollar thresholds — see auctionPosTiers(). */
@@ -193,6 +206,10 @@
       <h2>Draft board <span class="muted small">(dashed = keeper · click a filled cell to rewind there · scrolls for later rounds)</span></h2>
       <div class="board" id="boardGrid"></div>
     </div>
+    <div class="card" id="catTeamCard" style="display:none">
+      <h2>My projected categories <span class="muted small" id="catTeamSub"></span></h2>
+      <div style="overflow-x:auto"><table class="cat-team-table" id="catTeamTable"></table></div>
+    </div>
     <div class="draft-workspace" id="snakeDraftGrid">
     <div class="card" id="nhlLiveCard" style="display:none">
       <h2>Who to pick now <span class="muted small">· separate from My Rank</span></h2>
@@ -216,7 +233,7 @@
           </div>
           <div class="scroll">
             <table id="poolTable">
-              <thead><tr><th title="Queue">Q</th><th class="sortcol active" data-sort="adp" title="Click to sort by platform ADP">ADP</th><th class="sortcol" data-sort="ecr" title="Click to sort by ECR">ECR</th><th class="sortcol" data-sort="myRank" title="Click to sort by intrinsic league value, lower=better">My</th><th id="projHeader">Proj</th><th title="Exposure across your other drafted leagues in this sport">Exp</th><th>Pos</th><th>Player</th><th>P.Rk</th><th class="dcol">Δ</th><th></th></tr></thead>
+              <thead><tr><th title="Queue">Q</th><th class="sortcol active" data-sort="adp" title="Click to sort by platform ADP">ADP</th><th class="sortcol" data-sort="ecr" title="Click to sort by ECR">ECR</th><th class="sortcol" data-sort="myRank" title="Click to sort by intrinsic league value, lower=better">My</th><th id="projHeader">Proj</th><th title="Exposure across your other drafted leagues in this sport">Exp</th><th>Pos</th><th>Player</th><th class="prkcol">P.Rk</th><th class="dcol">Δ</th><th></th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -2801,6 +2818,31 @@ LEAGUES_DEFAULT['public-points-league-2']={
   // source rows replace the blank components where a matching player is present.
   rostersRaw:'',playersCsv:PLAYERS_CSV_NHL+'\nAleksander Barkov,C,FLA,63,63,0,5'+'\nGavin McKenna,LW,TOR,,,,'+'\nQuinton Byfield,C,LAK,,,,'+'\nIvar Stenberg,LW,SJS,,,,'+'\nJacob Fowler,G,MTL,,,,'+'\nAlexander Nikishin,D,CAR,,,,'+'\nEgor Chinakhov,LW,CBJ,,,,'+'\nJackson Blake,RW,CAR,,,,',
 };
+// Yahoo Public Prize H2H Categories league 3175 (PRIZE 50), joined Sep 28. Settings
+// copied from the league's own Scoring & Settings page: 12 teams, live standard
+// draft Mon Sep 28 10:00pm PDT, 1-minute picks, daily lineups, 4 adds/week, a
+// 3-goalie-game weekly minimum, FAB waivers. The draft slot is not known until
+// Yahoo publishes the order, so it starts unset: pick it with "My slot" above
+// the board before the first pick.
+LEAGUES_DEFAULT['yahoo-prize-cat-3175']={
+  ...LEAGUES_DEFAULT['yahoo-nhl-public-categories'],
+  id:'yahoo-prize-cat-3175', name:'Yahoo Prize H2H-Cat 3175', teams:12, rounds:16, rosterSize:16, irSlots:2,
+  mySlot:null, yahooLeagueId:'3175', yahooLeagueUrl:'https://hockey.fantasysports.yahoo.com/hockey/3175',
+  referenceDataRevision:'yahoo-prize-cat-3175-2026-09-28-v1', officialDraft:true,
+  scoringLabel:'H2H Categories · Yahoo Prize 50', draftDateLabel:'Mon Sep 28 · 10:00 PM PDT · 1 min/pick', keeperDeadlineLabel:'—',
+  starters:{C:2,LW:2,RW:2,D:4,G:2}, flexEligible:[], scoringMode:'categories', lineupPeriod:'daily',
+  categoryStats:{skater:['G','A','+/-','PPP','SOG','HIT'],goalie:['W','GAA','SV%','SHO']},
+  maxAcquisitionsPerWeek:4, minGoalieGamesPerWeek:3,
+  waiverRules:{type:'FAB with continual rolling list tiebreak',waiverDays:2,mode:'continuous',trades:true,tradeEnd:'2027-03-03'},
+  assumptions:[
+    'Yahoo Prize H2H-Cat 3175 PRIZE 50: 12 teams, live standard draft Mon Sep 28 10:00pm PDT, 1 minute per pick.',
+    'Roster C, C, LW, LW, RW, RW, D, D, D, D, G, G, 4 BN, 2 IR. Skater G, A, +/-, PPP, SOG, HIT; goalie W, GAA, SV%, SHO.',
+    'Daily lineups; 4 acquisitions per week; minimum 3 goalie appearances per week; FAB waivers, 2 days, continuous. Playoffs: 6 teams, weeks 25-27.'
+  ],
+  owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
+  meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
+  rostersRaw:'', playersCsv:PLAYERS_CSV_NHL, poolDataRevision:'nhl-2026-09-28-dedupe-and-position-repair',
+};
 let LEAGUES = {...LEAGUES_DEFAULT};
 </script>
 <script>
@@ -3023,6 +3065,11 @@ const NHL_MY_RANK={
   safeMoveTop25:5,
   safeMoveTop100:10,
   safeMoveRest:15,
+  // Category leagues use the same guardrail, wider: platform ADP is a mixed-format
+  // market, and punts are meant to move players, so the model gets more room.
+  catSafeMoveTop25:6,
+  catSafeMoveTop100:15,
+  catSafeMoveRest:25,
 };
 function nhlAvailabilityMultiplier(health){
   if(!health)return 1;
@@ -3043,7 +3090,7 @@ function blendNhlProjectionSources(sources,generatedAt){
     if(row.name){const key=normalizedPlayerName(row.name);byName.set(key,(byName.get(key)||[]).concat(keyed));}
     if(row.id){const key=String(row.id);byId.set(key,(byId.get(key)||[]).concat(keyed));}
   }));
-  const keys=['gp','g','a','pm','ppp','sog','blk','hit','w','sv','ga','sho'];
+  const keys=['gp','g','a','pm','ppp','sog','blk','hit','w','sv','ga','sho','gaa'];
   let matched=0;
   PLAYERS.forEach(p=>{
     const rows=(byId.get(String(p.nhlId||''))||byName.get(normalizedPlayerName(p.name))||[]);
@@ -3100,39 +3147,135 @@ function nhlMeanSd(vals){
   const sd=Math.sqrt(a.reduce((n,v)=>n+(v-mean)*(v-mean),0)/a.length)||1;
   return {mean,sd};
 }
-function nhlCategoryValue(){
+// ---------- CATEGORY ENGINE (H2H Categories / Rotisserie) ----------
+// One definition per Yahoo category. `key` reads the projected season total from
+// p.st; the two goalie rate stats are derived. `dec` is the display precision:
+// counting stats one decimal, GAA two, SV% three.
+const NHL_CAT_DEFS={
+  'G':{key:'g',dec:1,label:'Goals'}, 'A':{key:'a',dec:1,label:'Assists'}, '+/-':{key:'pm',dec:1,signed:true,label:'Plus/minus'},
+  'PPP':{key:'ppp',dec:1,label:'Power-play points'}, 'SOG':{key:'sog',dec:1,label:'Shots on goal'},
+  'HIT':{key:'hit',dec:1,label:'Hits'}, 'BLK':{key:'blk',dec:1,label:'Blocked shots'},
+  'W':{key:'w',dec:1,label:'Wins'}, 'GAA':{rate:true,lowerBetter:true,dec:2,label:'Goals-against average'},
+  'SV%':{rate:true,dec:3,label:'Save percentage'}, 'SHO':{key:'sho',dec:1,label:'Shutouts'},
+};
+// Categories the user has chosen to punt. League-scoped (it lives in the league's
+// saved setup) and reset on a league switch.
+let PUNT_CATS=new Set();
+const NHL_CAT_MODEL={
+  // A goalie is one of two active goalies feeding four categories; a skater is one
+  // of ten feeding six. Team-level spread therefore makes one goalie z worth more
+  // than one skater z (sqrt(10/2) in theory). Damped because goalie weeks are far
+  // noisier and the weekly goalie minimum lets managers stream starts.
+  goalieScale:1.15,
+  // Goalies expected to be rostered per team when sizing the draftable population.
+  goaliesPerTeam:2.75,
+  flexBonusPerExtra:0.04,
+};
+function isCategoryLeague(){return SPORT.id==='nhl'&&LEAGUE.scoringMode&&LEAGUE.scoringMode!=='points';}
+function nhlCategoryConfig(){
   const defaults=LEAGUE.scoringMode==='roto'
     ? {skater:['G','A','+/-','PPP','SOG','BLK'],goalie:['W','GAA','SV%','SHO']}
     : {skater:['G','A','+/-','PPP','SOG','HIT'],goalie:['W','GAA','SV%','SHO']};
   const cfg=LEAGUE.categoryStats||defaults;
-  const keyOf=x=>String(x||'').toUpperCase();
-  const statValue=(p,key)=>{
-    const st=p.st||{},k=keyOf(key);
-    if(k==='G')return +st.g||0;if(k==='A')return +st.a||0;if(k==='+/-'||k==='PM')return +st.pm||0;
-    if(k==='PPP')return +st.ppp||0;if(k==='SOG')return +st.sog||0;if(k==='BLK')return +st.blk||0;if(k==='HIT')return +st.hit||0;
-    if(k==='W')return +st.w||0;if(k==='SHO')return +st.sho||0;
-    if(k==='SV%'){const sv=+st.sv||0,ga=+st.ga||0;return sv+ga>0?sv/(sv+ga):0;}
-    if(k==='GAA'){const gp=Math.max(1,+p.gp||0);return (+st.ga||0)/gp;}
-    return 0;
-  };
+  const norm=list=>(list||[]).map(x=>{const k=String(x||'').toUpperCase();return k==='PM'?'+/-':k==='SV'?'SV%':k;}).filter(k=>NHL_CAT_DEFS[k]);
+  return {skater:norm(cfg.skater||defaults.skater),goalie:norm(cfg.goalie||defaults.goalie)};
+}
+function nhlCatGroup(p){return p&&p.pos==='G'?'goalie':'skater';}
+function nhlActiveCats(group){return nhlCategoryConfig()[group].filter(k=>!PUNT_CATS.has(k));}
+function nhlGoalieGaa(p){
+  const st=p.st||{};
+  if(Number.isFinite(+st.gaa)&&+st.gaa>0)return +st.gaa;
+  const gp=+p.gp||0;return gp>0?(+st.ga||0)/gp:NaN;
+}
+// Projected whole-season value of one category for one player (NaN = no value,
+// e.g. a goalie with no projected games).
+function nhlCatRaw(p,cat){
+  const d=NHL_CAT_DEFS[cat];if(!d||!p)return NaN;
+  const st=p.st||{};
+  if(cat==='GAA')return nhlGoalieGaa(p);
+  if(cat==='SV%'){const sv=+st.sv||0,ga=+st.ga||0;return sv+ga>0?sv/(sv+ga):NaN;}
+  const v=+st[d.key];return Number.isFinite(v)?v:0;
+}
+function nhlCatFormat(cat,v){
+  const d=NHL_CAT_DEFS[cat];if(!d||!Number.isFinite(v))return '';
+  if(cat==='SV%')return v.toFixed(3).replace(/^0/,'');
+  const out=v.toFixed(d.dec);
+  return d.signed&&v>0?'+'+out:out;
+}
+// Standard spreadsheet red-white-green 3-colour scale. t runs -1 (red) .. 0
+// (white) .. +1 (green).
+function nhlCatColor(t){
+  if(!Number.isFinite(t))return '';
+  const x=Math.max(-1,Math.min(1,t));
+  const white=[252,252,255],green=[99,190,123],red=[248,105,107];
+  const to=x>=0?green:red,a=Math.abs(x);
+  const rgb=white.map((w,i)=>Math.round(w+(to[i]-w)*a));
+  return `background:rgb(${rgb.join(',')});color:#15181f`;
+}
+// Draft-list colour buckets. Each value is placed by percentile within the
+// draftable population of its group (skaters or goalies expected to be drafted),
+// so the middle of the draft is the white band: early picks read mostly green,
+// rounds 7-12 a mix, and late picks keep only their specialist greens.
+const NHL_CAT_BUCKETS=[[0.8,1],[0.55,0.5],[0.2,0],[0.08,-0.5],[-1,-1]];
+function nhlCatCellStyle(p,cat){
+  const ref=NHL_CAT_REF&&NHL_CAT_REF[cat];const v=nhlCatRaw(p,cat);
+  if(!ref||!Number.isFinite(v)||PUNT_CATS.has(cat))return '';
+  // Percentile rank within the reference population (ties at the midpoint).
+  let lo=0,hi=ref.length;while(lo<hi){const m=(lo+hi)>>1;if(ref[m]<v)lo=m+1;else hi=m;}
+  let lo2=lo;while(lo2<ref.length&&ref[lo2]===v)lo2++;
+  let pct=((lo+lo2)/2)/Math.max(1,ref.length);
+  if(NHL_CAT_DEFS[cat].lowerBetter)pct=1-pct;
+  const bucket=NHL_CAT_BUCKETS.find(b=>pct>=b[0]);
+  return nhlCatColor(bucket?bucket[1]:-1);
+}
+let NHL_CAT_REF=null;
+function nhlCategoryValue(){
+  const cfg=nhlCategoryConfig();
+  const teams=LEAGUE.teams||12, picks=teams*(LEAGUE.rounds||16);
+  const goalieN=Math.round(teams*NHL_CAT_MODEL.goaliesPerTeam), skaterN=Math.max(teams,picks-goalieN);
+  NHL_CAT_REF={};
   [
-    {players:PLAYERS.filter(p=>p.pos!=='G'),stats:cfg.skater||defaults.skater},
-    {players:PLAYERS.filter(p=>p.pos==='G'),stats:cfg.goalie||defaults.goalie}
+    {group:'skater',players:PLAYERS.filter(p=>p.pos!=='G'),stats:cfg.skater,n:skaterN,scale:1},
+    {group:'goalie',players:PLAYERS.filter(p=>p.pos==='G'),stats:cfg.goalie,n:goalieN,scale:NHL_CAT_MODEL.goalieScale}
   ].forEach(group=>{
-    const dist={};group.stats.forEach(stat=>{dist[stat]=nhlMeanSd(group.players.map(p=>statValue(p,stat)));});
+    // Contribution in each category. Goalie rate stats are converted to volume
+    // (saves above average, goals prevented) so a backup's shiny SV% over ten
+    // starts can't outrank a workhorse's.
+    const contrib=(p,cat,base)=>{
+      const v=nhlCatRaw(p,cat);
+      if(cat==='SV%'){const st=p.st||{},faced=(+st.sv||0)+(+st.ga||0);return faced>0&&Number.isFinite(v)?(v-base['SV%'])*faced:0;}
+      if(cat==='GAA'){const gp=+p.gp||0;return gp>0&&Number.isFinite(v)?(base['GAA']-v)*gp:0;}
+      return Number.isFinite(v)?v:0;
+    };
+    // Pass 1 sizes the draftable population by market ADP; pass 2 re-sizes it by
+    // model value, then every z-score is measured against that population.
+    let pop=group.players.slice().sort((a,b)=>marketAdp(a)-marketAdp(b)).slice(0,group.n);
+    for(let pass=0;pass<2;pass++){
+      const base={};
+      const goalies=pop.filter(p=>+p.gp>0);
+      if(group.group==='goalie'){
+        const sv=goalies.reduce((n,p)=>n+(+p.st.sv||0),0),ga=goalies.reduce((n,p)=>n+(+p.st.ga||0),0);
+        base['SV%']=sv+ga>0?sv/(sv+ga):0.9;
+        const gp=goalies.reduce((n,p)=>n+(+p.gp||0),0);
+        base['GAA']=gp>0?goalies.reduce((n,p)=>n+(Number.isFinite(nhlGoalieGaa(p))?nhlGoalieGaa(p):0)*(+p.gp||0),0)/gp:3;
+      }
+      const dist={};group.stats.forEach(cat=>{dist[cat]=nhlMeanSd(pop.map(p=>contrib(p,cat,base)));});
+      group.players.forEach(p=>{
+        const z={};group.stats.forEach(cat=>{z[cat]=(contrib(p,cat,base)-dist[cat].mean)/dist[cat].sd;});
+        p.categoryZ=z;
+        p._catAll=Object.values(z).reduce((a,b)=>a+b,0);
+      });
+      pop=group.players.slice().sort((a,b)=>b._catAll-a._catAll).slice(0,group.n);
+    }
+    // Colour references: raw displayed values across the draftable population.
+    group.stats.forEach(cat=>{NHL_CAT_REF[cat]=pop.map(p=>nhlCatRaw(p,cat)).filter(Number.isFinite).sort((a,b)=>a-b);});
+    const active=group.stats.filter(k=>!PUNT_CATS.has(k));
     group.players.forEach(p=>{
-      const categoryZ={};
-      group.stats.forEach(stat=>{const d=dist[stat],raw=statValue(p,stat);let z=(raw-d.mean)/d.sd;if(keyOf(stat)==='GAA')z=-z;categoryZ[keyOf(stat)]=z;});
-      const zs=Object.values(categoryZ);
-      const rawValue=zs.length?zs.reduce((x,y)=>x+y,0)/Math.sqrt(zs.length):0;
-      const positiveShare=zs.length?zs.filter(z=>z>=0).length/zs.length:0;
-      const floor=zs.length?Math.max(-2,Math.min(...zs)):0;
-      // Reward broad contribution and gently penalize a severe category hole.
-      // This remains a category value (not Yahoo fantasy points) and keeps every
-      // category visible for roster-fit weighting in the live recommendation layer.
-      p.categoryZ=categoryZ;
-      p.categoryBalance=positiveShare;
-      p.categoryValue=rawValue+positiveShare*NHL_MY_RANK.categoryBalanceWeight+floor*NHL_MY_RANK.categoryFloorWeight;
+      const zs=active.map(k=>p.categoryZ[k]);
+      p.categoryBalance=zs.length?zs.filter(z=>z>=0).length/zs.length:0;
+      // Punting every category in a group leaves that group nothing to offer.
+      p.categoryValue=zs.length?zs.reduce((a,b)=>a+b,0)*group.scale:-6;
+      delete p._catAll;
     });
   });
 }
@@ -3168,17 +3311,23 @@ function computeMyRanksNhl(){
     const intrinsic=(+p[valueKey]||0)*confidence;
     const scarcityPremium=Math.max(0,best.vorp)*confidence;
     const cappedScarcity=Math.min(scarcityPremium,Math.max(4,Math.abs(intrinsic)*NHL_MY_RANK.maxScarcityShare));
-    let value=intrinsic+cappedScarcity+flexBonus;
+    // Categories rank on value over the replacement player at the best eligible
+    // slot: z-scores are already centred on the draftable pool, so replacement is
+    // the whole scarcity model (thin D and goalie tiers, deep centres), with a
+    // small bonus for each extra position a player can fill.
+    let value=isPoints?intrinsic+cappedScarcity+flexBonus
+      :best.vorp*(best.vorp>0?confidence:1)+Math.max(0,best.vorp)*NHL_CAT_MODEL.flexBonusPerExtra*Math.max(0,elig.length-1);
     const health=NHL_HEALTH_WATCH[p.name];
-    if(health)value*=nhlAvailabilityMultiplier(health);
+    if(health){const m=nhlAvailabilityMultiplier(health);value=value>=0?value*m:value/Math.max(0.1,m);}
     p.myRankTrust=confidence;p.myReplacementPos=best.pos;p.myReplacementProj=replacement[best.pos]||0;p.myValue=value;p.scarcityPremium=cappedScarcity;
     const why=isPoints
       ? ['league proj '+Number(p.leagueProj||0).toFixed(1),best.pos+' replacement '+Number(p.myReplacementProj||0).toFixed(1),'scarcity +'+Number(cappedScarcity||0).toFixed(1)+' (capped)']
       : [(LEAGUE.scoringMode==='roto'?'roto':'H2H cat')+' value '+Number(p.categoryValue||0).toFixed(2),best.pos+' replacement '+Number(p.myReplacementProj||0).toFixed(2),'VORP '+Number(best.vorp||0).toFixed(2)];
     if(!isPoints&&p.categoryZ){
-      const top=Object.entries(p.categoryZ).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,z])=>k+' '+(z>=0?'+':'')+z.toFixed(1));
-      why.push('best categories '+top.join(', '));
-      why.push(Math.round((p.categoryBalance||0)*100)+'% categories at/above pool mean');
+      const top=Object.entries(p.categoryZ).filter(([k])=>!PUNT_CATS.has(k)).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,z])=>k+' '+(z>=0?'+':'')+z.toFixed(1));
+      if(top.length)why.push('best categories '+top.join(', '));
+      why.push(Math.round((p.categoryBalance||0)*100)+'% of counted categories at/above the draftable-pool mean');
+      if(PUNT_CATS.size)why.push('punting '+[...PUNT_CATS].join('/'));
     }
     if(elig.length>1)why.push('+ '+(LEAGUE.platform||'fallback')+' flexibility '+displayElig.join('/'));
     if(confidence<0.97)why.push('projection confidence '+Math.round(confidence*100)+'%');
@@ -3188,10 +3337,12 @@ function computeMyRanksNhl(){
   });
   const rawOrder=PLAYERS.slice().sort((x,y)=>(y.myValue??-99999)-(x.myValue??-99999));
   rawOrder.forEach((p,i)=>{p.rawModelRank=i+1;});
-  if(isPoints){
+  {
+    const M=NHL_MY_RANK;
+    const caps=isPoints?[M.safeMoveTop25,M.safeMoveTop100,M.safeMoveRest]:[M.catSafeMoveTop25,M.catSafeMoveTop100,M.catSafeMoveRest];
     PLAYERS.forEach(p=>{
       const market=marketAdp(p);
-      const limit=market<=25?NHL_MY_RANK.safeMoveTop25:market<=100?NHL_MY_RANK.safeMoveTop100:NHL_MY_RANK.safeMoveRest;
+      const limit=market<=25?caps[0]:market<=100?caps[1]:caps[2];
       const rawDelta=(p.rawModelRank||market)-market;
       const bounded=Math.max(-limit,Math.min(limit,rawDelta));
       p.draftSafeLimit=limit;
@@ -3201,8 +3352,6 @@ function computeMyRanksNhl(){
       const guard=`draft-safe: ${LEAGUE.marketAdpSource==='fantrax'?'Fantrax':'Yahoo'} ADP ${market.toFixed(1)} ${bounded>=0?'+':''}${bounded.toFixed(1)} model adjustment (cap ±${limit}); raw one-season model rank ${p.rawModelRank}`;
       p.myRankWhy=guard+(p.projectionDisagreement?' · disagreement capped; ':'; ')+p.myRankWhy;
     });
-  } else {
-    rawOrder.forEach((p,i)=>{p.myRank=i+1;p.draftSafeScore=null;p.draftSafeLimit=null;p.projectionDisagreement=false;});
   }
 }
 function projectionLabel(){return LEAGUE.scoringMode==='points'?'Preseason Proj':'Cat';}
@@ -3873,11 +4022,12 @@ function setDraftRoomMode(auction){
   // it hides with the rest of the snake room in auction mode.
   ['snakeControlsCard','snakeDraftGrid','snakeBoardCard','snakeMyPicksCard','snakeAnalysisCard'].forEach(id=>{const x=el(id);if(x)x.style.display=auction?'none':'';});
   const a=el('auctionRoom');if(a)a.style.display=auction?'':'none';
+  const ct=el('catTeamCard');if(ct&&auction)ct.style.display='none';
 }
 function render(){
   const isAuction=LEAGUE.draftType==='auction'; setDraftRoomMode(isAuction);
   if(isAuction){renderAuctionRoom();return;}
-  renderPool();renderBoard();renderMyPicks();renderRoster();renderOnClock();renderCues();renderKeeperList();renderQueue();renderNhlLivePicks();
+  renderPool();renderBoard();renderMyPicks();renderRoster();renderOnClock();renderCues();renderKeeperList();renderQueue();renderNhlLivePicks();renderCatTeamTable();
 }
 function renderAuctionPlaceholder(){
   renderAuctionRoom();
@@ -4079,24 +4229,86 @@ function myUpcomingPicks(){
 // different question: what does this particular roster need before its next turn?
 // All modifiers are in approximate draft-pick units, not fantasy points. Never
 // turn a low-sample prior-season projection into a purported current role fact.
-function nhlCategoryRosterFit(p,roster){
-  if(LEAGUE.scoringMode==='points'||!p.categoryZ)return {score:0,reason:''};
-  const goalie=p.pos==='G';
-  const peers=roster.filter(q=>(q.pos==='G')===goalie&&q.categoryZ);
-  const cats=Object.keys(p.categoryZ),totals={};cats.forEach(k=>totals[k]=0);
-  peers.forEach(q=>cats.forEach(k=>totals[k]+=Number(q.categoryZ[k])||0));
+// Team-level category projections: season totals and per-player averages for one
+// roster. Rate stats pool properly — team GAA is games-weighted, team SV% is
+// total saves over total shots faced — rather than averaging percentages.
+function nhlTeamCategoryLine(roster){
+  const cfg=nhlCategoryConfig(), out={total:{},avg:{},n:{skater:0,goalie:0}};
+  const skaters=roster.filter(p=>p.pos!=='G'), goalies=roster.filter(p=>p.pos==='G');
+  out.n.skater=skaters.length;out.n.goalie=goalies.length;
+  cfg.skater.forEach(cat=>{
+    const t=skaters.reduce((n,p)=>n+(nhlCatRaw(p,cat)||0),0);
+    out.total[cat]=skaters.length?t:NaN;out.avg[cat]=skaters.length?t/skaters.length:NaN;
+  });
+  cfg.goalie.forEach(cat=>{
+    if(!goalies.length){out.total[cat]=NaN;out.avg[cat]=NaN;return;}
+    if(cat==='GAA'||cat==='SV%'){
+      const vals=goalies.map(p=>nhlCatRaw(p,cat)).filter(Number.isFinite);
+      out.avg[cat]=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:NaN;
+      if(cat==='GAA'){
+        const gp=goalies.reduce((n,p)=>n+(Number.isFinite(nhlGoalieGaa(p))?(+p.gp||0):0),0);
+        out.total[cat]=gp>0?goalies.reduce((n,p)=>n+(Number.isFinite(nhlGoalieGaa(p))?nhlGoalieGaa(p)*(+p.gp||0):0),0)/gp:NaN;
+      } else {
+        const sv=goalies.reduce((n,p)=>n+(+(p.st||{}).sv||0),0),ga=goalies.reduce((n,p)=>n+(+(p.st||{}).ga||0),0);
+        out.total[cat]=sv+ga>0?sv/(sv+ga):NaN;
+      }
+      return;
+    }
+    const t=goalies.reduce((n,p)=>n+(nhlCatRaw(p,cat)||0),0);
+    out.total[cat]=t;out.avg[cat]=t/goalies.length;
+  });
+  return out;
+}
+// Every team's line, plus where my team sits in each category against the league.
+// `standing[cat]` is my total in league standard deviations (+ = ahead), computed
+// only over teams that have a player in that category's group.
+function nhlLeagueCategoryState(){
+  const cfg=nhlCategoryConfig(), cats=cfg.skater.concat(cfg.goalie);
+  const lines=[];for(let slot=1;slot<=LEAGUE.teams;slot++)lines.push({slot,line:nhlTeamCategoryLine(rosterOf(slot))});
+  const mine=lines.find(x=>x.slot===mySlot);
+  const stats={};
+  cats.forEach(cat=>{
+    const group=cfg.goalie.includes(cat)?'goalie':'skater';
+    const lower=!!NHL_CAT_DEFS[cat].lowerBetter;
+    stats[cat]={};
+    ['total','avg'].forEach(kind=>{
+      const vals=lines.filter(x=>x.line.n[group]>0).map(x=>x.line[kind][cat]).filter(Number.isFinite).sort((a,b)=>a-b);
+      const med=vals.length?(vals.length%2?vals[(vals.length-1)/2]:(vals[vals.length/2-1]+vals[vals.length/2])/2):NaN;
+      const {mean,sd}=nhlMeanSd(vals);
+      const my=mine?mine.line[kind][cat]:NaN;
+      const better=Number.isFinite(my)?vals.filter(v=>lower?v<my:v>my).length:NaN;
+      stats[cat][kind]={values:vals,median:med,min:vals[0],max:vals[vals.length-1],mean,sd,mine:my,
+        rank:Number.isFinite(better)?better+1:null,teams:vals.length,
+        standing:Number.isFinite(my)&&vals.length>1?((my-mean)/(sd||1))*(lower?-1:1):0};
+    });
+  });
+  return {cfg,lines,mine:mine?mine.line:null,stats};
+}
+// Live-layer roster fit: weight a candidate's category z-scores toward the
+// categories where my team trails the league, away from ones I already lead, and
+// ignore punted categories entirely.
+function nhlCategoryRosterFit(p,roster,state){
+  if(!isCategoryLeague()||!p.categoryZ)return {score:0,reason:''};
+  const group=nhlCatGroup(p), goalie=group==='goalie', cats=nhlActiveCats(group);
+  if(!cats.length)return {score:-6,reason:`all ${goalie?'goalie':'skater'} categories punted`};
+  const peers=roster.filter(q=>nhlCatGroup(q)===group);
+  const z=k=>Number(p.categoryZ[k])||0;
   if(!peers.length){
-    const broad=Math.round((p.categoryBalance||0)*cats.length);
-    return {score:Math.max(-2,Math.min(3,((p.categoryBalance||0)-0.5)*4)),reason:`contributes in ${broad}/${cats.length} ${goalie?'goalie':'skater'} categories`};
+    const broad=cats.filter(k=>z(k)>=0).length;
+    return {score:Math.max(-2,Math.min(3,(broad/cats.length-0.5)*4)),reason:`contributes in ${broad}/${cats.length} ${goalie?'goalie':'skater'} categories`};
   }
-  const min=Math.min(...cats.map(k=>totals[k]));
-  const weights=cats.map(k=>Math.exp(-0.32*(totals[k]-min)));
-  const weighted=cats.reduce((n,k,i)=>n+(Number(p.categoryZ[k])||0)*weights[i],0)/weights.reduce((a,b)=>a+b,0);
-  const ordinary=cats.reduce((n,k)=>n+(Number(p.categoryZ[k])||0),0)/Math.max(1,cats.length);
-  const score=Math.max(-7,Math.min(7,(weighted-ordinary)*3.2));
-  const helps=cats.filter(k=>totals[k]<=min+0.75&&(Number(p.categoryZ[k])||0)>0)
-    .sort((a,b)=>p.categoryZ[b]-p.categoryZ[a]).slice(0,2);
-  return {score,reason:helps.length?'balances '+helps.join('/'):'category fit is neutral'};
+  state=state||nhlLeagueCategoryState();
+  const standing=k=>state.stats[k]?state.stats[k].total.standing:0;
+  const weights=cats.map(k=>Math.max(0.35,Math.min(2.2,1-0.45*standing(k))));
+  const weighted=cats.reduce((n,k,i)=>n+z(k)*weights[i],0)/weights.reduce((a,b)=>a+b,0);
+  const ordinary=cats.reduce((n,k)=>n+z(k),0)/cats.length;
+  // A group where my team trails overall (e.g. weak goalie categories) earns a
+  // small extra push toward that group.
+  const groupStanding=cats.reduce((n,k)=>n+standing(k),0)/cats.length;
+  const score=Math.max(-7,Math.min(7,(weighted-ordinary)*3.2-Math.max(-2.5,Math.min(2.5,groupStanding*1.2))*(ordinary>0?1:0.3)));
+  const weak=cats.filter(k=>standing(k)<=-0.25&&z(k)>0.25).sort((a,b)=>z(b)-z(a)).slice(0,2);
+  const strongOnly=cats.filter(k=>z(k)>0.5).every(k=>standing(k)>=0.75)&&cats.some(k=>z(k)>0.5);
+  return {score,reason:weak.length?'boosts weak '+weak.join('/'):strongOnly?'adds to categories you already lead':'category fit is neutral'};
 }
 function nhlLiveRecommendations(limit=6){
   if(SPORT.id!=='nhl' || LEAGUE.draftType==='auction')return [];
@@ -4140,9 +4352,13 @@ function nhlLiveRecommendations(limit=6){
   const stashCandidates=stashWindow?ranked.filter(p=>NHL_HEALTH_WATCH[p.name]?.kind==='stash'
     && (p.pos!=='G'||activeG>0)):[];
   const candidates=[...new Map(ranked.slice(0,85).concat(stashCandidates).map(p=>[p.id,p])).values()];
+  const catLeague=isCategoryLeague(), catState=catLeague?nhlLeagueCategoryState():null;
+  const goalieCatsLive=!catLeague||nhlActiveCats('goalie').length>0;
   const assessed=candidates.map(p=>{
     const type=group(p), survive=survival(p), reasons=[], elig=eligiblePositions(p);
-    const streamConf=elig.length?Math.max(...elig.map(pos=>STREAM_CONFIDENCE[pos]||0)):0;
+    // Category leagues replace the streaming sliders with punt checkboxes, so
+    // streaming confidence plays no hidden part in their recommendations.
+    const streamConf=catLeague?0:(elig.length?Math.max(...elig.map(pos=>STREAM_CONFIDENCE[pos]||0)):0);
     const alternatives=ranked.filter(q=>q.id!==p.id&&group(q)===type);
     const nextEquivalent=alternatives.find(q=>survival(q)>=0.42);
     const gap=nextEquivalent?Math.max(0,Math.min(24,(nextEquivalent.myRank||999)-(p.myRank||999))):24;
@@ -4162,12 +4378,19 @@ function nhlLiveRecommendations(limit=6){
       if(counts.D>=3)reasons.push(counts.D>=4?'D5 costs a flexible spot':'D4 must beat forward value');
       else if(counts.D===2)reasons.push('D3 is tier/value driven');
       if(counts.D<3&&run.D>=5&&survive<0.5){need+=3;reasons.push('defense run in this room');}
+      // Category My Rank already prices D scarcity through positional
+      // replacement, so the points-tuned D urgency is halved to avoid counting it twice.
+      if(catLeague)need*=0.5;
     } else if(type==='G'){
-      if(LEAGUE.scoringMode!=='points'){
+      if(LEAGUE.scoringMode!=='points'&&!goalieCatsLive){
+        // Punting every goalie category: roster two bodies late, nothing more.
+        need=activeG===0&&upcoming.length<=3?6:activeG<2&&upcoming.length<=2?6:-30;
+        reasons.push('goalie categories punted');
+      } else if(LEAGUE.scoringMode!=='points'){
         if(activeG===0)need=round>=3?12:4;
         else if(counts.G===1)need=round>=7?4:0;
         else need=-26;
-        reasons.push(counts.G===0?'goalies drive four categories':counts.G===1?'G2 protects goalie-category balance':'G3 is category over-investment');
+        reasons.push(counts.G===0?'goalies drive '+nhlActiveCats('goalie').length+' categories':counts.G===1?'G2 protects goalie-category balance':'G3 is category over-investment');
       } else if(activeG===0)need=round>=4?10:1;
       else if(counts.G===1)need=-10;
       else need=-30;
@@ -4201,7 +4424,7 @@ function nhlLiveRecommendations(limit=6){
       }
     }
     if(!newStarter&&streamConf>0){need-=streamConf*6;if(streamConf>=0.6)reasons.push('position is streamable');}
-    const catFit=nhlCategoryRosterFit(p,roster);
+    const catFit=nhlCategoryRosterFit(p,roster,catState);
     if(catFit.score){need+=catFit.score;reasons.unshift(catFit.reason);}
     let weekGames=0;
     if(LEAGUE.lineupPeriod==='weekly'){
@@ -4258,6 +4481,7 @@ function nhlLiveRecommendations(limit=6){
 function renderNhlStreamControls(){
   const box=el('nhlStreamControls');if(!box)return;
   if(SPORT.id!=='nhl'){box.innerHTML='';return;}
+  if(isCategoryLeague()){renderPuntControls(box);return;}
   box.innerHTML=['C','LW','RW','D','G'].map(pos=>{
     const v=Math.round((STREAM_CONFIDENCE[pos]||0)*100);
     return '<label>'+pos+' stream <b data-stream-value="'+pos+'">'+v+'%</b> <input type="range" min="0" max="100" step="5" value="'+v+'" data-stream="'+pos+'" style="width:82px"></label>';
@@ -4267,6 +4491,25 @@ function renderNhlStreamControls(){
     const v=box.querySelector('[data-stream-value="'+inp.dataset.stream+'"]');if(v)v.textContent=inp.value+'%';
     renderNhlLivePicks(false);saveSetup();
   });
+}
+// Category leagues: one punt checkbox per category in place of the streaming
+// sliders. A punted category drops out of My Rank, the recommendation fit, the
+// draft-list colours and the team table's colours.
+function renderPuntControls(box){
+  const cfg=nhlCategoryConfig();
+  const chip=cat=>`<label title="Punt ${NHL_CAT_DEFS[cat].label}: ignore it in My Rank and recommendations" style="white-space:nowrap"><input type="checkbox" data-punt="${cat}" ${PUNT_CATS.has(cat)?'checked':''}> ${cat}</label>`;
+  box.innerHTML=`<b style="color:var(--ink)">Punt</b> ${cfg.skater.map(chip).join(' ')} <span style="opacity:.5">|</span> ${cfg.goalie.map(chip).join(' ')}`
+    +(PUNT_CATS.size?` <span class="val-bad">· punting ${[...PUNT_CATS].join(', ')}</span>`:'');
+  box.querySelectorAll('[data-punt]').forEach(cb=>cb.onchange=()=>{
+    if(cb.checked)PUNT_CATS.add(cb.dataset.punt);else PUNT_CATS.delete(cb.dataset.punt);
+    computeMyRanks();render();saveSetup();
+  });
+}
+// Compact coloured category line under each recommendation (category leagues).
+function liveCatStrip(p){
+  if(!isCategoryLeague())return '';
+  const cats=nhlCategoryConfig()[nhlCatGroup(p)];
+  return `<div class="small" style="margin-top:3px;display:flex;flex-wrap:wrap;gap:3px">${cats.map(c=>`<span style="${nhlCatCellStyle(p,c)||'opacity:.5'};padding:0 4px;border-radius:3px;font-size:11px;white-space:nowrap">${c} ${nhlCatFormat(c,nhlCatRaw(p,c))}</span>`).join('')}</div>`;
 }
 function renderNhlLivePicks(drawControls=true){
   const card=el('nhlLiveCard');if(!card)return;
@@ -4278,6 +4521,7 @@ function renderNhlLivePicks(drawControls=true){
   if(card.style.display==='none')return;
   if(drawControls)renderNhlStreamControls();
   const list=nhlLiveRecommendations(), box=el('nhlLivePicks');
+  if(!mySlot){box.textContent='Set your draft slot ("My slot" above the board) to get pick recommendations.';el('nhlLiveContext').textContent='';return;}
   if(!list.length){box.textContent='Draft complete or no players available.';return;}
   const {now,next,paired,round,counts,activeG}=list[0];
   const weekly=LEAGUE.lineupPeriod==='weekly'?` · weekly lineup${DRAFT_SCHEDULE.days&&DRAFT_SCHEDULE.days.length?` · ${DRAFT_SCHEDULE.days.length}-day schedule loaded`:''}`:'';
@@ -4287,7 +4531,7 @@ function renderNhlLivePicks(drawControls=true){
     <span class="live-label ${label==='WAIT'?'wait':''}">${label}</span>
     <div class="live-pick-main"><b>${headshotImg(p)}${p.name}</b> ${posCell(p)}
       <span class="small muted">My ${p.myRank} · ADP ${marketAdp(p).toFixed(1)} · ${projectionLabel().toLowerCase()} ${projectionDisplay(p)}</span>
-      <div class="live-pick-reason">${reason}${label==='WAIT'?' · market ADP suggests it may last':''}</div></div>
+      <div class="live-pick-reason">${reason}${label==='WAIT'?' · market ADP suggests it may last':''}</div>${liveCatStrip(p)}</div>
     <button class="pick-btn" data-live-pick="${p.id}">draft →</button>
   </div>`).join('');
   box.querySelectorAll('[data-live-pick]').forEach(b=>b.onclick=()=>{
@@ -4337,10 +4581,18 @@ function renderPool(){
   const pos=el('posFilter').value, q=el('search').value.trim().toLowerCase();
   const ov=nextOpenPick(curPick); const {slot}=ov<=totalPicks?slotForOverall(ov):{slot:0};
   let rows=available();
+  const catCols=renderPoolCategoryHead(), ncol=11+catCols.length;
+  if(String(poolSort).startsWith('cat:')&&!catCols.length)poolSort='adp';
   // available() itself always stays ADP-sorted -- sim/analysis code elsewhere
   // depends on that order -- so re-sort only this rendered copy when the user
   // picked a different column. Missing values (e.g. no My Rank yet) sort last.
-  if(poolSort!=='adp'){
+  if(String(poolSort).startsWith('cat:')){
+    // Category columns sort best-first; the other group (goalies under a skater
+    // category, and vice versa) sorts last.
+    const cat=poolSort.slice(4),dir=NHL_CAT_DEFS[cat]&&NHL_CAT_DEFS[cat].lowerBetter?1:-1;
+    const val=p=>{const g=nhlCategoryConfig().goalie.includes(cat)?'goalie':'skater';const v=nhlCatGroup(p)===g?nhlCatRaw(p,cat):NaN;return Number.isFinite(v)?v:null;};
+    rows=rows.slice().sort((a,b)=>{const av=val(a),bv=val(b);if(av==null&&bv==null)return marketAdp(a)-marketAdp(b);if(av==null)return 1;if(bv==null)return -1;return (av-bv)*dir;});
+  } else if(poolSort!=='adp'){
     const key=poolSort;
     rows=rows.slice().sort((a,b)=>{
       const av=a[key], bv=b[key];
@@ -4361,7 +4613,7 @@ function renderPool(){
   if(q&&!rows.length){
     const drafted=PLAYERS.filter(p=>p.drafted&&playerMatchesSearch(p,q));
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td colspan="11" class="small muted">${drafted.length?`${drafted.map(p=>p.name).join(', ')} already drafted. Clear the search to see available players.`:'No matching player in this pool. Try the full surname or check the spelling.'}</td>`;
+    tr.innerHTML=`<td colspan="${ncol}" class="small muted">${drafted.length?`${drafted.map(p=>p.name).join(', ')} already drafted. Clear the search to see available players.`:'No matching player in this pool. Try the full surname or check the spelling.'}</td>`;
     tb.appendChild(tr);
   }
   // Tier counts are computed over the *filtered* rows on purpose: with the
@@ -4378,7 +4630,7 @@ function renderPool(){
       shownTier=p.tier;
       const n=tierLeft[p.tier];
       const trT=document.createElement('tr'); trT.className='tierrow';
-      trT.innerHTML=`<td colspan="11">Tier ${p.tier}<span class="${n<=3?'val-bad':'muted'}"> · ${n} left${pos!=='ALL'?' at '+pos:''}</span></td>`;
+      trT.innerHTML=`<td colspan="${ncol}">Tier ${p.tier}<span class="${n<=3?'val-bad':'muted'}"> · ${n} left${pos!=='ALL'?' at '+pos:''}</span></td>`;
       tb.appendChild(trT);
     }
     const adp=marketAdp(p);
@@ -4386,7 +4638,7 @@ function renderPool(){
     const tr=document.createElement('tr');
     tr.innerHTML=`<td><input type="checkbox" class="qcheck" data-q="${p.name.replace(/"/g,'&quot;')}" ${queued.has(p.name)?'checked':''}></td>
       <td>${adp<999?adp.toFixed(1):'—'}</td><td>${p.ecr}</td><td${p.myRankWhy?` title="${String(p.myRankWhy).replace(/"/g,'&quot;')}"`:''}>${p.myRank!=null?p.myRank:'—'}${p.projectionDisagreement?' ⚠':''}</td><td class="small">${projectionDisplay(p)}</td><td class="small" title="Exposure across your other drafted ${SPORT.label} leagues">${exposureText(p)}</td><td>${posCell(p)}</td>
-      <td>${headshotImg(p)}${p.name}${teamLogoImg(p)}${p.keeper?`<span class="kchip">K</span>`:''}${rookieBadge(p)}${NHL_HEALTH_WATCH[p.name]?` <a class="small" title="${NHL_HEALTH_WATCH[p.name].note}" href="${NHL_HEALTH_WATCH[p.name].url}" target="_blank" rel="noopener">${NHL_HEALTH_WATCH[p.name].label}</a>`:''}</td><td class="muted small">${p.pos}${p.posRank||''}</td>
+      <td>${headshotImg(p)}${p.name}${teamLogoImg(p)}${p.keeper?`<span class="kchip">K</span>`:''}${rookieBadge(p)}${NHL_HEALTH_WATCH[p.name]?` <a class="small" title="${NHL_HEALTH_WATCH[p.name].note}" href="${NHL_HEALTH_WATCH[p.name].url}" target="_blank" rel="noopener">${NHL_HEALTH_WATCH[p.name].label}</a>`:''}</td>${catCols.map(cat=>nhlPoolCatCell(p,cat)).join('')}<td class="muted small prkcol">${p.pos}${p.posRank||''}</td>
       <td class="dcol ${valClass(d)}">${d>0?'+':''}${d}</td>
       <td><button class="pick-btn" data-pk="${p.id}">draft →</button></td>`;
     tb.appendChild(tr);
@@ -4399,6 +4651,68 @@ function renderPool(){
     if(cb.checked)queued.add(cb.dataset.q); else queued.delete(cb.dataset.q);
     renderQueue(); saveSetup();
   });
+}
+// Category-league draft list: one projected whole-season column per category,
+// inserted after Player. Returns the categories shown (empty outside category
+// leagues, where the header is restored to the points layout).
+// My team's projected category line against the league, under the draft board.
+// White = the league median for that stat; green/red scale toward the best/worst
+// team. Hover a cell for the median, range and my rank.
+function renderCatTeamTable(){
+  const card=el('catTeamCard');if(!card)return;
+  const show=isCategoryLeague()&&LEAGUE.draftType!=='auction';
+  card.style.display=show?'':'none';if(!show)return;
+  const table=el('catTeamTable'), sub=el('catTeamSub');
+  if(!mySlot){table.innerHTML='';sub.textContent='· set your draft slot to see your team';return;}
+  const state=nhlLeagueCategoryState(), cats=state.cfg.skater.concat(state.cfg.goalie), mine=state.mine;
+  const n=mine?mine.n:{skater:0,goalie:0};
+  sub.textContent=`· ${n.skater} skater${n.skater===1?'':'s'}, ${n.goalie} goalie${n.goalie===1?'':'s'} · white = league median, green/red = ahead of/behind the other teams`;
+  const cell=(cat,kind)=>{
+    const st=state.stats[cat][kind], v=st.mine, lower=!!NHL_CAT_DEFS[cat].lowerBetter;
+    if(!Number.isFinite(v))return `<td class="muted-cell">—</td>`;
+    let t=0;
+    if(Number.isFinite(st.median)){
+      if(v>=st.median)t=st.max>st.median?(v-st.median)/(st.max-st.median):0;
+      else t=st.median>st.min?-(st.median-v)/(st.median-st.min):0;
+      if(lower)t=-t;
+    }
+    const tip=`${NHL_CAT_DEFS[cat].label} (${kind==='avg'?'per player':'team total'}): league median ${nhlCatFormat(cat,st.median)} · range ${nhlCatFormat(cat,st.min)}–${nhlCatFormat(cat,st.max)}${st.rank?` · you rank ${st.rank} of ${st.teams}`:''}`;
+    const style=PUNT_CATS.has(cat)?'opacity:.45':nhlCatColor(t);
+    const shown=kind==='total'&&!NHL_CAT_DEFS[cat].rate?v.toFixed(1):nhlCatFormat(cat,v);
+    return `<td style="${style}" title="${tip}">${shown}</td>`;
+  };
+  const head=`<tr><th></th>${cats.map((cat,i)=>`<th class="${i===state.cfg.skater.length?'catsplit ':''}${PUNT_CATS.has(cat)?'punted':''}" title="${NHL_CAT_DEFS[cat].label}">${cat}</th>`).join('')}</tr>`;
+  table.innerHTML=head
+    +`<tr><td>Average per player</td>${cats.map(cat=>cell(cat,'avg')).join('')}</tr>`
+    +`<tr><td>Team total${state.cfg.goalie.some(c=>NHL_CAT_DEFS[c].rate)?' <span class="muted small">(GAA/SV% pooled)</span>':''}</td>${cats.map(cat=>cell(cat,'total')).join('')}</tr>`;
+  const split=state.cfg.skater.length+1;
+  table.querySelectorAll('tr').forEach(tr=>{const c=tr.children[split];if(c)c.classList.add('catsplit');});
+}
+function renderPoolCategoryHead(){
+  const head=el('poolTable')&&el('poolTable').querySelector('thead tr');if(!head)return [];
+  head.querySelectorAll('th.catcol').forEach(th=>th.remove());
+  el('poolTable').classList.toggle('catmode',isCategoryLeague());
+  if(!isCategoryLeague())return [];
+  const cfg=nhlCategoryConfig(), cats=cfg.skater.concat(cfg.goalie);
+  const playerTh=[...head.children].find(th=>th.textContent.trim()==='Player');
+  let after=playerTh;
+  cats.forEach((cat,i)=>{
+    const th=document.createElement('th');
+    th.className='sortcol catcol'+(poolSort==='cat:'+cat?' active':'')+(i===cfg.skater.length?' catsplit':'')+(PUNT_CATS.has(cat)?' punted':'');
+    th.dataset.sort='cat:'+cat;
+    th.title=`${NHL_CAT_DEFS[cat].label} — projected full season${PUNT_CATS.has(cat)?' (punted)':''}. Click to sort best first.`;
+    th.textContent=cat;
+    th.onclick=()=>{poolSort=th.dataset.sort;document.querySelectorAll('#poolTable th.sortcol').forEach(h=>h.classList.toggle('active',h===th));renderPool();};
+    after.after(th);after=th;
+  });
+  return cats;
+}
+function nhlPoolCatCell(p,cat){
+  const goalieCat=nhlCategoryConfig().goalie.includes(cat), mine=goalieCat===(p.pos==='G');
+  const split=cat===nhlCategoryConfig().goalie[0]?' catsplit':'';
+  if(!mine)return `<td class="catcell${split}"></td>`;
+  const v=nhlCatRaw(p,cat);
+  return `<td class="catcell${split}${PUNT_CATS.has(cat)?' punted':''}" style="${nhlCatCellStyle(p,cat)}">${nhlCatFormat(cat,v)}</td>`;
 }
 function renderQueue(){
   const box=el('myQueue'); if(!box)return;
@@ -4995,13 +5309,14 @@ function setStatus(s){el('saveStatus').textContent=s; setTimeout(()=>el('saveSta
 // Full backup, independent of the cloud KV store — includes keepers/trades/picks
 // so "Export config JSON" is a real point-in-time snapshot you can keep as a file.
 function getConfig(){return {league:CURRENT_LEAGUE_ID,PLAYERS,KEEPERS,picks,auctionPicks,curPick,
-  assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],streamConfidence:STREAM_CONFIDENCE,seed:el('seedWarn').style.display};}
+  assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],streamConfidence:STREAM_CONFIDENCE,puntCats:[...PUNT_CATS],seed:el('seedWarn').style.display};}
 function applyConfig(cfg){PLAYERS=cfg.PLAYERS;KEEPERS=cfg.KEEPERS;picks=cfg.picks||[];auctionPicks=cfg.auctionPicks||[];curPick=cfg.curPick;
   if(Array.isArray(cfg.assigned))assigned=new Set(cfg.assigned);
   if(Array.isArray(cfg.cutPlayers))cutPlayers=new Set(cfg.cutPlayers);
   if(Array.isArray(cfg.queued))queued=new Set(cfg.queued);
   pickOwnerOverride=cfg.pickOwnerOverride||{}; playerTrades=cfg.playerTrades||{};
   if(cfg.streamConfidence)STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE,...(LEAGUE.defaultStreamConfidence||{}),...cfg.streamConfidence};
+  if(Array.isArray(cfg.puntCats)){PUNT_CATS=new Set(cfg.puntCats);if(SPORT.id==='nhl')computeMyRanks();}
   if(cfg.tendencies)OWNERS.forEach(o=>{const t=cfg.tendencies[o]; if(t)TENDENCIES[o]={enabled:!!t.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},t.bias||{})};});
   if(cfg.seed==='none')el('seedWarn').style.display='none';
   render(); if(el('teamsWrap')){renderTeams();renderTendencies();} renderTrades(); saveSetup();}
@@ -6095,13 +6410,14 @@ async function loadCommish(){
 let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
-function saveSetup(){if(!canSave())return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick,myRosterNames:myRoster().map(p=>p.name),streamConfidence:STREAM_CONFIDENCE,seededLiveSnapshot:!!LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames,appliedLiveSnapshotCount:LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames?.length||0});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
+function saveSetup(){if(!canSave())return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick,myRosterNames:myRoster().map(p=>p.name),streamConfidence:STREAM_CONFIDENCE,puntCats:[...PUNT_CATS],seededLiveSnapshot:!!LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames,appliedLiveSnapshotCount:LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames?.length||0});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
 function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign(blankBias(),v.bias||{})};}); }
 async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||s.seededLiveSnapshot||(Array.isArray(s.picks)&&s.picks.length)||(Array.isArray(s.auctionPicks)&&s.auctionPicks.length))){
   if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
   if(Array.isArray(s.cutPlayers))cutPlayers=new Set(s.cutPlayers);
   if(Array.isArray(s.queued))queued=new Set(s.queued);
   if(s.streamConfidence)STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE,...(LEAGUE.defaultStreamConfidence||{}),...s.streamConfidence};
+  if(Array.isArray(s.puntCats)){PUNT_CATS=new Set(s.puntCats);if(SPORT.id==='nhl')computeMyRanks();}
   auctionPicks=Array.isArray(s.auctionPicks)?s.auctionPicks.slice():[];
   pickOwnerOverride=s.pickOwnerOverride||{}; playerTrades=s.playerTrades||{};
   applyTendencies(s.tendencies);
@@ -6226,6 +6542,7 @@ function applyLeagueProfile(id){
 
   assigned=new Set(); cutPlayers=new Set(); pickOwnerOverride={}; playerTrades={}; queued=new Set(); KEEPERS=[]; picks=[]; auctionPicks=[]; curPick=1;
   STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE,...(LEAGUE.defaultStreamConfidence||{})};
+  PUNT_CATS=new Set();
 
   const w=el('seedWarn');
   if(PLAYERS_CSV && PLAYERS_CSV.indexOf('__PLAYERS')!==0 && PLAYERS_CSV.trim().length>20){

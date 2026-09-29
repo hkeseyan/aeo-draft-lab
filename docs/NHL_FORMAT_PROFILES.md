@@ -59,6 +59,18 @@ Reference: [Fantrax Classic Draft rules example](https://www.fantrax.com/newui/f
 - The H2H Categories reference uses the same engine with HIT instead of BLK and
   remains available if the user cannot enter a Roto contest.
 
+## Yahoo Prize H2H-Cat 3175 (PRIZE 50) — joined Sep 28
+
+- Profile `yahoo-prize-cat-3175`. 12 teams; live standard draft Mon Sep 28
+  10:00pm PDT, one minute per pick; draft slot unset until Yahoo publishes it.
+- C, C, LW, LW, RW, RW, D, D, D, D, G, G; four bench and two IR.
+- Skaters: G, A, +/-, PPP, SOG, HIT. Goalies: W, GAA, SV%, SHO.
+- Daily lineups; four acquisitions per week; three goalie appearances minimum;
+  FAB waivers (two days, continuous, rolling-list tiebreak); trades until Mar 3,
+  2027; six-team playoffs in weeks 25-27.
+- Category columns, colours, punts, the my-team category table and the
+  category-aware My Rank are described in `SPECS.md`.
+
 Reference: [Yahoo default fantasy hockey settings](https://help.yahoo.com/kb/SLN6815.html).
 
 ## Data-source boundary
