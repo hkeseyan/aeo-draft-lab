@@ -251,6 +251,14 @@ function normalizeFaabPlayer(raw, pool, currentWeek) {
   const byeWeek = n(raw.bye_week || raw.bye, 0);
   const unavailable = status === "O" || status === "IR" || status === "SUSP" || status === "NA" || byeWeek === currentWeek;
   const injuryRisk = raw.injury === "" || raw.injury == null ? status === "Q" || status === "D" ? 0.45 : unavailable ? 1 : 0.08 : ratio(raw.injury);
+  const rosterPctRaw = raw.roster_pct ?? raw.roster_percent ?? raw.percent_owned ?? raw.ownership_pct;
+  const rosterPct = rosterPctRaw === "" || rosterPctRaw == null ? null : clamp(n(rosterPctRaw, 0), 0, 100);
+  const trendRaw = raw.roster_trend ?? raw.trend ?? raw.adds ?? raw.add_count ?? raw.percent_change ?? raw.roster_pct_delta;
+  const rosterTrend = trendRaw === "" || trendRaw == null ? null : n(trendRaw, 0);
+  const trendMetric = String(raw.trend_metric || (raw.adds !== "" && raw.adds != null ? "adds" : raw.add_count !== "" && raw.add_count != null ? "adds" : raw.percent_change !== "" && raw.percent_change != null ? "roster_pct_delta" : raw.roster_pct_delta !== "" && raw.roster_pct_delta != null ? "roster_pct_delta" : "")).trim().toLowerCase();
+  const trendWindowHours = Math.max(0, n(raw.trend_window_hours || raw.lookback_hours, 0)) || null;
+  const trendSource = String(raw.trend_source || raw.market_source || "").trim().toLowerCase();
+  const metadataUpdatedAt = String(raw.metadata_updated_at || raw.market_updated_at || "").trim();
   let derivedEndgame = rank <= 5 ? 0.95 : rank <= 12 ? 0.75 : rank <= 30 ? 0.5 : rank <= 60 ? 0.25 : 0.08;
   if (pos === "QB" || pos === "TE") derivedEndgame *= 0.75;
   return {
@@ -264,6 +272,12 @@ function normalizeFaabPlayer(raw, pool, currentWeek) {
     schedule: clamp(n(raw.schedule || raw.schedule_grade, 3), 1, 5),
     injuryRisk,
     teammateOpportunity: raw.teammate === "" || raw.teammate == null ? ratio(raw.teammate_opportunity, 0) : ratio(raw.teammate),
+    rosterPct,
+    rosterTrend,
+    trendMetric,
+    trendWindowHours,
+    trendSource,
+    metadataUpdatedAt,
     byeWeek,
     status,
     unavailable,
@@ -388,6 +402,8 @@ function analyzeFaab(input, profile = {}) {
     if (p.injuryRisk >= 0.45) reasons.push("material injury/availability risk");
     if (p.schedule >= 4) reasons.push("favorable upcoming schedule input");
     if (p.teammateOpportunity >= 0.4) reasons.push("teammate news raises opportunity");
+    if (p.rosterPct != null) reasons.push(`${p.rosterPct.toFixed(1)}% rostered`);
+    if (p.rosterTrend != null) reasons.push(p.trendMetric === "adds" ? `${Math.round(p.rosterTrend)} recent adds` : p.trendMetric === "roster_pct_delta" ? `${p.rosterTrend >= 0 ? "+" : ""}${p.rosterTrend.toFixed(1)} ownership-point trend` : `market trend ${p.rosterTrend}`);
     if (suggestedDrop) reasons.push(`drop candidate: ${suggestedDrop.name} (${suggestedDrop.dropClass})`);
     else reasons.push("drop path is unresolved; do not infer a cut from lineup displacement");
     if (!marketReachable) reasons.push("projected market exceeds this roster's disciplined price");
@@ -443,7 +459,13 @@ function flattenYahooMeta(value, out = {}) {
     if (v == null || typeof v !== "object") out[k] = v;
     else if (k === "name" && v.full) out.name = v.full;
     else if (k === "bye_weeks" && v.week) out.bye_week = v.week;
-    else flattenYahooMeta(v, out);
+    else if (k === "percent_owned") {
+      const pct = flattenYahooMeta(v, {});
+      if (pct.value != null) out.percent_owned = pct.value;
+      if (pct.delta != null) out.percent_owned_delta = pct.delta;
+      if (pct.coverage_type != null) out.percent_owned_coverage = pct.coverage_type;
+      if (pct.week != null) out.percent_owned_week = pct.week;
+    } else flattenYahooMeta(v, out);
   });
   return out;
 }
@@ -481,10 +503,16 @@ function yahooPlayerRows(raw) {
   const seen = new Set();
   return collectYahooEntities(raw, "player").filter((p) => p.player_key && !seen.has(p.player_key) && seen.add(p.player_key)).map((p) => ({
     name: p.name || "Unknown",
+    player_key: p.player_key || "",
     pos: String(p.display_position || p.position || "").replace(/\s*,\s*/g, "/"),
     team: p.editorial_team_abbr || "",
     status: p.status || "",
     bye_week: p.bye_week || "",
+    roster_pct: p.percent_owned == null ? "" : p.percent_owned,
+    roster_trend: p.percent_owned_delta == null ? "" : p.percent_owned_delta,
+    trend_metric: p.percent_owned_delta == null ? "" : "roster_pct_delta",
+    trend_source: p.percent_owned == null ? "" : "yahoo",
+    metadata_updated_at: p.percent_owned == null ? "" : new Date().toISOString(),
     notes: p.injury_note || ""
   }));
 }
@@ -648,7 +676,7 @@ async function yahooFaabSnapshot(env, kv, originUrl, profile) {
   if (!mine || !mine.team_key) throw new Error("Yahoo league matched, but the current user's team could not be identified.");
   const [rosterRaw, waiversRaw] = await Promise.all([
     yahooJson(token, `team/${mine.team_key}/roster`),
-    yahooJson(token, `league/${key}/players;status=W;sort=OR;count=100`)
+    yahooJson(token, `league/${key}/players;status=W;sort=OR;count=100/percent_owned`)
   ]);
   const roster = yahooPlayerRows(rosterRaw);
   const available = yahooPlayerRows(waiversRaw);
