@@ -426,6 +426,35 @@ function analyzeFaab(input, profile = {}) {
       confidence: p.weekProjection && p.rosRank < 999 ? "medium" : "low"
     };
   }).sort((a, b) => b.recommendedBid - a.recommendedBid || b.lineupUpgrade - a.lineupUpgrade);
+
+  // Market-attention is a discovery/triage layer, not player value. Trend counts
+  // are normalized only against candidates with the same source + metric so we
+  // never pretend "Sleeper adds" and "Yahoo ownership delta" share a scale.
+  const trendGroups = new Map();
+  recommendations.forEach((p) => {
+    if (p.rosterTrend == null) return;
+    const key = `${p.trendSource || "unknown"}|${p.trendMetric || "unknown"}`;
+    if (!trendGroups.has(key)) trendGroups.set(key, []);
+    trendGroups.get(key).push(p);
+  });
+  trendGroups.forEach((rows) => {
+    const sorted = rows.slice().sort((a, b) => a.rosterTrend - b.rosterTrend);
+    sorted.forEach((p, i) => {
+      p.trendPercentile = sorted.length <= 1 ? 100 : Number((100 * i / (sorted.length - 1)).toFixed(1));
+    });
+  });
+  recommendations.forEach((p) => {
+    const parts = [];
+    if (p.rosterPct != null) parts.push(clamp(p.rosterPct, 0, 100));
+    if (p.trendPercentile != null) parts.push(p.trendPercentile);
+    p.discoveryScore = parts.length ? Number((parts.reduce((a, b) => a + b, 0) / parts.length).toFixed(1)) : null;
+  });
+  recommendations.slice().sort((a, b) =>
+    (b.discoveryScore ?? -1) - (a.discoveryScore ?? -1) ||
+    (b.rosterPct ?? -1) - (a.rosterPct ?? -1) ||
+    (b.rosterTrend ?? -Infinity) - (a.rosterTrend ?? -Infinity)
+  ).forEach((p, i) => { p.discoveryRank = i + 1; });
+
   recommendations.forEach((p, i) => {
     p.claimOrder = i + 1;
     p.claimOrderRule = "bid_descending";
@@ -444,6 +473,7 @@ function analyzeFaab(input, profile = {}) {
     bidOrderLocked: true,
     calibrationVersion: FAAB_CALIBRATION_VERSION,
     assumptions: [
+      "Market-discovery rank uses roster percentage plus source/metric-local trend percentile only to decide who deserves review; it is not a player-value score.",
       "For bid-based waivers, higher dollar bids execute before lower dollar bids; a lower bid cannot be manually promoted ahead of a higher bid.",
       "Projected winning bids use the 2025 Off With Their Heads history plus the Sep. 16, 2026 18-team and 12-team bid stacks.",
       "Competitor remaining budgets are not yet modeled; projected market prices use calibrated opening-budget shares with a modest season-phase adjustment.",
