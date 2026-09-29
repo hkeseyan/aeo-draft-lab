@@ -681,7 +681,13 @@ async function yahooFaabSnapshot(env, kv, originUrl, profile) {
   const roster = yahooPlayerRows(rosterRaw);
   const available = yahooPlayerRows(waiversRaw);
   if (!available.length) throw new Error("Yahoo returned no players currently on waivers; the eliminated roster may not be released yet.");
-  return { yahooLeagueKey: key, syncedAt: Date.now(), roster, available };
+  return {
+    yahooLeagueKey: key,
+    syncedAt: Date.now(),
+    roster,
+    available,
+    marketMetadata: available.some((p) => p.roster_pct !== "" || p.roster_trend !== "") ? "yahoo" : "none"
+  };
 }
 __name(yahooFaabSnapshot, "yahooFaabSnapshot");
 async function syncLeagueSnapshot(env, kv, originUrl, profile) {
@@ -722,7 +728,12 @@ async function syncLeagueSnapshot(env, kv, originUrl, profile) {
     roster,
     available,
     lineup: fantasyPros && fantasyPros.lineup || previous.lineup || null,
-    coverage: { roster: rosterSource, available: availabilitySource, projections: fantasyPros ? "fantasypros" : previous.coverage && previous.coverage.projections || "embedded" },
+    coverage: {
+      roster: rosterSource,
+      available: availabilitySource,
+      projections: fantasyPros ? "fantasypros" : previous.coverage && previous.coverage.projections || "embedded",
+      marketMetadata: yahoo && yahoo.marketMetadata && yahoo.marketMetadata !== "none" ? yahoo.marketMetadata : previous.coverage && previous.coverage.marketMetadata || "none"
+    },
     sourceStatus
   };
   await kv.put(leagueSnapshotKey(profile.id), JSON.stringify(snapshot));
