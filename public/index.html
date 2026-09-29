@@ -433,7 +433,7 @@
     <div class="grid2">
       <div class="card">
         <h2>My current roster</h2>
-        <p class="small muted">CSV columns: <code>name,pos,team,week_proj,ros_rank,status,bye_week</code>. Source sync replaces this automatically; otherwise the app pre-fills the saved league roster and estimates weekly points from its player pool.</p>
+        <p class="small muted">CSV columns: <code>name,pos,team,week_proj,ros_rank,status,bye_week,drop_class,drop_notes</code>. Optional <code>drop_class</code>: <b>dead</b> (drop outright), <b>replaceable</b> (churn/streaming slot), <b>conditional</b> (only for a better player), or <b>protected</b> (do not auto-cut). K/DST default to replaceable when unclassified. Source sync can fill the roster; unresolved cuts stay unresolved rather than being inferred from lineup displacement.</p>
         <textarea id="faabRosterCsv" style="min-height:210px"></textarea>
       </div>
       <div class="card">
@@ -5844,7 +5844,7 @@ async function setNhlDraftSlot(){
 let FAAB_REPORT=null;
 let INSEASON_STATE={};
 let WAIVER_TICKETS=[];
-const FAAB_ROSTER_HEADERS=['name','pos','team','week_proj','ros_rank','status','bye_week'];
+const FAAB_ROSTER_HEADERS=['name','pos','team','week_proj','ros_rank','status','bye_week','drop_class','drop_notes'];
 const FAAB_AVAILABLE_HEADERS=['name','pos','team','week_proj','ros_rank','endgame','role','schedule','injury','teammate','bye_week','status','notes'];
 function faabEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function faabCsvCell(v){const s=String(v==null?'':v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
@@ -5914,6 +5914,7 @@ function faabStateFromForm(){return {
   waiverMethod:el('waiverMethod').value,
   waiverPriorityBehavior:el('waiverPriorityBehavior').value,
   zeroBidAllowed:el('waiverZeroBidAllowed').checked,
+  bidOrderLocked:true,
   waiverDeadline:el('waiverDeadline').value,
   draftOrderRule:el('waiverDraftOrderRule').value.trim(),
   waiverTrigger:el('waiverTrigger').value.trim()
@@ -6009,8 +6010,9 @@ async function createWaiverTicket(index){
   const context=faabStateFromForm();if(notice)notice.textContent=`Creating ${player.name} ticket…`;
   try{
     const payload={
-      action:'add',player:player.name,pos:player.pos,team:player.team,suggestedDrop:player.replacement||'',
+      action:'add',player:player.name,pos:player.pos,team:player.team,suggestedDrop:player.suggestedDrop||'',suggestedDropClass:player.suggestedDropClass||'',
       recommendedBid:player.recommendedBid,projectedWinningBid:player.projectedWinningBid,stretchBid:player.stretchBid,
+      claimOrder:player.claimOrder,claimOrderRule:player.claimOrderRule,bidOrderLocked:player.bidOrderLocked!==false,
       waiverProcessing:context.waiverProcessing,waiverMethod:context.waiverMethod,waiverPriorityBehavior:context.waiverPriorityBehavior,
       zeroBidAllowed:context.zeroBidAllowed,deadline:context.waiverDeadline,teamDirection:context.teamDirection,
       draftOrderRule:context.draftOrderRule,trigger:context.waiverTrigger,rationale:[...(player.reasons||[]),player.notes||''].filter(Boolean).join(' · '),
