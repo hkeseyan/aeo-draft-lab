@@ -499,6 +499,17 @@ ok &= check('TRAX50 profile keeps its exact Fantrax ID, scoring, and weekly gene
   'LEAGUES[CURRENT_LEAGUE_ID].fantraxLeagueId+":"+LEAGUE.scoring.hit+":"+LEAGUE.starters.F+":"+LEAGUE.irSlots+":"+LEAGUE.lineupPeriod', 'bdd8aa7jmtjj0e84:0.25:5:0:weekly');
 ok &= check('TRAX50 profile uses Fantrax market ADP and has no trade route',
   'LEAGUE.marketAdpSource+":"+LEAGUES[CURRENT_LEAGUE_ID].waiverRules.trades+":"+LEAGUES[CURRENT_LEAGUE_ID].waiverRules.waiverDays', 'fantrax:false:2');
+ok &= check('TRAX50 completed board fills all 192 picks',
+  'picks.length+":"+LEAGUES[CURRENT_LEAGUE_ID].initialPickNames.length+":"+mySlot', '192:192:8');
+ok &= check('TRAX50 roster in slot 8 is the Tkachuk Norris team',
+  'ME_OWNER+":"+["Kirill Kaprizov","Ilya Sorokin","Adrian Kempe","Elias Pettersson"].map(n=>myRoster().some(p=>p.name===n&&(n!=="Elias Pettersson"||p.pos!=="D"))).join(",")',
+  'Tkachuk Norris:true,true,true,false');
+liveSetupOverride = {picks:[{overall:1,round:1,slot:1,playerId:ev('findPlayer("Connor McDavid").id'),keeper:false}],curPick:2,myRosterNames:['Connor McDavid']};
+await ev('loadSetup()');
+ok &= check('stale mock picks saved before the board existed do not replace it',
+  'picks.length+":"+PLAYERS.find(p=>p.id===pickTakenAt(1).playerId).name', '192:Nathan MacKinnon');
+liveSetupOverride = null;
+ok &= check('TRAX50 forward Pettersson resolves to the forward', 'PLAYERS.find(p=>p.id===pickTakenAt(179).playerId).pos', v => v !== 'D');
 ev('switchLeague("aeo-keepers")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('football unaffected after switching back', () => ev('SPORT.id') + ' ' + slots(), 'nfl QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');

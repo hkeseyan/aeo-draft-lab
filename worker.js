@@ -484,6 +484,11 @@ function profileSlotForOverall(profile, ov) {
 }
 __name(profileSlotForOverall, "profileSlotForOverall");
 function savedRosterNames(profile, setup) {
+  // A setup saved before a completed official board was added (e.g. mock picks)
+  // never seeded that board, so it cannot speak for the real roster.
+  const board = profile && profile.officialDraft === true && Array.isArray(profile.initialPickNames) ? profile.initialPickNames : null;
+  const complete = board && board.length >= Number(profile.teams || 12) * Number(profile.rounds || 16);
+  if (complete && !(setup && setup.seededLiveSnapshot)) setup = null;
   if (setup && Array.isArray(setup.myRosterNames) && setup.myRosterNames.length) {
     return [...new Set(setup.myRosterNames.map(String).map((x) => x.trim()).filter(Boolean))];
   }
@@ -510,7 +515,8 @@ function savedRosterNames(profile, setup) {
   if (!names.length && profile && profile.officialDraft === true && Array.isArray(profile.initialPickNames)) {
     profile.initialPickNames.forEach((name, idx) => {
       const ov = idx + 1;
-      if (profileSlotForOverall(profile, ov) === mySlot && name) names.push(String(name).trim());
+      // Drop a position qualifier ("Elias Pettersson (C)") so exposure keys match player names.
+      if (profileSlotForOverall(profile, ov) === mySlot && name) names.push(String(name).replace(/\s*\([A-Za-z/ ]{1,9}\)\s*$/, "").trim());
     });
   }
   return [...new Set(names.filter(Boolean))];

@@ -144,7 +144,12 @@ reports those settings instead of forcing one size. `public-points-league-2` /
 **Yahoo Prize H2H-Pts 141304** is the second official points league, inherits the
 same tested reference settings, places the user in slot 4, and starts with a blank
 192-pick board plus placeholder opponents until live team names/results arrive.
-Custom/bangers formats are imported rather than guessed.
+Custom/bangers formats are imported rather than guessed. **TRAX50 Classic Draft (76)** is an official
+completed Fantrax board as well: 192 picks from the Fantrax results CSV, the user
+as Tkachuk Norris in slot 8. When a league carries a complete official board and
+its saved setup never seeded it (for example, mock picks saved earlier), the board
+wins in the Draft Room and in exposure; exposure also strips position qualifiers
+such as `Elias Pettersson (C)` from names.
 
 ## App shape
 
