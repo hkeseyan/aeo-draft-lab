@@ -1469,7 +1469,11 @@ var worker_default = {
           if (draftType) notes.push(`Fantrax reports a ${draftType} draft.`);
           if (unresolved) notes.push(`${unresolved} roster entries kept their Fantrax player id because the player dictionary did not name them.`);
           notes.push("Fantrax roster data carries no drafted round or keeper flag, so players are marked FA/NONE.");
-          // Preserve the actual Fantrax roster shape from league constraints.
+          // A Fantrax league declares the slots it actually rosters, and hockey leagues
+          // there commonly use one combined forward slot (F) rather than C/LW/RW. Read
+          // that from the league's own constraints rather than assuming either shape —
+          // the built-in Fantrax profile hardcodes F/D/G, but a real league may differ.
+          // rosterPositions is the field the app already resolves positions through.
           const constraintCodes = (() => {
             const pc = info && info.rosterInfo && info.rosterInfo.positionConstraints;
             if (!pc) return [];
