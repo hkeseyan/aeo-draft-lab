@@ -92,6 +92,8 @@ ok &= check('Waiver Lab persists explicit non-FAAB context', () => JSON.stringif
 ev('switchLeague("yahoo-nhl-public")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('switched to the NHL league', 'CURRENT_LEAGUE_ID', 'yahoo-nhl-public');
+ok &= check('league selector reflects the active NHL profile after rebuilding its options',
+  () => w.document.getElementById('leagueSelect').value, 'yahoo-nhl-public');
 ok &= check('Yahoo Public Prize points reference is 12 teams', 'LEAGUE.teams', 12);
 ok &= check('NHL sport pack active', 'SPORT.id', 'nhl');
 ok &= check('recommendations share a row with the full player list', () =>
