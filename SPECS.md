@@ -348,6 +348,54 @@ A player that is truly `dead` can sometimes be dropped **before** entering claim
 
 When several claims use the same drop player, they form a mutually exclusive branch: the first successful claim consumes that drop path, and later claims tied to that player should naturally fail/skip rather than cause an additional unrelated cut. Position-specific caps can create another branch rule (for example, "take at most one of these RB claims"); those caps are part of the waterfall, not independent player rankings.
 
+
+#### Candidate discovery metadata
+
+Waiver Lab separates **discovery/triage** from **valuation**. Before the projection model is trusted enough to drive the entire candidate list, the fastest reliable way to make the pool manageable is to surface the same two market-attention signals the user already uses on host apps:
+
+1. **Roster percentage** — how broadly a player is held.
+2. **Recent trend** — how quickly managers are adding/roster­ing the player now.
+
+These are not player-value inputs by default. They answer "who deserves inspection?" rather than "who is the best player?" A low-rostered breakout with fresh injury-driven opportunity can be more valuable than a highly rostered veteran, and early Tuesday data can lag because many leagues have not processed waivers or reacted to new information yet.
+
+The normalized available-player schema supports:
+- `roster_pct`
+- `roster_trend`
+- `trend_metric` (e.g. `adds` or `roster_pct_delta`)
+- `trend_window_hours`
+- `trend_source`
+- `metadata_updated_at`
+
+Do **not** combine unlike trend metrics into one universal number without source-specific calibration. "134 Sleeper adds in 24h" and "+1.8 Yahoo ownership percentage points this week" are displayed with their source/window intact.
+
+Source plan:
+- **Yahoo:** official Fantasy API `percent_owned`; current responses include ownership value and a delta. The Waiver Lab Yahoo snapshot now requests this sub-resource for its returned waiver pool and stores the metadata on each row.
+- **Sleeper:** official public trending endpoint provides recent add/drop counts with configurable `lookback_hours`; no documented global roster-percentage field should be assumed. Add-count ingestion still needs a stable Sleeper-ID mapping into the Draft Lab player identity layer.
+- **ESPN:** ownership percentage/change are available through the widely used fantasy endpoints, but those endpoints are not officially supported. Treat them as an opportunistic source with health checks and fallbacks, not a contractual dependency.
+- **FantasyPros:** useful for league-specific availability, waiver recommendations, rankings, injury/news context and projections; use as enrichment/fallback rather than pretending its waiver recommendation percentage is the same thing as host-platform roster/add momentum.
+
+The interactive waiver run should explicitly refresh sources before planning. A fetch timestamp proves when Draft Lab retrieved a value, not when the provider last incorporated news, so provider projection freshness must not be inferred merely from a recent HTTP response.
+
+#### Projection freshness and conditional opportunity
+
+Host-platform projections are supplemental until the in-season projection layer is event-aware. They can update slowly and can blur mutually exclusive outcomes. For injury contingencies, do not treat a single blended point projection as the full decision model.
+
+Example pattern: if a starting RB is uncertain, the true useful scenarios may be approximately:
+- starter active → starter projects normally, backup remains a low-volume reserve;
+- starter inactive → starter projects zero, backup inherits a large workload.
+
+A platform may temporarily show both players at middling values while the injury is unresolved. Draft Lab should eventually model the conditional scenarios separately and attach a probability/confidence to the starter's availability, rather than blindly trusting the host's blended projection.
+
+Projection/news requirements for the future engine:
+- incorporate the latest completed game before the next waiver decision;
+- incorporate material role/injury news from the last several hours;
+- track source timestamp and confidence;
+- retain scenario branches when an injury/role outcome is unresolved;
+- prefer authoritative late information for status, while allowing earlier probabilistic assumptions for planning;
+- keep market metadata (roster %, add trend) separate from the football-value projection.
+
+For the current first version, projections remain useful context, but market discovery + roster/drop logic + current news can outrank a stale platform point projection.
+
 The current FantasyPros direct feed covers the user's roster/matchup and decision context but not the complete free-agent pool. Therefore the normalized snapshot tracks coverage per field (`roster`, `available`, `projections`) and never presents a partial provider as complete. Yahoo or the last saved/manual pool remains the availability authority until a supported complete FantasyPros availability feed is added.
 
 ### Strategy Lab
