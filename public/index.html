@@ -438,7 +438,7 @@
       </div>
       <div class="card">
         <h2>Available / newly dropped players</h2>
-        <p class="small muted">Minimum: <code>name,pos,team</code>. Optional decision inputs: <code>week_proj,ros_rank,endgame,role,schedule,injury,teammate,bye_week,status,notes</code>. Scores may be 0–1 or percentages; schedule is 1–5.</p>
+        <p class="small muted">Minimum: <code>name,pos,team</code>. Discovery metadata: <code>roster_pct,roster_trend,trend_metric,trend_window_hours,trend_source,metadata_updated_at</code>. Decision inputs: <code>week_proj,ros_rank,endgame,role,schedule,injury,teammate,bye_week,status,notes</code>. Roster % and recent-add/ownership trend are candidate-discovery signals, not player-value scores; keep their source/window visible instead of comparing unlike trend metrics as if they were the same scale.</p>
         <textarea id="faabAvailableCsv" style="min-height:210px"></textarea>
       </div>
     </div>
@@ -5845,7 +5845,7 @@ let FAAB_REPORT=null;
 let INSEASON_STATE={};
 let WAIVER_TICKETS=[];
 const FAAB_ROSTER_HEADERS=['name','pos','team','week_proj','ros_rank','status','bye_week','drop_class','drop_notes'];
-const FAAB_AVAILABLE_HEADERS=['name','pos','team','week_proj','ros_rank','endgame','role','schedule','injury','teammate','bye_week','status','notes'];
+const FAAB_AVAILABLE_HEADERS=['name','pos','team','roster_pct','roster_trend','trend_metric','trend_window_hours','trend_source','metadata_updated_at','week_proj','ros_rank','endgame','role','schedule','injury','teammate','bye_week','status','notes'];
 function faabEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function faabCsvCell(v){const s=String(v==null?'':v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
 function faabRowsCsv(rows,headers){return headers.join(',')+'\n'+(rows||[]).map(r=>headers.map(h=>faabCsvCell(r[h])).join(',')).join('\n');}
@@ -6030,7 +6030,7 @@ function renderFaabReport(report){
   el('faabReportMeta').textContent=showFaab?`Week ${report.week} · ${report.teamsAlive} alive · $${report.remainingBudget} left · ${new Date(report.createdAt).toLocaleString()}`:`Week ${report.week} · claim route: ${(el('waiverMethod').value||'unknown').replace(/_/g,' ')} · ${new Date(report.createdAt).toLocaleString()}`;
   const body=el('faabResults');
   body.innerHTML=(report.recommendations||[]).map((p,i)=>`<tr>
-    <td><b>${faabEsc(p.name)}</b><div class="small muted">${faabEsc(p.team)} · ${faabEsc(p.pos)} · ${faabEsc(p.tier)}</div><div class="small ${showFaab?(p.marketReachable?'faab-good':'faab-pass'):'muted'}">${showFaab?(p.marketReachable?'Market is within your ceiling':'Disciplined pass at projected market'):'Candidate for manual claim review'}</div></td>
+    <td><b>${faabEsc(p.name)}</b><div class="small muted">${faabEsc(p.team)} · ${faabEsc(p.pos)} · ${faabEsc(p.tier)}</div><div class="small muted">${p.rosterPct!=null?p.rosterPct.toFixed(1)+'% rostered':'roster % —'}${p.rosterTrend!=null?' · '+(p.trendMetric==='adds'?Math.round(p.rosterTrend)+' adds':(p.rosterTrend>=0?'+':'')+p.rosterTrend.toFixed(1)+' own. trend'):''}${p.trendSource?' · '+faabEsc(p.trendSource):''}${p.trendWindowHours?' / '+p.trendWindowHours+'h':''}</div><div class="small ${showFaab?(p.marketReachable?'faab-good':'faab-pass'):'muted'}">${showFaab?(p.marketReachable?'Market is within your ceiling':'Disciplined pass at projected market'):'Candidate for manual claim review'}</div></td>
     <td><b>${p.adjustedWeekProjection} pts</b><div class="small muted">lineup upgrade +${p.lineupUpgrade}${p.lineupDisplaced?' · lineup displaced '+faabEsc(p.lineupDisplaced):''}</div><div class="small muted">${p.suggestedDrop?'drop '+faabEsc(p.suggestedDrop)+' ('+faabEsc(p.suggestedDropClass||'')+')':'drop unresolved'} · ROS rank ${p.rosRank<999?p.rosRank:'—'} · endgame ${Math.round(p.endgame*100)}%</div></td>
     <td>${showFaab?`<div class="faab-metrics"><div class="faab-metric"><span class="small muted">Bid</span><b>$${p.recommendedBid}</b></div><div class="faab-metric"><span class="small muted">Projected win</span><b>$${p.projectedWinningBid}</b></div><div class="faab-metric"><span class="small muted">Stretch max</span><b>$${p.stretchBid}</b></div></div><div class="small muted" style="margin-top:4px">Independent fair value: $${p.fairBid}</div>`:`<div class="small muted">No FAAB bid applied. Confirm the host’s claim route before submission.</div>`}</td>
     <td class="small">${(p.reasons||[]).map(faabEsc).join(' · ')}${p.notes?'<div class="muted" style="margin-top:4px">'+faabEsc(p.notes)+'</div>':''}</td>
