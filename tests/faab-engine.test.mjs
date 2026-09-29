@@ -32,11 +32,11 @@ Davante Adams,WR,LAR,10.7,23,protected,
 Courtland Sutton,WR,DEN,8.9,38,conditional,
 Keenan Allen,WR,LAC,6.7,59,conditional,
 Tyler Warren,TE,IND,9.7,4,protected,`,
-  availableCsv: `name,pos,team,week_proj,ros_rank,endgame,role,schedule,injury
-Puka Nacua,WR,LAR,16.9,2,100,100,4,10
-Malik Nabers,WR,NYG,11.4,10,75,85,3,25
-Emeka Egbuka,WR,TB,10.5,16,55,85,3,8
-Tucker Kraft,TE,GB,9.0,5,40,65,3,15`
+  availableCsv: `name,pos,team,roster_pct,roster_trend,trend_metric,trend_window_hours,trend_source,week_proj,ros_rank,endgame,role,schedule,injury
+Puka Nacua,WR,LAR,99.2,1.8,roster_pct_delta,,yahoo,16.9,2,100,100,4,10
+Malik Nabers,WR,NYG,96.5,0.4,roster_pct_delta,,yahoo,11.4,10,75,85,3,25
+Emeka Egbuka,WR,TB,71.0,134,adds,24,sleeper,10.5,16,55,85,3,8
+Tucker Kraft,TE,GB,44.0,52,adds,24,sleeper,9.0,5,40,65,3,15`
 };
 
 assert.equal(parseCsvObjects('name,pos\n"Nacua, Puka",WR')[0].name, 'Nacua, Puka');
@@ -77,6 +77,14 @@ assert.ok(byName['Tucker Kraft'].lineupUpgrade < byName['Emeka Egbuka'].lineupUp
 
 assert.equal(byName['Puka Nacua'].suggestedDrop, 'Tony Pollard');
 assert.equal(byName['Puka Nacua'].suggestedDropClass, 'replaceable');
+assert.equal(byName['Puka Nacua'].rosterPct, 99.2);
+assert.equal(byName['Puka Nacua'].rosterTrend, 1.8);
+assert.equal(byName['Puka Nacua'].trendMetric, 'roster_pct_delta');
+assert.equal(byName['Puka Nacua'].trendSource, 'yahoo');
+assert.equal(byName['Emeka Egbuka'].rosterTrend, 134);
+assert.equal(byName['Emeka Egbuka'].trendMetric, 'adds');
+assert.equal(byName['Emeka Egbuka'].trendWindowHours, 24);
+assert.equal(byName['Emeka Egbuka'].trendSource, 'sleeper');
 assert.ok(byName['Puka Nacua'].lineupDisplaced);
 assert.equal(report.bidOrderLocked, true);
 assert.equal(report.claimOrderRule, 'bid_descending');
