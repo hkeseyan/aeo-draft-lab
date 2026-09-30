@@ -23,20 +23,20 @@ const input = {
   remainingBudget: 1000,
   teamsAlive: 18,
   aggression: 0.8,
-  rosterCsv: `name,pos,team,week_proj,ros_rank
-Josh Allen,QB,BUF,23.5,1
-De'Von Achane,RB,MIA,14.5,11
-Tony Pollard,RB,TEN,8.9,34
-Aaron Jones Sr.,RB,MIN,8.6,42
-Davante Adams,WR,LAR,10.7,23
-Courtland Sutton,WR,DEN,8.9,38
-Keenan Allen,WR,LAC,6.7,59
-Tyler Warren,TE,IND,9.7,4`,
-  availableCsv: `name,pos,team,week_proj,ros_rank,endgame,role,schedule,injury
-Puka Nacua,WR,LAR,16.9,2,100,100,4,10
-Malik Nabers,WR,NYG,11.4,10,75,85,3,25
-Emeka Egbuka,WR,TB,10.5,16,55,85,3,8
-Tucker Kraft,TE,GB,9.0,5,40,65,3,15`
+  rosterCsv: `name,pos,team,week_proj,ros_rank,drop_class,drop_notes
+Josh Allen,QB,BUF,23.5,1,protected,
+De'Von Achane,RB,MIA,14.5,11,protected,
+Tony Pollard,RB,TEN,8.9,34,replaceable,replace when waiver plan has a better use
+Aaron Jones Sr.,RB,MIN,8.6,42,conditional,
+Davante Adams,WR,LAR,10.7,23,protected,
+Courtland Sutton,WR,DEN,8.9,38,conditional,
+Keenan Allen,WR,LAC,6.7,59,conditional,
+Tyler Warren,TE,IND,9.7,4,protected,`,
+  availableCsv: `name,pos,team,roster_pct,roster_trend,trend_metric,trend_window_hours,trend_source,week_proj,ros_rank,endgame,role,schedule,injury
+Puka Nacua,WR,LAR,99.2,1.8,roster_pct_delta,,yahoo,16.9,2,100,100,4,10
+Malik Nabers,WR,NYG,96.5,0.4,roster_pct_delta,,yahoo,11.4,10,75,85,3,25
+Emeka Egbuka,WR,TB,71.0,134,adds,24,sleeper,10.5,16,55,85,3,8
+Tucker Kraft,TE,GB,44.0,52,adds,24,sleeper,9.0,5,40,65,3,15`
 };
 
 assert.equal(parseCsvObjects('name,pos\n"Nacua, Puka",WR')[0].name, 'Nacua, Puka');
@@ -74,6 +74,27 @@ assert.ok(byName['Emeka Egbuka'].projectedWinningBid >= 45 && byName['Emeka Egbu
 assert.ok(byName['Tucker Kraft'].projectedWinningBid >= 15 && byName['Tucker Kraft'].projectedWinningBid <= 30);
 assert.ok(byName['Puka Nacua'].lineupUpgrade > byName['Emeka Egbuka'].lineupUpgrade);
 assert.ok(byName['Tucker Kraft'].lineupUpgrade < byName['Emeka Egbuka'].lineupUpgrade);
+
+assert.equal(byName['Puka Nacua'].suggestedDrop, 'Tony Pollard');
+assert.equal(byName['Puka Nacua'].suggestedDropClass, 'replaceable');
+assert.equal(byName['Puka Nacua'].rosterPct, 99.2);
+assert.equal(byName['Puka Nacua'].rosterTrend, 1.8);
+assert.equal(byName['Puka Nacua'].trendMetric, 'roster_pct_delta');
+assert.equal(byName['Puka Nacua'].trendSource, 'yahoo');
+assert.equal(byName['Emeka Egbuka'].rosterTrend, 134);
+assert.equal(byName['Emeka Egbuka'].trendMetric, 'adds');
+assert.equal(byName['Emeka Egbuka'].trendWindowHours, 24);
+assert.equal(byName['Emeka Egbuka'].trendSource, 'sleeper');
+assert.equal(byName['Puka Nacua'].trendPercentile, 100);
+assert.equal(byName['Emeka Egbuka'].trendPercentile, 100);
+assert.equal(byName['Puka Nacua'].discoveryRank, 1);
+assert.equal(byName['Emeka Egbuka'].discoveryRank, 2);
+assert.ok(byName['Puka Nacua'].discoveryScore > byName['Malik Nabers'].discoveryScore);
+assert.ok(byName['Puka Nacua'].lineupDisplaced);
+assert.equal(report.bidOrderLocked, true);
+assert.equal(report.claimOrderRule, 'bid_descending');
+assert.ok(report.recommendations.every((p, i, rows) => i === 0 || rows[i - 1].recommendedBid >= p.recommendedBid));
+assert.deepEqual(report.recommendations.map(p => p.claimOrder), report.recommendations.map((_, i) => i + 1));
 
 const twelve = analyzeFaab({ ...input, teamsAlive: 12 }, { ...profile, teams: 12 });
 const twelvePuka = twelve.recommendations.find((p) => p.name === 'Puka Nacua');
