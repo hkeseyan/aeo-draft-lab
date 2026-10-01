@@ -555,13 +555,41 @@ ok &= check('a different scoring system re-ranks without new data', () => ev(`(f
   LEAGUE.scoring=saved; computeMyRanks();
   return after!==before && Math.abs(findPlayer('Nikola Jokic').leagueProj-before)<0.01;
 })()`), true);
-ok &= check('every NBA player gets a finite, draft-safe My Rank', () => ev(`(function(){
+ok &= check('NBA My Rank is simply the order of league value, with no ADP guardrail', () => ev(`(function(){
   const bad=PLAYERS.filter(p=>!Number.isFinite(p.myRank)||!Number.isFinite(p.myValue));
   if(bad.length) return 'non-finite: '+bad.slice(0,3).map(p=>p.name);
-  const loose=PLAYERS.filter(p=>Math.abs(p.myRank-marketAdp(p))>15.5);
-  return loose.length?'outside guardrail: '+loose.slice(0,3).map(p=>p.name):true;
+  const byRank=PLAYERS.slice().sort((a,b)=>a.myRank-b.myRank);
+  for(let i=1;i<byRank.length;i++) if(byRank[i].leagueProj>byRank[i-1].leagueProj+1e-9) return 'out of order at '+byRank[i].name;
+  if(new Set(PLAYERS.map(p=>p.myRank)).size!==PLAYERS.length) return 'ranks not unique';
+  return PLAYERS.some(p=>Math.abs(p.myRank-marketAdp(p))>15) || 'still capped near ADP';
 })()`), true);
-ok &= check('My Rank explains itself with the projection source', 'findPlayer("Nikola Jokic").myRankWhy', v => /league proj/.test(v) && /FantasyPros 2026-27/.test(v) && /draft-safe: Yahoo ADP/.test(v));
+ok &= check('centres get no flat positional bonus', () => ev(`(function(){
+  return PLAYERS.every(p=>Math.abs(p.myValue-p.leagueProj)<1e-9);
+})()`), true);
+ok &= check('live projection blend weights Hashtag 50 / FantasyPros 25 / ESPN 25, attempts without FantasyPros', () => ev(`(function(){
+  const p=findPlayer('Nikola Jokic'), saved={st:{...p.st},gp:p.gp,minutes:p.minutes,src:p.projectionSources,live:p.projectionLive};
+  const row=(pts,extra)=>Object.assign({name:'Nikola Jokić',gp:70,min:2500,pts,reb:900,ast:700,stl:100,blk:50,to:250,tpm:120},extra||{});
+  const n=blendNbaProjectionSources([
+    {id:'hashtag',rows:[row(2000,{fgm:800,fga:1400,ftm:400,fta:500})]},
+    {id:'fp',noAttempts:true,rows:[row(1000,{fgm:1,fga:999})]},
+    {id:'espn',rows:[row(1600,{fgm:700,fga:1300,ftm:380,fta:460})]},
+  ],'2026-10-01T00:00:00Z');
+  const out=[n>=1, Math.abs(p.st.pts-1650)<1e-6, Math.abs(p.st.fga-(0.5*1400+0.25*1300)/0.75)<1e-6, p.projectionSources.join('+')];
+  Object.assign(p,{st:saved.st,gp:saved.gp,minutes:saved.minutes,projectionSources:saved.src,projectionLive:saved.live});
+  computeMyRanks();
+  return out.join('|');
+})()`), 'true|true|true|hashtag+fp+espn');
+ok &= check('Yahoo league shows Yahoo eligibility, not FantasyPros', 'eligiblePositions(findPlayer("Tyrese Maxey")).join("/")+":"+findPlayer("Tyrese Maxey").pos', 'PG:PG');
+ok &= check('My Rank explains itself with the projection source', 'findPlayer("Nikola Jokic").myRankWhy', v => /league value/.test(v) && /per game/.test(v) && !/draft-safe/.test(v));
+ok &= check('league value column sorts best-first', () => {
+  const th = w.document.getElementById('projHeader');
+  th.click();
+  const first = [...w.document.querySelectorAll('#poolTable tbody tr')].find(r => r.querySelector('[data-pk]'));
+  const name = first && first.children[7].textContent;
+  const top = ev('PLAYERS.filter(p=>!p.drafted).sort((a,b)=>b.leagueProj-a.leagueProj)[0].name');
+  w.document.querySelector('#poolTable th[data-sort="adp"]').click();
+  return name && name.includes(top) ? true : name + ' vs ' + top;
+}, true);
 ok &= check('a second PG/SG counts at SG, not piled onto PG', () => ev(`(function(){
   const pgsg=PLAYERS.filter(x=>eligiblePositions(x).join('/')==='PG/SG').slice(0,2);
   const c=countsOf(pgsg); return c.PG+':'+c.SG+':'+c.G;
