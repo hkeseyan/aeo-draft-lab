@@ -43,8 +43,9 @@ What research established on 2026-10-01:
   reward single-game ceiling over games played, which is the draft implication for
   build step 5.
 
-**Still owed by step 2:** a second projection source to blend (Sleeper per-game x
-games is the obvious one; its attempts already feed FGA/FTA); a refresh path that is
+**Still owed by step 2:** a projection blend led by the sources the user trusts
+(see "User direction" below: Hashtag first, with Yahoo/Fantrax once reachable;
+FantasyPros demoted to at most a low weight); a refresh path that is
 not a by-hand pull (hockey's is `/api/nhl/preseason-projections`); Fantrax ADP wired
 for Fantrax leagues (`/api/nhl/fantrax-adp` is hockey-only); tiers (FantasyPros'
 NBA `ecrData` carries none). Anchors found for later steps: Yahoo source sync picks
@@ -57,6 +58,183 @@ overall.php`, `/nba/adp/overall.php`, `/nba/projections/overall.php`) and Sleepe
 `/v1/players/nba`, `/v1/projections/nba/regular/2026` and `/v1/stats/nba/regular/2025`,
 then rebuild the CSV with the same joins (FantasyPros id; Sleeper name + team or
 position; drop same-name FA records with no data) and bump `poolDataRevision`.
+
+## User direction (2026-10-01) — sources, schedule, positions, categories
+
+Captured from the user's second message of the NBA session; they are still reading
+and will add more. Nothing below is built yet except where it says so. FEEDBACK.md
+has the short form.
+
+### Projection sources
+
+**What the current pool uses.** `proj` comes from FantasyPros' **stat projections**
+(season totals per category: its projections page, not its rankings). Its ECR
+rankings are kept separately as the `ecr` column, as for hockey.
+
+**The user's trust order.** FantasyPros is not a reliable NBA source to the user.
+It's acceptable as one input to a collective average, since it does project its own
+stats, but no more. **Yahoo and Fantrax rank above it**, and they matter for a second
+reason: opponents mostly view projections in their platform's app, so a platform's
+own projection predicts how opponents value players. **Hashtag Basketball** is
+trusted, and the user has Hashtag Premium. **Basketball Monster** is on a similar
+tier or better, but the user has no subscription.
+
+**What's reachable, checked from the agent container on 2026-10-01:**
+
+| Source | Free access | What it gives |
+|---|---|---|
+| Hashtag Basketball projections | **Yes.** The default page shows 30 players; an ASP.NET postback with the "show" dropdown set to All returns **all ~430** without a login | 2026-27 per-game projections with GP, MPG, **FGM/FGA, FTM/FTA**, 3PM, PTS, REB, AST, STL, BLK, TO, plus Hashtag's own z-score total. A positions dropdown switches between **Yahoo, ESPN and Fantrax eligibility**, a possible source for the missing platform eligibility. Premium does not appear to be needed for projections; it adds tools like the premium schedule grid and waiver tools. |
+| Hashtag Advanced NBA Schedule Grid | Yes (page loads) | Weekly grid, Yahoo-style weeks (W1 = 19-25 Oct, W7 = 30 Nov-13 Dec spans the NBA Cup break) |
+| Basketball Monster | **Rankings page only.** Its free view is **2025-26 actuals** with per-category values; the 2026-27 projections page redirects (subscriber-only) | Last season's per-game stats with attempts and usage, and per-category values. Useful as a z-score methodology reference, not as a projection |
+| ESPN (unofficial fantasy API) | Yes | 2026-27 stat projections (season 2027, stat source 1, 31 stat ids per player) |
+| Sleeper API | Yes | 2026-27 per-game projections with attempts (529 players); Sleeper ADP. Sleeper is one of the user's NBA platforms, so this is what opponents there see |
+| Yahoo | **Blocked** until Yahoo provisions the app's Fantasy API access (expected roughly Oct 3-10, see FEEDBACK.md) | Yahoo's own projections; the opponent view for Yahoo leagues |
+| Fantrax | No public projection feed among the endpoints we use (`getPlayerIds`, `getAdp`); needs a look with a real league ID | Fantrax's own projections; the opponent view for Fantrax leagues |
+| FantasyPros | Yes | Season-total stat projections without attempts (the current `proj`) |
+
+**Proposed shape (for the user to confirm).** Mirror the hockey pattern of raw-stat
+sources blended *before* league scoring is applied, with two layers kept apart,
+like Market $ vs Target $ for auctions:
+- **Our projection** (drives My Rank): a weighted blend of the sources the user
+  trusts, with Hashtag first. ESPN and Sleeper are candidates, and FantasyPros at
+  most a low weight. Yahoo and Fantrax join once reachable. Weights are the user's
+  call.
+- **Platform view** (opponent modelling): the league's own platform projection
+  (Yahoo for a Yahoo league, Fantrax for a Fantrax league), kept as its own column.
+  It's the in-app number opponents see, the same reason rivals draft against
+  platform ADP.
+
+**Other sources to vet** (suggestions only; the user confirms reliability):
+- ESPN projections and Sleeper projections (both free, above).
+- **DARKO**, a free public NBA projection model well regarded by analysts. It's a
+  Shiny app, so access needs a closer look.
+- numberFire (FanDuel Research).
+- RotoWire (paid).
+
+### Schedule grid and the playoff-week tiebreak
+
+- The user consults Hashtag's **Advanced Schedule Grid** constantly for **NBA, NHL
+  and MLB**. We can build our own from raw schedule data rather than depend on it.
+  It barely matters at the draft but is **critical in-season for all three sports**.
+- **NBA schedule data:** Sleeper's free `schedule/nba/regular/2026` returns **1,200
+  games, 80 per team**, with dates and weeks. A full season is 1,230: each team's
+  last 2 games are the **NBA Cup knockout games, scheduled in December**, so a
+  per-week games count must treat them as unknown until then.
+  - `cdn.nba.com` and ESPN's scoreboard 403 from the agent container. The deployed
+    Worker might reach them; not verified.
+  - Hockey already has `/api/nhl/schedule`.
+- **Playoff-schedule tiebreak in My Rank — low-medium priority.** Only ever sways a
+  near-tie: when projections and My Rank are otherwise very close and one player
+  plays 3-5 more games across the league's 2-3 fantasy-playoff weeks. It must never
+  carry Giannis over Wembanyama.
+  - Requires an absolutely solid schedule integration.
+  - Requires the **playoff weeks confirmed per league, for that draft**, plus that
+    platform's week boundaries.
+  - **The weight is 0 whenever the playoff weeks are unknown or uncertain** from what
+    the user has provided.
+  - Yahoo's documented default is playoffs in weeks 20-22. That's a default, not a
+    confirmation for any specific league.
+
+### Positions — do not repeat the NHL treatment
+
+- **Basketball F and C are different positions.** In hockey C is a subset of F.
+  Yahoo hockey has no Flex or Util, which made eligibility a big deal there.
+- Basketball differs in several ways:
+  - Production is more even across positions.
+  - Players are often both F and C.
+  - Util and the G/F slots add flexibility.
+- The user's hockey experience was that C is deeper and outproduces other positions.
+  Whether basketball C does the same in points leagues is unconfirmed; it may just
+  be stat diversity.
+- **Current build:** F is SF/PF only and a pure C does not fill F (a PF/C fills
+  both), per Yahoo's slot rules. There is no hockey-style C-only markdown or
+  multi-forward markup.
+  - **Open item:** the points My Rank gives a small data-driven positional premium.
+    C-eligible players get about +73 Yahoo points a season (about 1 point a game,
+    roughly 2%) because the best undrafted C projects slightly below the best
+    undrafted player overall.
+  - The user's guidance points toward position-neutral My Rank in points leagues,
+    with balance handled by the recommender. Proposed: drop the premium. Awaiting
+    confirmation.
+- **Multi-eligibility** is slightly more valuable, but on a balanced roster it
+  evens out. It matters in **heavy punt builds**. Example: hard-punt FT%,
+  soft-punt 3PM and AST.
+  - Anchors like Giannis, Zion and Gobert set the build.
+  - Then guards who supply AST and 3PM are worth more to the user than yet another
+    mid-round C, regardless of their FT%.
+  - The back end can be filled with Cs nobody else wants.
+  - My Rank may inflate those players for that build. In such builds the user also
+    values "out of position" eligibility and players who stretch into extra
+    positions. Mostly a category-league concern.
+- **Points-league recommender: position-blind until the roster leans too far.**
+  - Example: six rounds in, three PG-only players and no PF-eligible player. Stop
+    recommending PG-only players and boost PF increasingly until one is taken.
+  - Judge on full multi-eligibility, not the listed primary. Three PG/SG players
+    still want a PF, but barely penalize another PG-only.
+  - With three PG-only, a PG/SG counts as an SG, because that's where he will play.
+  - The `slotCounting:'capacity'` counting built in step 1 already models "where
+    he will actually play"; the recommender is not built.
+
+### Categories (H2H and Roto)
+
+- **Category scarcity matters more than position.** Use it in VORP- and VORS-style
+  metrics on z-scores, as Hashtag and Basketball Monster do.
+- **FG% and FT% are volume-weighted.** Examples:
+  - 10 FTA/g at 88% beats 4 FTA/g at 92%.
+  - 10 FTA/g at 65% effectively forces a FT% punt.
+  - 4 FTA/g at 72% is manageable if the team carries few bad FT shooters.
+  - 1.5 FTA/g at 65% barely matters.
+  - In impact terms: (makes − league rate × attempts) per game.
+- **Scarce categories are valued earlier** than ones available late or on waivers.
+- **Points correlate with many categories.** Early players with volume FT%, FG% and
+  3PM usually bring points. A strong points foundation can then be pushed over the
+  line by streaming; without the foundation, streaming rarely gets there.
+- **Turnovers:** the user usually soft-punts TO, especially at the top of the draft,
+  then reassesses. **Punting AST means not punting TO.**
+- Punting and dynamic draft strategy will be discussed during live drafts.
+
+**Data check of the user's experience** (Hashtag 2026-27 per-game projections,
+2026-10-01; 12 teams × 13 rounds = 156 drafted; market order is Hashtag's ADP, then
+its value; "waiver" = market ranks 157-260; league FG% .484, FT% .792 over the
+drafted pool):
+
+| Category | Where the top-24 producers go: R1-3 / R4-8 / R9-13 / waiver | Best 10 on waivers as % of the top 12 |
+|---|---|---|
+| PTS | 21 / 3 / 0 / 0 | 57% (15.8 vs 27.7/g) |
+| REB | 11 / 9 / 3 / 1 | 62% |
+| AST | 17 / 5 / 1 / 1 | 61% (5.1 vs 8.5/g) |
+| STL | 8 / 7 / 2 / 7 | **87%** |
+| BLK | 4 / 9 / 4 / 7 | 75% (1.45 vs 1.94/g) |
+| 3PM | 10 / 11 / 1 / 2 | 78% (2.7 vs 3.4/g) |
+| FG% impact | 6 / 6 / 5 / 7 | 64% |
+| FT% impact | 11 / 11 / 1 / 1 | **44%** |
+| TO (fewest) | 0 / 0 / 9 / 15 | — |
+
+**Where the data agrees with the user:**
+- **FT% at volume** is the scarcest category. It has the lowest waiver ratio, and
+  22 of the top 24 go in rounds 1-8 (SGA, Curry, Booker, Reaves, Trae, Harden...).
+- **Elite assists and elite points** go early. 37 of the 45 projected 20+ ppg
+  scorers go in the first 60 picks. Only 3 come after pick 96, each with baggage:
+  Jalen Green at a 42% FG, LaVine listed OUT, and Barrett.
+- **Steals and 3PM** are the most replaceable (87% and 78%).
+- Mid-level rebounds are available later.
+- Low-TO players are all late, so drafting stars means accepting TO.
+
+**Where the data adds nuance:**
+- **FG% and blocks are both available late, through low-usage centres.** 7 of the
+  top-24 FG% impact producers and 7 of the top-24 shot-blockers are waiver-level:
+  Poeltl, Queta, Lively, Kalkbrenner, Maluach, Robert Williams.
+- *Anchor-volume* FG% (Giannis at 60.8% on 19.9 FGA) and true elite blocks
+  (Wembanyama, 3.2) are early and unique. But 1-1.5 FG% impact and ~1.5 bpg are a
+  late-centre commodity.
+- That fits the user's own note that the back end can be filled with Cs nobody
+  wants: a punt-FT% build gets FG% and blocks cheaply there.
+
+**Caveats:**
+- These are preseason projections. In-season waiver value from injuries and role
+  changes is invisible to them, and that's where much real waiver value appears.
+- Per-game, not schedule-adjusted.
+- One source (Hashtag).
 
 ## Status going in
 

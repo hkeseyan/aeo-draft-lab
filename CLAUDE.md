@@ -148,7 +148,10 @@ needs semantics rather than a new type. **Build step 1 is done (2026-10-01):** t
 `nba` sport pack, composite G/F/Util roster slots (`slotGroups`, shared with
 hockey's Fantrax F), a 335-player 2026-27 pool and the `yahoo-nba-public-points`
 reference league with an NBA points My Rank — see `SPECS.md` → "Basketball (NBA)"
-and the status section at the top of `docs/NBA_PLAN.md` for what is next.
+and the status section at the top of `docs/NBA_PLAN.md` for what is next. The user's direction on projection sources (Hashtag over
+FantasyPros; Yahoo/Fantrax as the opponent view), the schedule grid, positions
+(**don't repeat the hockey F/C treatment**) and category valuation is in
+`docs/NBA_PLAN.md` → "User direction (2026-10-01)".
 
 **Multi-sport history: NHL shipped, NBA next, then MLB.**
 Plan and reasoning live in `docs/MULTISPORT_PLAN.md`; built behaviour is in
