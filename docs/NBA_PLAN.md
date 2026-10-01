@@ -4,6 +4,60 @@ Captured 2026-10-01, at the end of the NHL build. The next session starts here.
 `docs/MULTISPORT_PLAN.md` holds the original cross-sport reasoning; this file is
 NBA-specific and names the exact code that has to change.
 
+## Progress
+
+**2026-10-01 — build step 1 done.** Built: the `nba` sport pack; composite roster
+slots (`slotGroups` in the pack, read by `playerFillsPos()`, `rosterEligiblePositions()`,
+`countsOf()` and `posCell()`, with hockey's Fantrax F expressed the same way and its
+behaviour unchanged); the `yahoo-nba-public-points` reference league; a 335-player
+2026-27 pool (`PLAYERS_CSV_NBA`); `computeMyRanksNba()` for points leagues; NBA
+headshots; the "My slot" control for NBA. `SPECS.md` → "Basketball (NBA)" has the
+behaviour. Step 2 is partly done as a side effect, because the board needed a real
+pool: market ADP and stats-based projections are in; what step 2 still owes is
+listed below.
+
+What research established on 2026-10-01:
+
+- **`stats.nba.com` times out from the agent container** (curl, browser headers, 30s).
+  Not needed for now: FantasyPros' **NBA projections page is free** (season totals for
+  266 players, unlike football's paywalled ones), and Sleeper publishes NBA season
+  stats (`/v1/stats/nba/regular/2025` = 2025-26) and per-game projections with
+  attempts (`/v1/projections/nba/regular/2026`, 529 players).
+- **FantasyPros works exactly as it did for hockey**: `ecrData` in the rankings HTML
+  (311 players, 6 experts, roto scoring), and the ADP page is a plain table with
+  **Yahoo** and **ESPN** columns (223 rows). FantasyPros carries four stale duplicate
+  prospect records (Morez Johnson Jr., Darius Acuff Jr., Mikel Brown Jr., Terrence
+  Shannon Jr. listed again as FA); the pool build drops them.
+- **Fantrax `getAdp?sport=NBA` works with no auth** (312 rows), same as hockey.
+- **Yahoo defaults** (help SLN6919): Public leagues default to **10-team H2H Points**,
+  PTS 1 / REB 1.2 / AST 1.5 / STL 3 / BLK 3 / TO -1, roster PG, SG, G, SF, PF, F, C, C,
+  Util, Util + 3 BN + 3 IL, daily changes, 4 adds/week. **Public Prize basketball is
+  exactly 12 managers** (official rules), H2H Points / H2H Categories / Roto, live
+  standard or auction drafts only. First game week: **Tue Oct 20, 2026**.
+- **Yahoo "High Score"** is Yahoo's new default for private leagues: draft 10, start 6
+  (2 G, 3 frontcourt, 1 Util), and each starter's **single best game of the week**
+  counts; PTS 1, REB 1, AST 2, STL 3, BLK 3. Not offered for Public Prize.
+- **"Lock-In" is Sleeper's mode**: one game per player per week counts, chosen by the
+  manager after it is played and before his next game; the player must have been in
+  that day's starting lineup. It is the manual cousin of Yahoo's High Score. Both
+  reward single-game ceiling over games played, which is the draft implication for
+  build step 5.
+
+**Still owed by step 2:** a second projection source to blend (Sleeper per-game x
+games is the obvious one; its attempts already feed FGA/FTA); a refresh path that is
+not a by-hand pull (hockey's is `/api/nhl/preseason-projections`); Fantrax ADP wired
+for Fantrax leagues (`/api/nhl/fantrax-adp` is hockey-only); tiers (FantasyPros'
+NBA `ecrData` carries none). Anchors found for later steps: Yahoo source sync picks
+its game key at `worker.js` `profile.sport === "nhl" ? "nhl" : "nfl"`, so an NBA
+league would query football; the live recommendation card and streaming controls
+are gated to `SPORT.id==='nhl'`.
+
+**Refreshing the pool by hand:** curl the three FantasyPros pages (`/nba/rankings/
+overall.php`, `/nba/adp/overall.php`, `/nba/projections/overall.php`) and Sleeper's
+`/v1/players/nba`, `/v1/projections/nba/regular/2026` and `/v1/stats/nba/regular/2025`,
+then rebuild the CSV with the same joins (FantasyPros id; Sleeper name + team or
+position; drop same-name FA records with no data) and bump `poolDataRevision`.
+
 ## Status going in
 
 NHL drafting is winding down. The user may be done; they are still looking for a
@@ -108,7 +162,13 @@ than blended. Repeat that shape.
 
 ## Open questions for the user
 
-1. Which specific NBA leagues, on which platforms, and their settings?
-2. What is the Lock-In feature actually called, and what exactly does it lock?
-3. Which Fantrax Best Ball format — roster size, how many count each week/period?
+Asked 2026-10-01; answers arrive as the user joins leagues.
+
+1. Which specific NBA leagues, on which platforms, and their settings (league ID,
+   teams, scoring or category list, roster slots, draft type and date)?
+2. Lock-In: research says it is **Sleeper's** mode (one game per player per week,
+   chosen after it is played, starters only). Is that the one, or does another
+   platform you'll play have its own version (Yahoo's High Score is automatic)?
+3. Which Fantrax Best Ball format — roster size, how many count each period, and is
+   the period daily or weekly?
 4. Any salary/contract league this season, or is that hypothetical for now?

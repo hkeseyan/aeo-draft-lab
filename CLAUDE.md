@@ -144,7 +144,11 @@ sources to establish and a simple-first build order are all in `docs/NBA_PLAN.md
 The single biggest blocker named there: **`isCategoryLeague()` is hardcoded to
 `SPORT.id==='nhl'`**, and 9-cat NBA is category-native. Note also that
 `leagueType:'bestball'` already exists but behaves as redraft, so Fantrax Best Ball
-needs semantics rather than a new type.
+needs semantics rather than a new type. **Build step 1 is done (2026-10-01):** the
+`nba` sport pack, composite G/F/Util roster slots (`slotGroups`, shared with
+hockey's Fantrax F), a 335-player 2026-27 pool and the `yahoo-nba-public-points`
+reference league with an NBA points My Rank — see `SPECS.md` → "Basketball (NBA)"
+and the status section at the top of `docs/NBA_PLAN.md` for what is next.
 
 **Multi-sport history: NHL shipped, NBA next, then MLB.**
 Plan and reasoning live in `docs/MULTISPORT_PLAN.md`; built behaviour is in
@@ -238,7 +242,7 @@ goalie rates, positional VORP, draft-safe ADP caps 6/15/25). Tunables live in
 with BLK; NBA should reuse the same shape.
 
 Testing, before any push: `node tests/boot-smoke.mjs` (boots the whole page in
-jsdom, 45 assertions across both sports; needs `npm install --no-save jsdom`),
+jsdom, 160 assertions across all three sports; needs `npm install` for jsdom),
 `node tests/fantrax-import.test.mjs` (drives the real worker route with stubbed
 Fantrax responses), plus the existing `faab-engine`, `source-sync` and
 `validate-fantastic-data` tests.

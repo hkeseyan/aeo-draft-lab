@@ -13,7 +13,7 @@ incomplete, not final.
 ## Sports
 
 The app serves more than one sport from one deployment. A league profile names its
-sport (`sport:'nfl'|'nhl'`, defaulting to `'nfl'` so every pre-existing football
+sport (`sport:'nfl'|'nhl'|'nba'`, defaulting to `'nfl'` so every pre-existing football
 profile keeps working untouched), and a **sport pack** in `SPORTS` supplies
 everything that used to be hardcoded football: the position list and colours, the
 tendency positions, the flex default, position aliases, the roster depth-cap rule,
@@ -151,6 +151,72 @@ its saved setup never seeded it (for example, mock picks saved earlier), the boa
 wins in the Draft Room and in exposure; exposure also strips position qualifiers
 such as `Elias Pettersson (C)` from names.
 
+### Basketball (NBA) — build step 1
+
+The `nba` sport pack (positions PG/SG/SF/PF/C) and a **Yahoo Public Prize NBA H2H
+Points** reference league (`yahoo-nba-public-points`) are built; the remaining NBA
+work is sequenced in `docs/NBA_PLAN.md`.
+
+**Composite roster slots.** Basketball rosters G (PG/SG), F (SF/PF) and Util (any)
+*alongside* the base positions, where hockey's Fantrax F *replaces* C/LW/RW. Both
+are one mechanism: a sport pack's `slotGroups` names the positions a composite slot
+accepts, and `playerFillsPos()` / `rosterEligiblePositions()` read it (hockey's F is
+`slotGroups.F=['C','LW','RW','F']`, unchanged behaviour). A basketball centre does
+not fill F. The board shows a player's own positions (`PG/SG`) rather than every
+slot he can start in, and shows a composite only when the league rosters none of
+his own positions (Fantrax hockey's F). Basketball counts a rostered player into the
+first slot he can still start in, own positions before composites
+(`slotCounting:'capacity'`), so a second PG/SG lands at SG instead of piling onto
+PG; a full composite slot is simply full, and bench depth is judged on the player's
+own position (depth cap = starters + 2).
+
+**Reference league.** Yahoo's official 2026-27 rules give Public Prize basketball
+exactly **12 managers**; roster, scoring and add cap are Yahoo's documented
+defaults: PG, SG, G, SF, PF, F, C, C, Util, Util, 3 bench, 3 IL (13 drafted rounds);
+PTS 1, REB 1.2, AST 1.5, STL 3, BLK 3, TO -1; daily lineups; 4 adds per week. Yahoo
+Public (free) leagues default to 10 teams, so imports should trust the reported
+size. The "My slot" control above the board works here as it does for hockey.
+
+**The NBA pool's three columns** (335 players, pulled 2026-10-01, embedded as
+`PLAYERS_CSV_NBA`):
+
+- `adp` — **real Yahoo ADP** from FantasyPros' ADP table (ESPN where Yahoo is
+  blank; players in neither sort in behind, by ECR then projection). Yahoo's column
+  is thin preseason and has outliers (AJ Green at 46, Aaron Nesmith at 41), but it
+  is the market Yahoo drafters actually use.
+- `ecr` — FantasyPros expert consensus (6 experts, roto-flavoured).
+- `proj` — component projections rescored through the league's point values.
+  Components are FantasyPros' 2026-27 season projections (PTS/REB/AST/STL/BLK/TO/
+  3PM/GP/MIN, FG%, FT%), which are forward-looking, so a player who missed 2025-26
+  (Tatum, Haliburton) is not erased. FantasyPros publishes no attempts: FTA comes
+  from Sleeper's projected free-throw rate per minute and FGM/FGA are solved from
+  points, 3PM and FT so the line keeps FantasyPros' FG%; double-/triple-double
+  rates are Sleeper's. 66 players FantasyPros does not project use Sleeper's
+  per-game projection times estimated games (`proj_src` records which).
+  FantasyPros rows join on FantasyPros' own player id; Sleeper on name plus team or
+  position; four stale duplicate prospect records in FantasyPros' data are dropped.
+
+**My Rank (basketball).** Same shape as hockey's points model: projected points
+through the league's scoring, value over the replacement player (the best player
+at that position outside the league's draftable cut) at the best of the player's
+own positions, a positional premium capped at 6% of his own projection, a small
+multi-position bonus, then the draft-safe Yahoo-ADP guardrail (±5 inside the top
+25, ±10 to 100, ±15 beyond). The tooltip keeps the raw model rank and names the
+projection source. On the reference league the model lifts rebound/assist big men
+(Sabonis, Adebayo, Davis, Giannis) and fades low-volume specialists (Holmgren,
+Kessler) against a category-influenced Yahoo ADP. Category NBA leagues rank on
+Yahoo default points until build step 3.
+
+**Leagues tab lineup inputs follow the sport.** The starters editor used to list
+football positions only, so saving a hockey or basketball profile from the form
+replaced its lineup with an empty one. It now lists the edited profile's own sport
+slots (plus any the profile already carries, such as Fantrax hockey's F), and
+changing the Sport dropdown swaps in that sport's slots.
+
+**Not yet for basketball:** the live recommendation card, category engine
+(`isCategoryLeague()` is still hockey-only), Add Radar (needs a schedule source),
+Fantrax ADP, Sleeper NBA import, Yahoo platform eligibility, team logos.
+
 ## App shape
 
 Single-page app (`public/index.html`), ten tabs:
@@ -283,8 +349,8 @@ warns outright when no platform eligibility is loaded for the active league. A
 third-party guess must never be mistaken for the league's own truth.
 
 ### Add Radar
-Only shown for sports with daily lineups (hockey today; basketball and baseball
-later) and hidden entirely in guest mode. A daily pickup shortlist built from **our
+Only shown for sports whose pack sets `addRadar` and has a schedule source (hockey
+today; basketball has daily lineups but no NBA schedule feed yet, so it stays hidden) and hidden entirely in guest mode. A daily pickup shortlist built from **our
 own logic rather than a republished waiver list**: every player is scored on how many
 games their team plays in a chosen window and how many of those fall on a **light
 night** (few teams playing league-wide, so a bench slot is actually free to start

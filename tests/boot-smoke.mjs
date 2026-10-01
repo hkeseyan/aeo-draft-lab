@@ -37,7 +37,9 @@ const dom = new JSDOM(html, {
       const j = (b) => ({ ok: true, status: 200, json: async () => b, text: async () => JSON.stringify(b) });
       if (u.startsWith('/api/me')) return j({ accountsEnabled: false, signedIn: false, admin: true, user: null });
       if (u === '/api/leagues') return j([]);                 // empty cloud -> seed from defaults
-      if (u.startsWith('/api/leagues/')) return j({ ok: true });
+      // The worker answers a profile PUT with the saved profile; echo it so callers
+      // that store the response (setNhlDraftSlot) keep a real profile.
+      if (u.startsWith('/api/leagues/')) return j(opts && opts.method === 'PUT' && opts.body ? JSON.parse(opts.body) : { ok: true });
       if (u.startsWith('/api/setup/history')) return j([]);
       if (u.startsWith('/api/setup')) return j(liveSetupOverride || {});
       if (u.startsWith('/api/commish')) return j({});
@@ -175,7 +177,7 @@ ok &= check('goalie depth cap is tighter than skaters', 'SPORT.depthCap("G",2)+"
 ok &= check('no K/DST lateness rule in hockey', 'SPORT.lateRoundPositions.length', 0);
 ok &= check('scoring values carried onto LEAGUE', 'LEAGUE.scoring.sog', 0.9);
 ok &= check('weekly acquisition cap carried', 'LEAGUE.maxAcquisitionsPerWeek', 4);
-ok &= check('sport bar shows both sports', () => w.document.getElementById('sportBar').children.length, 2);
+ok &= check('sport bar shows all three sports', () => w.document.getElementById('sportBar').children.length, 3);
 ok &= check('league dropdown scoped to the sport', () => [...w.document.getElementById('leagueSelect').options].map(o => o.value).join(','),
   'yahoo-nhl-public,fantrax-nhl-weekly-points,trax50-classic-draft-76,yahoo-nhl-public-categories,yahoo-nhl-public-roto,public-points-league-1,public-points-league-2,yahoo-prize-cat-3175');
 ok &= check('position filter is hockey', () => [...w.document.getElementById('posFilter').options].map(o => o.value).join(','), 'ALL,C,LW,RW,D,G');
@@ -515,6 +517,99 @@ ok &= check('stale mock picks saved before the board existed do not replace it',
   'picks.length+":"+PLAYERS.find(p=>p.id===pickTakenAt(1).playerId).name', '192:Nathan MacKinnon');
 liveSetupOverride = null;
 ok &= check('TRAX50 forward Pettersson resolves to the forward', 'PLAYERS.find(p=>p.id===pickTakenAt(179).playerId).pos', v => v !== 'D');
+// ---------- NBA (build step 1: sport pack + Yahoo points reference) ----------
+ok &= check('NBA reference league seeded and offered in the sport bar', () =>
+  ev('Object.keys(LEAGUES).includes("yahoo-nba-public-points")') &&
+  !!w.document.querySelector('#sportBar [data-sport="nba"], [data-sport="nba"]'), true);
+ev('switchSport("nba")');
+await new Promise(r => setTimeout(r, 300));
+ok &= check('switched to the NBA reference league', 'CURRENT_LEAGUE_ID+":"+SPORT.id+":"+LEAGUE.teams+":"+LEAGUE.rounds', 'yahoo-nba-public-points:nba:12:13');
+ok &= check('NBA pool loaded', 'PLAYERS.length', 335);
+ok &= check('Yahoo default NBA roster slots', slots, 'PG,SG,G,SF,PF,F,C,C,UTIL,UTIL');
+ok &= check('a PG/SG fills PG, SG, G and Util but not F', () => ev(`(function(){
+  const p=PLAYERS.find(x=>eligiblePositions(x).join('/')==='PG/SG');
+  return ['PG','SG','G','UTIL','F','C'].map(s=>playerFillsPos(p,s)?1:0).join('');
+})()`), '111100');
+// Hockey's F means any forward and treats C as one; basketball's F is SF/PF only.
+ok &= check('a basketball centre does not fill F', 'playerFillsPos(findPlayer("Nikola Jokic"),"F")+":"+playerFillsPos(findPlayer("Jayson Tatum"),"F")', 'false:true');
+ok &= check('board shows own positions, not the G/F/Util slots they can fill', () => {
+  const cell = ev('posCell(findPlayer("Luka Doncic"))');
+  return /class="pos PG">PG\/SG</.test(cell) ? true : cell;
+}, true);
+ok &= check('NBA pool has no duplicate player and only real positions', () => ev(`(function(){
+  const names=PLAYERS.map(p=>p.name), ids=PLAYERS.map(p=>p.sleeperId).filter(Boolean);
+  if(new Set(names).size!==names.length) return 'duplicate name';
+  if(new Set(ids).size!==ids.length) return 'duplicate sleeper id';
+  const bad=PLAYERS.filter(p=>!eligiblePositions(p).every(x=>['PG','SG','SF','PF','C'].includes(x)));
+  return bad.length?'bad position: '+bad.map(p=>p.name+' '+p.pos).join(', '):true;
+})()`), true);
+ok &= check('points are rescored from components through the league values', () => ev(`(function(){
+  const p=findPlayer('Nikola Jokic'), s=p.st;
+  const want=s.pts+1.2*s.reb+1.5*s.ast+3*s.stl+3*s.blk-s.to;
+  return Math.abs(p.leagueProj-want)<0.01 && p.leagueProj>3000;
+})()`), true);
+ok &= check('a different scoring system re-ranks without new data', () => ev(`(function(){
+  const before=findPlayer('Nikola Jokic').leagueProj, saved=LEAGUE.scoring;
+  LEAGUE.scoring={pts:1,tpm:1,fga:-1,fgm:2,fta:-1,ftm:1,reb:1,ast:2,stl:4,blk:4,to:-2};
+  computeMyRanks(); const after=findPlayer('Nikola Jokic').leagueProj;
+  LEAGUE.scoring=saved; computeMyRanks();
+  return after!==before && Math.abs(findPlayer('Nikola Jokic').leagueProj-before)<0.01;
+})()`), true);
+ok &= check('every NBA player gets a finite, draft-safe My Rank', () => ev(`(function(){
+  const bad=PLAYERS.filter(p=>!Number.isFinite(p.myRank)||!Number.isFinite(p.myValue));
+  if(bad.length) return 'non-finite: '+bad.slice(0,3).map(p=>p.name);
+  const loose=PLAYERS.filter(p=>Math.abs(p.myRank-marketAdp(p))>15.5);
+  return loose.length?'outside guardrail: '+loose.slice(0,3).map(p=>p.name):true;
+})()`), true);
+ok &= check('My Rank explains itself with the projection source', 'findPlayer("Nikola Jokic").myRankWhy', v => /league proj/.test(v) && /FantasyPros 2026-27/.test(v) && /draft-safe: Yahoo ADP/.test(v));
+ok &= check('a second PG/SG counts at SG, not piled onto PG', () => ev(`(function(){
+  const pgsg=PLAYERS.filter(x=>eligiblePositions(x).join('/')==='PG/SG').slice(0,2);
+  const c=countsOf(pgsg); return c.PG+':'+c.SG+':'+c.G;
+})()`), '1:1:0');
+ok &= check('depth cap vetoes a seventh centre but still wants a guard', () => ev(`(function(){
+  const cs=PLAYERS.filter(x=>eligiblePositions(x).join('/')==='C');
+  const c=countsOf(cs.slice(0,6));
+  return needScoreFor(c,cs[6])+':'+needScoreFor(c,findPlayer('Stephen Curry'));
+})()`), '-1:1');
+ok &= check('Add Radar stays hidden until an NBA schedule source exists', 'radarVisible()', false);
+ok &= check('My slot control is offered for the NBA public league', () => w.document.getElementById('draftSlotControl').style.display, '');
+w.document.getElementById('draftSlotInput').value = '7';
+await ev('setNhlDraftSlot()');
+ok &= check('NBA draft slot applies to the board', 'mySlot===7 && OWNER_SLOT.Me===7 && overall(1,mySlot)===7 && overall(2,mySlot)===18', true);
+ok &= check('NBA headshots come from the NBA CDN', 'headshotImg(findPlayer("Victor Wembanyama"))', v => /cdn\.nba\.com\/headshots\/nba\/latest\/260x190\/1641705\.png/.test(v));
+ok &= check('a full 156-pick rival mock fills every team\'s ten starting slots', () => ev(`(function(){
+  resetDraft();
+  for(let ov=1;ov<=totalPicks;ov++)rivalPick(ov,0.5);
+  if(picks.length!==totalPicks) return 'picks '+picks.length;
+  const short=[];
+  for(let slot=1;slot<=LEAGUE.teams;slot++){
+    const fit=slotRosterPlayers(rosterOf(slot),LEAGUE.starters);
+    if(fit.starterSlots.some(s=>!s.player)) short.push(slot+':'+fit.starterSlots.filter(s=>!s.player).map(s=>s.label).join('/'));
+  }
+  resetDraft();
+  return short.length?short.join(' '):true;
+})()`), true);
+ok &= check('saving the NBA profile from the Leagues form keeps its lineup', () => ev(`(function(){
+  if(!el('lgStartersRow')) return 'no Leagues tab';
+  const sorted=o=>JSON.stringify(Object.keys(o).sort().map(k=>[k,o[k]]));
+  loadLeagueIntoForm('yahoo-nba-public-points');
+  const got=collectLeagueForm().starters, want=LEAGUES['yahoo-nba-public-points'].starters;
+  return sorted(got)===sorted(want) || JSON.stringify(got);
+})()`), true);
+ok &= check('the Leagues form keeps a Fantrax hockey F lineup too', () => ev(`(function(){
+  const sorted=o=>Object.keys(o).sort().map(k=>k+o[k]).join(',');
+  loadLeagueIntoForm('fantrax-nhl-weekly-points');
+  const got=collectLeagueForm().starters;
+  loadLeagueIntoForm('aeo-keepers');
+  const nfl=collectLeagueForm().starters;
+  return sorted(got)+' '+sorted(nfl);
+})()`), 'D3,F5,G2 DST1,FLEX1,K1,QB1,RB2,TE1,WR3');
+w.document.getElementById('draftSlotInput').value = '1';
+await ev('setNhlDraftSlot()');
+ev('switchLeague("fantrax-nhl-weekly-points")');
+await new Promise(r => setTimeout(r, 300));
+ok &= check('hockey F still means any forward after visiting NBA', () =>
+  ev('playerFillsPos(findPlayer("Connor McDavid"),"F")') && /class="pos F">F</.test(ev('posCell(findPlayer("Connor McDavid"))')) && slots() === 'F,F,F,F,F,D,D,D,G,G', true);
 ev('switchLeague("aeo-keepers")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('football unaffected after switching back', () => ev('SPORT.id') + ' ' + slots(), 'nfl QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');
