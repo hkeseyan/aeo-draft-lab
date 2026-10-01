@@ -151,7 +151,13 @@ reference league with an NBA points My Rank — see `SPECS.md` → "Basketball (
 and the status section at the top of `docs/NBA_PLAN.md` for what is next. The user's direction on projection sources (Hashtag over
 FantasyPros; Yahoo/Fantrax as the opponent view), the schedule grid, positions
 (**don't repeat the hockey F/C treatment**) and category valuation is in
-`docs/NBA_PLAN.md` → "User direction (2026-10-01)".
+`docs/NBA_PLAN.md` → "User direction (2026-10-01)". Later the same day: basketball My Rank became
+pure value order (no ADP guardrail, no positional bonus), projections became a
+Hashtag 50 / FantasyPros 25 / ESPN 25 raw-stat blend with a live
+`/api/nba/preseason-projections` refresh, each platform got its own eligibility and
+ADP, the category engine was ungated for basketball (volume-weighted FG%/FT%), and
+templates exist for Yahoo H2H Points/Cat/Roto, Fantrax Best Ball and Sleeper
+Lock-In. `npm test` now runs ten suites (adds `tests/nba-projections.test.mjs`).
 
 **Multi-sport history: NHL shipped, NBA next, then MLB.**
 Plan and reasoning live in `docs/MULTISPORT_PLAN.md`; built behaviour is in
@@ -245,7 +251,7 @@ goalie rates, positional VORP, draft-safe ADP caps 6/15/25). Tunables live in
 with BLK; NBA should reuse the same shape.
 
 Testing, before any push: `node tests/boot-smoke.mjs` (boots the whole page in
-jsdom, 160 assertions across all three sports; needs `npm install` for jsdom),
+jsdom, 177 assertions across all three sports; needs `npm install` for jsdom),
 `node tests/fantrax-import.test.mjs` (drives the real worker route with stubbed
 Fantrax responses), plus the existing `faab-engine`, `source-sync` and
 `validate-fantastic-data` tests.

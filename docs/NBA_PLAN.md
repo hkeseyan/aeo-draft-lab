@@ -16,6 +16,67 @@ behaviour. Step 2 is partly done as a side effect, because the board needed a re
 pool: market ADP and stats-based projections are in; what step 2 still owes is
 listed below.
 
+**2026-10-01, later — the user's part-2 direction applied.** Built:
+- **My Rank is pure value order:** no ADP guardrail, no positional premium.
+- **League value column sorts.**
+- **Projection blend** (Hashtag 50 / FantasyPros 25 / ESPN 25, attempts without
+  FantasyPros), with a live `GET /api/nba/preseason-projections` refresh.
+- **Per-platform eligibility and market:** Yahoo, Fantrax and Sleeper positions;
+  Fantrax and Sleeper ADP.
+- **Build step 3:** `isCategoryLeague()` is ungated for basketball, with
+  volume-weighted FG%/FT%.
+- **Templates:** Yahoo H2H Cat, Yahoo Roto, Fantrax Best Ball (provisional) and
+  Sleeper Lock-In (provisional).
+
+Steps 1-3 are therefore in place for drafting. See `SPECS.md` → "Basketball (NBA)".
+
+**Answers to the user's part-2 questions (checked 2026-10-01):**
+- **Fantrax with league ID `xna4w7nnmona530f`:** it is **SBCFBL**.
+  - The league:
+    - 30 teams.
+    - `HEAD_TO_HEAD_ROTI_SINGLE_WIN` with category weights: PTS 61; AST and TS%
+      41; BLK, ST, OREB, DREB, +/-, 3PT% and 2PT% 31; FT% and TO 21; MIN 11.
+    - Lineup PG, SG, SF, PF, C plus 3 Flx; 17 players.
+    - Twice-weekly scoring periods, playoffs from period 37.
+  - **What Fantrax's public API returns:**
+    - League-scoped eligibility for **1,284 NBA players** (the source of
+      `fantrax_pos`).
+    - Exact scoring-period boundaries.
+    - Rosters and draft results.
+    - **No projections**, for any league. The ID only needs to be a real NBA league
+      for eligibility, not the league the projections are for.
+    - **No contract or salary fields**, so SBCFBL's contracts need another source.
+- **Fantrax week handling, from SBCFBL:** 3-4-day periods. The **All-Star break is
+  one long period (Feb 17-26)**. Every Fantrax league's periods can be read from the
+  API rather than assumed.
+- **Yahoo weeks 2026-27** (Yahoo's schedule article):
+  - Week 1 is 6 days (from Tue Oct 20).
+  - **Week 7 (Nov 30-Dec 13) and Week 17 (All-Star, Feb 15-28) are 14-day
+    matchups.**
+  - Default playoffs are Weeks 20-22 (Mar 15-Apr 4).
+- **NBA Cup:** group and knockout games count; **only the championship game (Dec
+  11) does not count**, which confirms the user's memory.
+  - Sleeper's schedule lists 80 games per team; the other 2 are the Cup knockout
+    games scheduled in December.
+- **DARKO:**
+  - What it is: a **next-game, per-100-possession** projection of most box-score
+    stats (points, assists, rebounds, steals, blocks, turnovers, FT%, 3P%,
+    shooting by zone, usage), plus minutes and starting role.
+  - Update speed: **after every game**, so performance-driven role growth shows up
+    within a day.
+  - Gaps: no season totals or games played; its about page names no injury-news
+    input.
+  - Access: CSV downloads are offered.
+  - So it covers our categories as rates and is fast, but would need our own games
+    and availability layer to become a season or rest-of-season line.
+- **FantasyPros league sync:** the existing MyPlaybook connector reads one league
+  per MyPlaybook link (`?key=`), and returns that league's **matchup roster, not its
+  settings**. Pulling the four Yahoo + one Fantrax leagues needs each league's
+  MyPlaybook link. Settings still have to come from the platform (Fantrax: league
+  ID; Yahoo: API once provisioned) or the user.
+- **Basketball Monster:** projections are subscriber-only; the free page is
+  2025-26 actuals.
+
 What research established on 2026-10-01:
 
 - **`stats.nba.com` times out from the agent container** (curl, browser headers, 30s).
@@ -149,13 +210,13 @@ like Market $ vs Target $ for auctions:
 - **Current build:** F is SF/PF only and a pure C does not fill F (a PF/C fills
   both), per Yahoo's slot rules. There is no hockey-style C-only markdown or
   multi-forward markup.
-  - **Open item:** the points My Rank gives a small data-driven positional premium.
+  - **Resolved 2026-10-01: removed.** It was a small data-driven positional premium.
     C-eligible players get about +73 Yahoo points a season (about 1 point a game,
     roughly 2%) because the best undrafted C projects slightly below the best
     undrafted player overall.
-  - The user's guidance points toward position-neutral My Rank in points leagues,
-    with balance handled by the recommender. Proposed: drop the premium. Awaiting
-    confirmation.
+  - The user confirmed: no inherent C bonus and no double-counting. Tier gaps belong
+    to the valuation metrics, never a flat per-position shift. My Rank is now pure
+    value order.
 - **Multi-eligibility** is slightly more valuable, but on a balanced roster it
   evens out. It matters in **heavy punt builds**. Example: hard-punt FT%,
   soft-punt 3PM and AST.
@@ -350,3 +411,15 @@ Asked 2026-10-01; answers arrive as the user joins leagues.
 3. Which Fantrax Best Ball format — roster size, how many count each period, and is
    the period daily or weekly?
 4. Any salary/contract league this season, or is that hypothetical for now?
+   **Answered:** SBCFBL (Fantrax) is a dynasty contract league whose rookie draft
+   already happened. Wanted for in-season management soon; its contracts aren't
+   in Fantrax's public API.
+5. **New:** Fantrax H2H Points and Fantrax Roto public prize settings aren't
+   published. Any public Fantrax league ID from the lobby would let us read them.
+6. **New:** Sleeper's default roster and league size aren't published; the
+   Lock-In template uses placeholders.
+7. **New:** remove the ADP guardrail from hockey's My Rank too? Basketball's is gone
+   per the user's rule; hockey's was left alone under the "don't touch NHL" agreement.
+8. **New:** to sync the four Yahoo + one Fantrax leagues from FantasyPros, each
+   league's MyPlaybook link is needed. The Fantrax import also needs to learn NBA
+   player names before SBCFBL can be imported.

@@ -617,6 +617,67 @@ ok &= check('a full 156-pick rival mock fills every team\'s ten starting slots',
   resetDraft();
   return short.length?short.join(' '):true;
 })()`), true);
+// ---- NBA categories and the public prize templates ----
+ev('switchLeague("yahoo-nba-public-cat")');
+await new Promise(r => setTimeout(r, 300));
+ok &= check('NBA H2H Categories template runs the category engine on nine categories', () =>
+  ev('isCategoryLeague()+":"+nhlCategoryConfig().skater.join(",")'), 'true:FG%,FT%,3PM,PTS,REB,AST,STL,BLK,TO');
+ok &= check('Best Available shows one column per category', () =>
+  [...w.document.querySelectorAll('#poolTable th.catcol')].map(th => th.textContent).join(','), 'FG%,FT%,3PM,PTS,REB,AST,STL,BLK,TO');
+ok &= check('category My Rank is the order of category value', () => ev(`(function(){
+  const byRank=PLAYERS.slice().sort((a,b)=>a.myRank-b.myRank);
+  for(let i=1;i<byRank.length;i++) if(byRank[i].categoryValue>byRank[i-1].categoryValue+1e-9) return 'out of order at '+byRank[i].name;
+  return Number.isFinite(byRank[0].categoryValue) && /H2H cat value/.test(byRank[0].myRankWhy);
+})()`), true);
+ok &= check('FT% is valued by volume, not the bare percentage', () => ev(`(function(){
+  const g=findPlayer('Giannis Antetokounmpo'), ft=p=>(p.st.ftm||0)/(p.st.fta||1);
+  // a worse free-throw shooter on a fraction of the attempts must hurt less
+  const small=PLAYERS.find(p=>p!==g&&p.st.fta>0&&p.st.fta<g.st.fta/4&&ft(p)<ft(g));
+  if(!small) return 'no comparison player';
+  return nbaRateImpact(g,'FT%')<nbaRateImpact(small,'FT%') && g.categoryZ['FT%']<small.categoryZ['FT%'];
+})()`), true);
+ok &= check('punting FT% lifts Giannis and drops Curry', () => ev(`(function(){
+  const g=findPlayer('Giannis Antetokounmpo'), c=findPlayer('Stephen Curry'), before=[g.myRank,c.myRank];
+  PUNT_CATS=new Set(['FT%']); computeMyRanks();
+  const after=[g.myRank,c.myRank];
+  PUNT_CATS=new Set(); computeMyRanks();
+  return after[0]<before[0] && after[1]>before[1];
+})()`), true);
+ok &= check('team table pools FG%/FT% and offers nine punt boxes', () =>
+  /FG%\/FT% pooled/.test(w.document.getElementById('catTeamTable').textContent) &&
+  w.document.querySelectorAll('#catPuntControls [data-punt]').length === 9, true);
+ev('switchLeague("yahoo-nba-public-roto")');
+await new Promise(r => setTimeout(r, 300));
+ok &= check('NBA Rotisserie template: roto scoring with the 82-game position cap', 'LEAGUE.scoringMode+":"+LEAGUE.maxGamesPlayed+":"+isCategoryLeague()', 'roto:82:true');
+ev('switchLeague("fantrax-nba-best-ball")');
+await new Promise(r => setTimeout(r, 300));
+ok &= check('Fantrax Best Ball template rosters generic G/F/C and counts 4/4/2', slots, 'G,G,G,G,F,F,F,F,C,C');
+ok &= check('Best Ball board shows G, F and C as that league rosters them', () =>
+  ['Luka Doncic','Karl-Anthony Towns','Jayson Tatum','Nikola Jokic'].map(n => ev(`posCell(findPlayer(${JSON.stringify(n)}))`).replace(/<[^>]+>/g,'')).join(','), 'G,F/C,F,C');
+ok &= check('Best Ball drafts against Fantrax ADP', 'MARKET_ADP_STATUS+":"+(marketAdp(findPlayer("Nikola Jokic"))===findPlayer("Nikola Jokic").fantraxAdp)', 'fantrax:true');
+ok &= check('Best Ball draft limits (12 G) replace the starter-based depth cap', () => ev(`(function(){
+  const guards=PLAYERS.filter(p=>eligiblePositions(p).every(x=>x==='PG'||x==='SG'));
+  const c11=countsOf(guards.slice(0,11)), c12=countsOf(guards.slice(0,12));
+  return needScoreFor(c11,guards[12])+':'+needScoreFor(c12,guards[12]);
+})()`), '0.15:-1');
+ok &= check('a full 240-pick Best Ball mock fills every team\'s ten counting slots', () => ev(`(function(){
+  resetDraft();
+  for(let ov=1;ov<=totalPicks;ov++)rivalPick(ov,0.5);
+  if(picks.length!==totalPicks) return 'picks '+picks.length;
+  const short=[];
+  for(let slot=1;slot<=LEAGUE.teams;slot++){
+    const fit=slotRosterPlayers(rosterOf(slot),LEAGUE.starters);
+    if(fit.starterSlots.some(s=>!s.player)) short.push(slot);
+  }
+  resetDraft();
+  return short.length?'short: '+short.join(','):true;
+})()`), true);
+ev('switchLeague("sleeper-nba-lock-in")');
+await new Promise(r => setTimeout(r, 300));
+ok &= check('Sleeper Lock-In template: Sleeper scoring, ADP and positions', () =>
+  ev('LEAGUE.lineupMode+":"+LEAGUE.scoring.stl+":"+MARKET_ADP_STATUS+":"+/confirmed from sleeper/.test(eligibilitySourceNote())'), 'lockin:3:sleeper:true');
+ev('switchLeague("yahoo-nba-public-points")');
+await new Promise(r => setTimeout(r, 300));
 ok &= check('saving the NBA profile from the Leagues form keeps its lineup', () => ev(`(function(){
   if(!el('lgStartersRow')) return 'no Leagues tab';
   const sorted=o=>JSON.stringify(Object.keys(o).sort().map(k=>[k,o[k]]));
