@@ -137,7 +137,16 @@ The embedded 2026 auction inputs use authenticated Yahoo **League Value** plus Y
 Check `FEEDBACK.md` for unaddressed 🆕 items first — that's the live backlog, more
 current than this list.
 
-**Current priority (2026-09-17): multi-sport — NHL shipped, NBA next, then MLB.**
+**Current priority (2026-10-01): NBA — see `docs/NBA_PLAN.md` first.** NHL drafting
+is winding down (one possible Yahoo Roto Public Prize league still filling). The NBA
+requirements, what transfers from the NHL build, what genuinely needs work, the data
+sources to establish and a simple-first build order are all in `docs/NBA_PLAN.md`.
+The single biggest blocker named there: **`isCategoryLeague()` is hardcoded to
+`SPORT.id==='nhl'`**, and 9-cat NBA is category-native. Note also that
+`leagueType:'bestball'` already exists but behaves as redraft, so Fantrax Best Ball
+needs semantics rather than a new type.
+
+**Multi-sport history: NHL shipped, NBA next, then MLB.**
 Plan and reasoning live in `docs/MULTISPORT_PLAN.md`; built behaviour is in
 `SPECS.md` → "Sports" and "Add Radar". **NHL v1 is built and deployed**: a `sport`
 field on league profiles, per-sport "sport packs" replacing the hardcoded football
