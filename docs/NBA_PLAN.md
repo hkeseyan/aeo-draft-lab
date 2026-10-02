@@ -77,6 +77,77 @@ Steps 1-3 are therefore in place for drafting. See `SPECS.md` → "Basketball (N
 - **Basketball Monster:** projections are subscriber-only; the free page is
   2025-26 actuals.
 
+**2026-10-02 — part-3 direction applied.**
+
+*Built:*
+- Turnovers at 25% of a normal category.
+- An H2H z floor of −2 (Hashtag's default H2H ranking), calibrated so Giannis is
+  5th, matching Hashtag; roto keeps the full penalty.
+- The basketball live recommender, with paths: BEST VALUE / BALANCE / BUILD for
+  categories, NEED / CROWDED for points.
+- Hockey's ADP guardrail removed.
+- Sleeper Lock-In working roster: 9 starters, 6 bench, 1 IR.
+- The real **TRAX10 Best Ball (5)** league (`2g9d05jbmuaop7st`), with confirmed
+  Fantrax Best Ball rules and primary-position-only G/F/C eligibility. The user's
+  team is set with "My slot".
+- Fantrax ADP refreshed (320 rows).
+
+*Research, 2026-10-02:*
+
+- **Replacing FantasyPros' 25%:**
+  - **CBS Sports** is the strongest free candidate. Its
+    `cbssports.com/fantasy/basketball/stats/<POS>/2027/season/projections/` pages
+    have 2026-27 season totals with **FGM/FGA, FTM/FTA, 3PM/3PA**, GP, minutes, PTS,
+    REB, AST, STL (and further columns), 100 rows per position.
+  - Caveat: CBS projects near-full health (Luka 79 GP), so blend its per-game rates
+    with the other sources' games rather than its totals.
+  - Ruled out: RotoWire (projections paywalled), Basketball Monster (subscription),
+    Razzball (free page stale or paywalled), numberFire/FanDuel Research (no season
+    projections page found).
+  - Sleeper fits only inside the ESPN/Sleeper 25% cap.
+  - Awaiting the user's choice.
+- **Minus-1, H2H and alternatives:**
+  - Hashtag's **H2H** setting is Standard with each category floored at −2. Its
+    **Minus-1** drops each player's worst category.
+  - Hashtag's *default* view is H2H, per-game averages, 20% games-missed penalty,
+    TO 0.25.
+  - Basketball Monster's **DURANT H2H** drops turnovers plus the next-lowest
+    category.
+  - **G-scores** (Rosenof, arXiv 2307.02188) add week-to-week variance to the
+    z-score denominator for H2H. Relative to Z they shrink steals most (44% of Z),
+    then FG% 56%, FT% 58%, TO 62%, PTS 65%, BLK 68%, REB 69%, 3PM 72%, AST 75%.
+    In that paper's simulations, G-score drafters beat Z-score drafters heavily.
+    Roto barely needs the adjustment.
+  - **H-scoring** (Rosenof, arXiv 2409.09884) is dynamic. It weights each category
+    by how close the team is to a 50% win rate in it, so it learns to punt. The
+    recommender's balance/build paths are a simplified form of it.
+  - Adopted: the −2 floor. Proposed for later: G-score weights for H2H (a
+    noticeable re-weighting, so the user's call) and Hashtag's per-game basis with
+    a games-missed penalty instead of full season totals.
+- **Best Ball strategy (for the next step):**
+  - Fantrax counts each week's top 4 G / 4 F / 2 C by weekly total, so **games
+    per week** dominate a week (2-5 games). One study found a rotation player's best
+    game runs ~15% above average in 2-game weeks and ~32% in 4-game weeks, so
+    ceiling and volatility add value beyond the mean.
+  - Depth beyond the counting slots covers rest and injuries; there's no IR and no
+    moves. Common guidance is about twice the counting slots, i.e. ~8 G / 8 F /
+    4 C, within the 12/12/5 limits.
+  - Injured stars who return midseason cost only a bench spot.
+  - Late-season tanking teams hand young players big minutes in March-April, while
+    contenders rest stars.
+  - Teammate stacking is weak in the NBA (usage competition within games, pace
+    effects across a season); the only rule is that a roster can't be all one NBA
+    team.
+  - A proper valuation simulates weekly scoring: games per week from the schedule,
+    per-game mean and spread, availability, and the top-N per position.
+- **Priorities (user):** finish the generic draft strategy → lock in Best Ball
+  strategy → return to the finer details of the other drafts.
+  - Lock-In: discuss draft strategy first, then in-season lock decisions and
+    reminders.
+  - SBCFBL waits until drafting is solid (trades and deep waivers later; contracts
+    tracked elsewhere).
+  - DARKO is a target for after the drafts, on top of our own availability layer.
+
 What research established on 2026-10-01:
 
 - **`stats.nba.com` times out from the agent container** (curl, browser headers, 30s).
@@ -416,10 +487,12 @@ Asked 2026-10-01; answers arrive as the user joins leagues.
    in Fantrax's public API.
 5. **New:** Fantrax H2H Points and Fantrax Roto public prize settings aren't
    published. Any public Fantrax league ID from the lobby would let us read them.
-6. **New:** Sleeper's default roster and league size aren't published; the
-   Lock-In template uses placeholders.
-7. **New:** remove the ADP guardrail from hockey's My Rank too? Basketball's is gone
-   per the user's rule; hockey's was left alone under the "don't touch NHL" agreement.
+6. ~~Sleeper's default roster~~: commissioner-configured. Working setup per the user
+   is 9 starters, 6 bench, 1 IR; each joined league's details come from the user.
+9. **New (2026-10-02):** which team is the user's in TRAX10 Best Ball (5)? Set it
+   with "My slot". Also: adopt CBS Sports in place of FantasyPros? G-score
+   weighting for H2H? Per-game basis with a games-missed penalty?
+7. ~~Remove the ADP guardrail from hockey's My Rank too?~~ **Yes** (2026-10-02); done.
 8. **New:** to sync the four Yahoo + one Fantrax leagues from FantasyPros, each
    league's MyPlaybook link is needed. The Fantrax import also needs to learn NBA
    player names before SBCFBL can be imported.

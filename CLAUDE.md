@@ -157,7 +157,11 @@ Hashtag 50 / FantasyPros 25 / ESPN 25 raw-stat blend with a live
 `/api/nba/preseason-projections` refresh, each platform got its own eligibility and
 ADP, the category engine was ungated for basketball (volume-weighted FG%/FT%), and
 templates exist for Yahoo H2H Points/Cat/Roto, Fantrax Best Ball and Sleeper
-Lock-In. `npm test` now runs ten suites (adds `tests/nba-projections.test.mjs`).
+Lock-In. `npm test` now runs ten suites (adds `tests/nba-projections.test.mjs`). On 2026-10-02: turnovers weigh 25%, H2H category
+value floors each category at −2 (Hashtag's H2H), a basketball live recommender
+offers BEST VALUE / BALANCE / BUILD paths, hockey's guardrail is gone too, and the
+user's real Fantrax league **TRAX10 Best Ball (5)** (`trax10-best-ball-5`) is in with
+Fantrax primary-position eligibility. Next per the user: Best Ball draft strategy.
 
 **Multi-sport history: NHL shipped, NBA next, then MLB.**
 Plan and reasoning live in `docs/MULTISPORT_PLAN.md`; built behaviour is in
@@ -214,11 +218,9 @@ right market anchor for a Fantrax league (we only have Yahoo ADP today).
 
 **My Rank (hockey)** is the roster-construction layer — see `SPECS.md` → "My Rank
 (hockey)". It first computes a raw league-specific rank from projected value and
-replacement, then applies temporary draft-safety guardrails in points leagues:
-platform ADP plus or minus 5 picks in the top 25, 10 through pick 100, and 15 later.
-The tooltip retains the raw one-season model rank and identifies capped disagreement;
-the projection column says `2025 Proj`. Category ranks remain category-native and
-unanchored. The underlying model applies proportional positional adjustments: centre-only marked down
+replacement; **My Rank is that order, with no ADP guardrail** (removed 2026-10-02 at
+the user's direction, for hockey and basketball alike: My Rank is the order of total
+value and the model does no math on it). The underlying model applies proportional positional adjustments: centre-only marked down
 (streamable, only two start), dual/triple forward eligibility marked up, the elite
 tier exempt from both, a premium bump for volume-starter goalies and a markdown past
 the league's startable goalie count, a small bump for elite D. Weights are named
@@ -246,12 +248,12 @@ own profile (`yahoo-prize-cat-3175`). Category leagues show one colour-scaled
 projected column per category on Best Available, a "My projected categories" team
 table under the board (white = league median), punt checkboxes instead of the
 streaming sliders, and a category My Rank (draftable-pool z-scores, volume-weighted
-goalie rates, positional VORP, draft-safe ADP caps 6/15/25). Tunables live in
+goalie rates, positional VORP; no ADP caps since 2026-10-02). Tunables live in
 `NHL_CAT_MODEL` and `NHL_CAT_BUCKETS`; details in `SPECS.md`. Roto reuses all of it
 with BLK; NBA should reuse the same shape.
 
 Testing, before any push: `node tests/boot-smoke.mjs` (boots the whole page in
-jsdom, 177 assertions across all three sports; needs `npm install` for jsdom),
+jsdom, 188 assertions across all three sports; needs `npm install` for jsdom),
 `node tests/fantrax-import.test.mjs` (drives the real worker route with stubbed
 Fantrax responses), plus the existing `faab-engine`, `source-sync` and
 `validate-fantastic-data` tests.
