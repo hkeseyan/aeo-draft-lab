@@ -1644,6 +1644,128 @@ var worker_default = {
           return J({ error: "Fantrax import failed: " + e.message }, 502);
         }
       }
+      if (path.startsWith("/api/import/yahoo/")) {
+        const denied = requireAdmin();
+        if (denied) return denied;
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const key = decodeURIComponent(path.split("/").pop());
+        if (!/^\d+\.l\.\d+$/.test(key)) return J({ error: "invalid Yahoo league key" }, 400);
+        try {
+          const token = await getYahooAccessToken(env, kv, url);
+          if (!token) return J({ error: "Yahoo account not connected. Visit /auth/yahoo/start first." }, 401);
+          const [settingsRaw, teamsRaw, draftRaw] = await Promise.all([
+            yahooJson(token, `league/${key}/settings`),
+            yahooJson(token, `league/${key}/teams/roster`),
+            // Optional: only exists once the league has drafted.
+            yahooJson(token, `league/${key}/draftresults`).catch(() => null)
+          ]);
+          const league = settingsRaw.fantasy_content && settingsRaw.fantasy_content.league || [];
+          const meta = Array.isArray(league) ? league[0] || {} : league;
+          const settings = Array.isArray(league) ? league[1] && league[1].settings && league[1].settings[0] || {} : {};
+          const sport = meta.game_code === "nhl" || url.searchParams.get("game") === "nhl" ? "nhl" : "nfl";
+          // Yahoo position codes -> Draft Lab starter keys.
+          const posMap = sport === "nhl" ? {} : { DEF: "DST", "W/R/T": "FLEX", "W/R": "FLEX", "W/T": "FLEX", "Q/W/R/T": "SUPERFLEX" };
+          const reserve = ["BN", "IR", "IR+", "NA"];
+          const starters = {};
+          let rosterSize = 0, irSlots = 0;
+          (settings.roster_positions || []).forEach((x) => {
+            const rp = x && x.roster_position || x || {};
+            const count = Number(rp.count) || 0;
+            if (!rp.position || !count) return;
+            if (rp.position === "IR" || rp.position === "IR+") irSlots += count;
+            if (rp.position !== "IR" && rp.position !== "IR+" && rp.position !== "NA") rosterSize += count;
+            if (reserve.includes(rp.position)) return;
+            const k = posMap[rp.position] || rp.position;
+            starters[k] = (starters[k] || 0) + count;
+          });
+          // Rounds each rostered player was drafted in this season, by player key.
+          const draftRound = {};
+          const firstRoundOrder = [];
+          if (draftRaw) {
+            collectYahooEntities(draftRaw, "draft_result").forEach((d) => {
+              if (d.player_key && d.round) draftRound[d.player_key] = Number(d.round);
+              if (Number(d.round) === 1 && d.team_key) firstRoundOrder[Number(d.pick) - 1] = d.team_key;
+            });
+          }
+          const teamNodes = [];
+          const findTeams = /* @__PURE__ */ __name((v) => {
+            if (Array.isArray(v)) v.forEach(findTeams);
+            else if (v && typeof v === "object") Object.entries(v).forEach(([k, x]) => k === "team" ? teamNodes.push(x) : findTeams(x));
+          }, "findTeams");
+          findTeams(teamsRaw);
+          const owners = [];
+          const ownerSlot = {};
+          const rosterLines = [];
+          const platformEligibility = {};
+          let meOwner = "";
+          let keeperFlags = 0;
+          teamNodes.forEach((team, i) => {
+            // team = [[meta objects...], { roster: {...} }]. Flatten only the meta
+            // part: flattening the whole node would let player names overwrite it.
+            const tm = flattenYahooMeta(Array.isArray(team) ? team[0] : team);
+            let owner = String(tm.name || `Team ${i + 1}`).trim();
+            let uniq = owner, suffix = 2;
+            while (owners.includes(uniq)) uniq = `${owner} (${suffix++})`;
+            owner = uniq;
+            owners.push(owner);
+            const fromDraft = firstRoundOrder.indexOf(tm.team_key) + 1;
+            ownerSlot[owner] = Number(tm.draft_position) || fromDraft || Number(tm.team_id) || i + 1;
+            if (Number(tm.is_owned_by_current_login) === 1) meOwner = owner;
+            const rest = Array.isArray(team) ? team.slice(1) : [];
+            const playerNodes = [];
+            const findPlayers = /* @__PURE__ */ __name((v) => {
+              if (Array.isArray(v)) v.forEach(findPlayers);
+              else if (v && typeof v === "object") Object.entries(v).forEach(([k, x]) => k === "player" ? playerNodes.push(x) : findPlayers(x));
+            }, "findPlayers");
+            findPlayers(rest);
+            playerNodes.forEach((pn) => {
+              const metaPart = Array.isArray(pn) ? pn[0] : pn;
+              // is_keeper is an object whose "status" would clobber injury status
+              // in a full flatten, so read it on its own.
+              const keeperObj = (Array.isArray(pn) ? pn.flat() : [pn]).find((o) => o && o.is_keeper);
+              const p = flattenYahooMeta(metaPart);
+              const nm = String(p.name || "").trim();
+              if (!nm) return;
+              const pos = String(p.display_position || "").replace(/\s*,\s*/g, "/");
+              if (pos) platformEligibility[nm.toLowerCase()] = pos;
+              const kept = keeperObj && keeperObj.is_keeper && (keeperObj.is_keeper.kept || keeperObj.is_keeper.status);
+              if (kept) keeperFlags++;
+              const round = draftRound[p.player_key];
+              rosterLines.push(`${owner}|${nm}|${round || "FA"}|NONE`);
+            });
+          });
+          const auction = String(settings.is_auction_draft) === "1";
+          const notes = ["Review keeper rules, scoring label and dates before saving."];
+          notes.push(Object.keys(draftRound).length
+            ? "Drafted round comes from this season's Yahoo draft results; undrafted players are FA."
+            : "This league hasn't drafted yet on Yahoo, so every player is marked FA.");
+          if (keeperFlags) notes.push(`Yahoo flags ${keeperFlags} rostered player(s) as keepers; keeper costs aren't imported, so set them on Teams & Keepers.`);
+          if (!meOwner) notes.push("Yahoo didn't say which team is yours; pick it under Me.");
+          return J({
+            name: meta.name || "Imported Yahoo League",
+            teams: Number(meta.num_teams) || owners.length || 12,
+            owners,
+            ownerSlot,
+            meOwner,
+            mySlot: meOwner ? ownerSlot[meOwner] : null,
+            rostersRaw: rosterLines.join("\n"),
+            draftType: auction ? "auction" : "snake",
+            rosterSize: rosterSize || null,
+            irSlots,
+            starters,
+            superflex: !!starters.SUPERFLEX,
+            scoringType: settings.scoring_type || null,
+            sport,
+            platform: "yahoo",
+            yahooLeagueKey: key,
+            platformEligibility: { yahoo: platformEligibility },
+            _source: "yahoo",
+            _note: notes.join(" ")
+          });
+        } catch (e) {
+          return J({ error: "Yahoo import failed: " + e.message }, 502);
+        }
+      }
       if (path.startsWith("/api/import/mfl/")) {
         const denied = requireAdmin();
         if (denied) return denied;

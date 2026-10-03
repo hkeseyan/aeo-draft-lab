@@ -48,6 +48,10 @@ const dom = new JSDOM(html, {
         { name:'McDavid, Connor', adp:1.64, pos:'C', id:'02un4' },
         { name:'Makar, Cale', adp:8.5, pos:'D', id:'03q3f' },
       ]);
+      if (u.startsWith('/api/import/yahoo/')) return j({ name: 'Yahoo Puck', teams: 2, owners: ['Mine', 'Theirs'],
+        ownerSlot: { Mine: 2, Theirs: 1 }, meOwner: 'Mine', mySlot: 2, rostersRaw: 'Mine|Connor McDavid|1|NONE',
+        draftType: 'snake', rosterSize: 16, irSlots: 2, starters: { C: 2, LW: 2, RW: 2, D: 4, G: 2 }, superflex: false,
+        scoringType: 'point', sport: 'nhl', platform: 'yahoo', yahooLeagueKey: '465.l.9', platformEligibility: { yahoo: {} }, _note: 'n.' });
       if (u.startsWith('/api/exposure')) return j({ denominator: 4, counts: { 'jason robertson': 2 }, leagues: [] });
       return j({});
     };
@@ -519,6 +523,14 @@ ev('switchLeague("aeo-keepers")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('football unaffected after switching back', () => ev('SPORT.id') + ' ' + slots(), 'nfl QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');
 ok &= check('radar tab hidden for football', () => w.document.querySelector('nav button[data-view="radar"]').style.display, 'none');
+w.document.getElementById('yahooLeagueSelect').innerHTML = '<option value="465.l.9">Yahoo Puck</option>';
+await ev('importFromYahoo()');
+ok &= check('Yahoo import fills the profile form as a new league',
+  'editingLeagueId+":"+el("lgName").value+":"+el("lgSport").value+":"+el("lgMySlot").value+":"+el("lgMeOwner").value+":"+el("lgRostersRaw").value',
+  'null:Yahoo Puck:nhl:2:Mine:Mine|Connor McDavid|1|NONE');
+ok &= check('Yahoo import save body keeps the league key and NHL starters',
+  '(()=>{const b=collectLeagueForm();return b.yahooLeagueKey+":"+b.platform+":"+JSON.stringify(b.starters)+":"+b.ownerSlot.Theirs})()',
+  '465.l.9:yahoo:{"C":2,"LW":2,"RW":2,"D":4,"G":2}:1');
 ok &= check('no errors after all the switching', () => errors.slice(0, 3).join(' | '), v => v === '');
 
 console.log(ok ? '\nALL CHECKS PASSED' : '\nSOME CHECKS FAILED');

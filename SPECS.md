@@ -560,6 +560,22 @@ carries no drafted round or keeper flag, so players import as FA/NONE and any th
 the league's player dictionary doesn't name keep their Fantrax id (counted in the
 import note) rather than silently vanishing. Review-before-save, same as the others.
 
+**Yahoo import**: once Yahoo is connected (admin only), *List my leagues* →
+pick a league → **Import league** calls `GET /api/import/yahoo/:leagueKey` and fills
+the Profile form as a new league: name, team count, sport (NFL/NHL from the
+league's game), owners (Yahoo team names, duplicates suffixed), draft order
+(Yahoo's `draft_position`, else round 1 of the draft results, else team id), your
+team and slot (`is_owned_by_current_login`), starter slots mapped to Draft Lab keys
+(`W/R/T`→FLEX, `Q/W/R/T`→SUPERFLEX + superflex flag, `DEF`→DST), roster size
+(everything but IR/NA), IR slots, snake vs auction, a scoring label, Yahoo position
+eligibility, and current rosters. Each rostered player's drafted round comes from
+this season's draft results; undrafted players (or every player, before the draft)
+are FA. Keeper costs aren't imported; the note counts players Yahoo flags as
+keepers so they can be set on Teams & Keepers. The profile keeps `yahooLeagueKey`, and
+the status line warns if another profile already links that league. The form's
+starter inputs only cover football, so saving a non-football profile keeps its
+imported or saved starters. Review-before-save, same as the others.
+
 **MFL import**: same idea, for MyFantasyLeague.com — paste a league ID (and
 year, defaults to the current one) to pull owners/rosters via MFL's public
 export API (no OAuth needed). MFL doesn't expose ADP/ECR/projections, a
