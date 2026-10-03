@@ -627,13 +627,14 @@
     </div>
     <div class="card">
       <h2>Connect Yahoo (in progress)</h2>
-      <p class="small muted">This is where Yahoo gets connected — admin only, one grant covers every Yahoo league. Click <b>Connect Yahoo account</b>, approve in the tab that opens, then come back and click <b>List my leagues</b>. The FAAB Lab uses this connection for its best-effort Tuesday roster and waiver-pool sync; full league-profile import is still separate work.</p>
+      <p class="small muted">This is where Yahoo gets connected — admin only, one grant covers every Yahoo league. Click <b>Connect Yahoo account</b>, approve in the tab that opens, then come back and click <b>List my leagues</b>. The FAAB Lab uses this connection for its best-effort Tuesday roster and waiver-pool sync; <b>Import league</b> fills the Profile form below from the selected league (name, teams, owners, draft order, your team, roster slots, current rosters with drafted rounds) as a new league; nothing saves until you click Save.</p>
       <p class="small muted">If listing fails with <code>additional_authorization_required</code>, Yahoo is saying the <i>grant this token was issued under</i> has no fantasy access. A refresh token can never gain a permission it wasn't granted, so refreshing or reconnecting on top of the old grant won't help — and Yahoo skips the consent screen for an app you've already approved, quietly reissuing on the same grant. Two things to check, in order: (1) <b>Check status</b> below shows which client id this Worker actually holds — confirm it matches the app you edited in the Yahoo Developer console; (2) if it matches, revoke the app at <a href="https://login.yahoo.com/account/security" target="_blank" rel="noopener">Yahoo account security → apps</a>, click <b>Disconnect</b> here, then Connect again so Yahoo has to ask you fresh.</p>
       <div class="row">
         <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account</button>
         <label class="small">List sport <select id="yahooGameSelect"><option value="nhl">NHL</option><option value="nfl">NFL</option></select></label>
         <button class="btn ghost" id="yahooListBtn">List my leagues</button>
         <select id="yahooLeagueSelect" aria-label="Yahoo league to inspect" style="min-width:170px"><option value="">List leagues first</option></select>
+        <button class="btn ghost" id="yahooFullImportBtn">Import league</button>
         <button class="btn ghost" id="yahooSettingsBtn">Compare settings</button>
         <label class="small">My draft slot <input type="number" id="yahooImportSlot" min="1" max="20" value="4" style="width:58px"></label>
         <button class="btn ghost" id="yahooImportBtn" disabled>Create matched NHL profile</button>
@@ -5546,7 +5547,9 @@ function collectLeagueForm(){
     draftDateLabel: el('lgDraftDate').value.trim()||'TBD',
     keeperDeadlineLabel: el('lgKeeperDeadline').value.trim()||'TBD',
     sport: el('lgSport') ? el('lgSport').value : (existing.sport||'nfl'),
-    starters,
+    // The starter inputs only cover football slots, so for other sports keep
+    // the imported or saved starters instead of wiping them.
+    starters: (el('lgSport')&&el('lgSport').value!=='nfl') ? (PENDING_LEAGUE_META.starters||existing.starters||starters) : starters,
     // Was hardcoded to football's flex, which silently reverted any league with a
     // narrower flex (ESPN's RB/WR-only) on every save. The form has no editor for
     // it, so keep what the profile already had and fall back to the sport default.
@@ -5658,6 +5661,36 @@ async function importFromFantrax(){
     if(data.rosterSize) el('lgRounds').value=data.rosterSize;
     el('fantraxImportStatus').textContent='\u2713 Imported as a NEW league \u2014 '+(data._note||'review the fields below, then Save to create it.');
   }catch(e){ el('fantraxImportStatus').textContent='\u26a0 Import failed: '+e.message; }
+}
+async function importFromYahoo(){
+  const key=el('yahooLeagueSelect').value;
+  if(!key){el('yahooStatus').textContent='List your leagues, then select one to import.';return;}
+  // Same rule as the other importers: always a NEW league, never the one the form had open.
+  editingLeagueId=null; PENDING_LEAGUE_META={};
+  el('yahooStatus').textContent='Importing\u2026'; el('yahooRaw').textContent='';
+  try{
+    const r=await fetch('/api/import/yahoo/'+encodeURIComponent(key)+'?game='+encodeURIComponent(el('yahooGameSelect').value));
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
+    const existing=Object.values(LEAGUES).find(p=>p.yahooLeagueKey===data.yahooLeagueKey);
+    ['platform','yahooLeagueKey','platformEligibility','starters'].forEach(k=>{if(data[k]!==undefined)PENDING_LEAGUE_META[k]=data[k];});
+    el('lgName').value=data.name||'';
+    el('lgTeams').value=data.teams||12;
+    if(el('lgSport'))el('lgSport').value=data.sport||'nfl';
+    el('lgDraftType').value=data.draftType||'snake';
+    el('lgAuctionFields').style.display=data.draftType==='auction'?'':'none';
+    if(data.rosterSize){el('lgRounds').value=data.rosterSize;el('lgRosterSize').value=data.rosterSize;}
+    el('lgIrSlots').value=data.irSlots||0;
+    el('lgSuperflex').checked=!!data.superflex;
+    if(data.scoringType)el('lgScoring').value='Yahoo '+data.scoringType;
+    el('lgMySlot').value=data.mySlot!=null?data.mySlot:'';
+    el('lgOwners').value=(data.owners||[]).join(', ');
+    if((data.sport||'nfl')==='nfl')renderStartersInputs(data.starters||{});
+    renderOwnerSlotInputs(data.owners||[], data.ownerSlot||{}, data.meOwner||'');
+    el('lgRostersRaw').value=data.rostersRaw||'';
+    el('yahooStatus').textContent='\u2713 Imported '+(data.name||key)+' as a NEW league \u2014 '+(data._note||'')+' Review the Profile form below, then Save to create it.'
+      +(existing?' Note: '+existing.name+' is already linked to this Yahoo league; saving creates a second copy.':'');
+  }catch(e){ el('yahooStatus').textContent='\u26a0 Import failed: '+e.message; }
 }
 async function importFromMfl(){
   const mid=el('mflLeagueId').value.trim(); if(!mid)return;
@@ -6175,6 +6208,7 @@ el('yahooStatusBtn').onclick=yahooStatusCheck;
 el('yahooDisconnectBtn').onclick=yahooDisconnect;
 el('yahooListBtn').onclick=listYahooLeagues;
 el('yahooSettingsBtn').onclick=compareYahooSettings;
+el('yahooFullImportBtn').onclick=importFromYahoo;
 el('yahooImportBtn').onclick=importMatchedYahooNhl;
 el('draftSlotInput').onchange=setNhlDraftSlot;
 el('lgOpenRosterBuilderBtn').onclick=openRosterBuilder;

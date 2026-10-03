@@ -168,6 +168,11 @@ A **Fantrax import** (`GET /api/import/fantrax/:leagueId`) is the recommended
 integration path over Yahoo: league-ID keyed, no OAuth, no approval queue. Note
 Fantrax returns HTTP 200 with an `error` body on a bad id.
 
+**Yahoo API access is live** (approved 2026-10). `GET /api/import/yahoo/:leagueKey`
+imports a Yahoo league (owners, draft order, my team, starters, current rosters with
+drafted rounds) into the Leagues form for review; see `SPECS.md` → "Yahoo import".
+Test: `node tests/yahoo-import.test.mjs`.
+
 **A Fantrax NHL league rosters F/D/G rather than C/LW/RW** (the user's confirmed
 2026-27 league does). Positions resolve per league through `rosterPositionOrder()`
 (a profile's `rosterPositions` beats the sport pack), and `rosterEligiblePositions()`
