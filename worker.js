@@ -33,7 +33,35 @@ var inSeasonTicketsKey = /* @__PURE__ */ __name((lg) => `inseasonTickets:${lg}`,
 var inSeasonTicketKey = /* @__PURE__ */ __name((lg, id) => `inseasonTicket:${lg}:${id}`, "inSeasonTicketKey");
 var leagueSourceConfigKey = /* @__PURE__ */ __name((lg) => `leagueSource:${lg}`, "leagueSourceConfigKey");
 var leagueSnapshotKey = /* @__PURE__ */ __name((lg) => `leagueSnapshot:${lg}`, "leagueSnapshotKey");
-var FAAB_CALIBRATION_VERSION = "off-with-their-heads-2025-plus-2026-09-16";
+var faabCalibrationKey = /* @__PURE__ */ __name((lg) => `faabCalibration:${lg}`, "faabCalibrationKey");
+var FAAB_CALIBRATION_VERSION = "off-with-their-heads-through-2026-09-30-v2";
+// The preserved bid stacks are observations, not universal price rules. Keeping
+// the winner and the lower stack separate lets the model distinguish a broadly
+// competitive market from one manager's outlier bid.
+var FAAB_CALIBRATION_SEED = [
+  { date: "2026-09-16", week: 2, team_count: 18, player: "Caleb Douglas", pos: "WR", tier: "depth", winning_bid: 0, losing_bids: [0, 0], winning_manager: "Ilyn Payne", notes: "Won on waiver priority." },
+  { date: "2026-09-16", week: 2, team_count: 18, player: "Josh Jacobs", pos: "RB", tier: "starter", winning_bid: 11, losing_bids: [1], winning_manager: "Gamble Play Edward" },
+  { date: "2026-09-16", week: 2, team_count: 18, player: "Tucker Kraft", pos: "TE", tier: "starter", winning_bid: 21, losing_bids: [19, 12, 7], winning_manager: "Ilyn Payne" },
+  { date: "2026-09-16", week: 2, team_count: 18, player: "Emeka Egbuka", pos: "WR", tier: "starter", winning_bid: 57, losing_bids: [50, 17, 5], winning_manager: "Ilyn Payne" },
+  { date: "2026-09-16", week: 2, team_count: 18, player: "Jeremiyah Love", pos: "RB", tier: "starter", winning_bid: 200, losing_bids: [200, 75, 53, 50, 15], winning_manager: "Trick Play taron", notes: "Tie won on waiver priority; clear outlier above the next cluster." },
+  { date: "2026-09-16", week: 2, team_count: 18, player: "Malik Nabers", pos: "WR", tier: "core", winning_bid: 200, losing_bids: [200, 170, 150, 86, 39, 36, 25], winning_manager: "ArtTakesNote", notes: "Tie won on waiver priority." },
+  { date: "2026-09-16", week: 2, team_count: 18, player: "Puka Nacua", pos: "WR", tier: "elite", winning_bid: 400, losing_bids: [350, 306, 299, 278, 200, 150, 67, 51, 50], winning_manager: "Trick Play taron", notes: "Endgame WR; deep consensus market." },
+  { date: "2026-09-23", week: 3, team_count: 18, player: "Jameson Williams", pos: "WR", tier: "starter", winning_bid: 17, losing_bids: [], winning_manager: "Ilyn Payne", complete_stack: false },
+  { date: "2026-09-30", week: 4, team_count: 18, player: "Jaylen Wright", pos: "RB", tier: "depth", winning_bid: 3, losing_bids: [2], winning_manager: "Ilyn Payne" },
+  { date: "2026-09-30", week: 4, team_count: 18, player: "Braelon Allen", pos: "RB", tier: "starter", winning_bid: 125, losing_bids: [24, 3, 0], winning_manager: "Beast Mode roberto", notes: "Outlier winner; competitive market was near $24." },
+  { date: "2026-09-30", week: 4, team_count: 18, player: "Rashee Rice", pos: "WR", tier: "core", winning_bid: 126, losing_bids: [75, 64, 17], winning_manager: "Puka di Beppo" },
+  { date: "2026-09-30", week: 4, team_count: 18, player: "Matthew Golden", pos: "WR", tier: "starter", winning_bid: 150, losing_bids: [75, 58, 50, 43, 5, 3, 0], winning_manager: "Beast Mode roberto", notes: "Outlier winner above a $75 competitive market." },
+  { date: "2026-09-30", week: 4, team_count: 18, player: "Saquon Barkley", pos: "RB", tier: "elite", winning_bid: 203, losing_bids: [100, 76, 76, 27], winning_manager: "Ilyn Payne", notes: "User won; endgame RB2 profile, but the next bid was $100." },
+  { date: "2026-09-30", week: 4, team_count: 18, player: "Kyren Williams", pos: "RB", tier: "core", winning_bid: 300, losing_bids: [276, 266, 133, 118, 100, 76, 50, 27], winning_manager: "3rd Down 4 What!", notes: "Consensus competitive market, not a lone outlier." },
+  { date: "2026-09-16", week: 2, team_count: 12, player: "Dalton Kincaid", pos: "TE", tier: "starter", winning_bid: 5, losing_bids: [2], winning_manager: "Overtime Emin" },
+  { date: "2026-09-16", week: 2, team_count: 12, player: "Cam Skattebo", pos: "RB", tier: "starter", winning_bid: 47, losing_bids: [36, 26, 25, 17], winning_manager: "Daejon Loves U" },
+  { date: "2026-09-16", week: 2, team_count: 12, player: "Tee Higgins", pos: "WR", tier: "core", winning_bid: 51, losing_bids: [32, 10], winning_manager: "Goal Line David" },
+  { date: "2026-09-16", week: 2, team_count: 12, player: "Davante Adams", pos: "WR", tier: "core", winning_bid: 75, losing_bids: [16], winning_manager: "P's Buffalo Wings" },
+  { date: "2026-09-16", week: 2, team_count: 12, player: "Saquon Barkley", pos: "RB", tier: "elite", winning_bid: 199, losing_bids: [175, 127, 77, 67, 56, 20], winning_manager: "Bootleg David", notes: "Deep 12-team bid stack." },
+  { date: "2026-09-16", week: 2, team_count: 12, player: "Brock Bowers", pos: "TE", tier: "elite", winning_bid: 250, losing_bids: [56, 53, 15, 11], winning_manager: "Beast Mode Paul", notes: "Large outlier winner." },
+  { date: "2026-09-16", week: 2, team_count: 12, player: "Parker Washington", pos: "WR", tier: "starter", winning_bid: 300, losing_bids: [111, 57, 20, 17, 9], winning_manager: "P's Buffalo Wings", notes: "Large outlier winner." },
+  { date: "2026-09-16", week: 2, team_count: 12, player: "George Kittle", pos: "TE", tier: "elite", winning_bid: 13, losing_bids: [], winning_manager: "Daejon Loves U", complete_stack: false }
+];
 var WAIVER_TICKET_STATUSES = /* @__PURE__ */ new Set(["draft", "approved", "submitted", "verified", "not_won", "cancelled"]);
 var WAIVER_TICKET_ACTIONS = /* @__PURE__ */ new Set(["add", "drop", "hold", "wait"]);
 function slugify(s) {
@@ -213,6 +241,87 @@ function ratio(v, fallback = 0) {
   return clamp(x > 1 ? x / 100 : x);
 }
 __name(ratio, "ratio");
+function numberList(value) {
+  if (Array.isArray(value)) return value.map((x) => n(x, NaN)).filter(Number.isFinite).map((x) => Math.max(0, x));
+  return String(value == null ? "" : value).split(/[|;/ ]+/).map((x) => n(x, NaN)).filter(Number.isFinite).map((x) => Math.max(0, x));
+}
+__name(numberList, "numberList");
+function median(values = []) {
+  const rows = values.filter(Number.isFinite).slice().sort((a, b) => a - b);
+  if (!rows.length) return null;
+  const middle = Math.floor(rows.length / 2);
+  return rows.length % 2 ? rows[middle] : (rows[middle - 1] + rows[middle]) / 2;
+}
+__name(median, "median");
+function normalizeCalibrationRow(raw = {}, source = "custom") {
+  const losingBids = numberList(raw.losing_bids ?? raw.losingBids ?? raw.lower_offers ?? raw.lowerOffers);
+  const winningBid = Math.max(0, n(raw.winning_bid ?? raw.winningBid, 0));
+  const player = String(raw.player || raw.name || "").trim();
+  return {
+    id: String(raw.id || `${raw.date || "unknown"}|${raw.team_count || raw.teamCount || "?"}|${player}`).slice(0, 180),
+    date: String(raw.date || "").slice(0, 10),
+    season: Math.max(0, n(raw.season, String(raw.date || "").slice(0, 4) || 2026)),
+    week: Math.max(0, n(raw.week, 0)) || null,
+    teamCount: Math.max(2, n(raw.team_count ?? raw.teamCount, 18)),
+    teamsAlive: Math.max(2, n(raw.teams_alive ?? raw.teamsAlive, raw.team_count ?? raw.teamCount ?? 18)),
+    startingBudget: Math.max(1, n(raw.starting_budget ?? raw.startingBudget, 1e3)),
+    player,
+    pos: String(raw.pos || raw.position || "").toUpperCase(),
+    tier: String(raw.tier || "").toLowerCase(),
+    winningBid,
+    losingBids,
+    competitiveBid: losingBids.length ? Math.max(...losingBids) : winningBid,
+    winningManager: String(raw.winning_manager ?? raw.winningManager ?? "").trim(),
+    notes: String(raw.notes || "").trim(),
+    completeStack: raw.complete_stack == null && raw.completeStack == null ? losingBids.length > 0 : ![false, "false", "0", 0].includes(raw.complete_stack ?? raw.completeStack),
+    source
+  };
+}
+__name(normalizeCalibrationRow, "normalizeCalibrationRow");
+function calibrationRows(input = {}) {
+  const custom = Array.isArray(input.bidHistory) ? input.bidHistory : parseCsvObjects(input.bidHistoryCsv || input.bid_history_csv || "");
+  const seen = new Set();
+  return [...FAAB_CALIBRATION_SEED.map((row) => normalizeCalibrationRow(row, "baseline")), ...custom.map((row) => normalizeCalibrationRow(row, "custom"))].filter((row) => {
+    if (!row.player) return false;
+    const key = `${row.date}|${row.teamCount}|${row.player.toLowerCase()}|${row.winningBid}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+__name(calibrationRows, "calibrationRows");
+function historicalMarketFor(player, tier, teamsAlive, startingBudget, rows) {
+  const exact = rows.filter((row) => Math.abs(row.teamCount - teamsAlive) <= 1 && row.player.toLowerCase() === player.name.toLowerCase());
+  const tierPos = rows.filter((row) => Math.abs(row.teamCount - teamsAlive) <= 1 && row.pos === player.pos && row.tier === tier);
+  const position = rows.filter((row) => Math.abs(row.teamCount - teamsAlive) <= 1 && row.pos === player.pos);
+  const matches = exact.length ? exact : tierPos.length ? tierPos : position;
+  if (!matches.length) return { sampleSize: 0, match: "fallback", competitiveBid: null, winningBid: null, outlierRate: null };
+  const normalize = (row, value) => value / row.startingBudget * startingBudget;
+  const competitive = matches.map((row) => normalize(row, row.competitiveBid));
+  const winning = matches.map((row) => normalize(row, row.winningBid));
+  const outliers = matches.filter((row) => row.competitiveBid >= 0 && row.winningBid >= row.competitiveBid + Math.max(20, row.competitiveBid * 0.5)).length;
+  return {
+    sampleSize: matches.length,
+    match: exact.length ? "same player" : tierPos.length ? "same position and tier" : "same position",
+    competitiveBid: Math.round(median(competitive)),
+    winningBid: Math.round(median(winning)),
+    outlierRate: Number((outliers / matches.length).toFixed(2))
+  };
+}
+__name(historicalMarketFor, "historicalMarketFor");
+function managerOverrides(input = {}) {
+  const rows = Array.isArray(input.playerOverrides) ? input.playerOverrides : parseCsvObjects(input.playerOverridesCsv || input.player_overrides_csv || "");
+  return new Map(rows.map((row) => [String(row.name || row.player || "").trim().toLowerCase(), row]).filter(([name]) => name).map(([name, row]) => [name, {
+      targetBid: row.suggested_bid === "" || row.suggested_bid == null ? null : Math.max(0, n(row.suggested_bid, 0)),
+      maxBid: row.max_bid === "" || row.max_bid == null ? null : Math.max(0, n(row.max_bid, 0)),
+      primaryDrop: String(row.drop_first || row.primary_drop || "").trim(),
+      secondaryDrop: String(row.drop_second || row.secondary_drop || "").trim(),
+      secondaryMultiplier: clamp(n(row.secondary_multiplier, 0.5), 0, 1),
+      decision: String(row.decision || "").trim().toLowerCase(),
+      notes: String(row.notes || "").trim()
+    }]));
+}
+__name(managerOverrides, "managerOverrides");
 function playerPoolMap(profile) {
   const map = new Map();
   parseCsvObjects(profile && profile.playersCsv || "").forEach((p) => {
@@ -248,6 +357,7 @@ function normalizeFaabPlayer(raw, pool, currentWeek) {
   const seasonProjection = n(raw.season_projection || raw.proj, base.seasonProjection || 0);
   const weekProjection = n(raw.week_proj || raw.week_projection, base.weekProjection || (seasonProjection ? seasonProjection / 17 : 0));
   const status = String(raw.status || "").toUpperCase();
+  const rosterSlot = String(raw.roster_slot || raw.selected_position || "").toUpperCase();
   const byeWeek = n(raw.bye_week || raw.bye, 0);
   const unavailable = status === "O" || status === "IR" || status === "SUSP" || status === "NA" || byeWeek === currentWeek;
   const injuryRisk = raw.injury === "" || raw.injury == null ? status === "Q" || status === "D" ? 0.45 : unavailable ? 1 : 0.08 : ratio(raw.injury);
@@ -280,6 +390,7 @@ function normalizeFaabPlayer(raw, pool, currentWeek) {
     metadataUpdatedAt,
     byeWeek,
     status,
+    rosterSlot,
     unavailable,
     dropClass: normalizeDropClass(raw.drop_class || raw.drop_disposition, pos),
     dropNotes: String(raw.drop_notes || "").trim(),
@@ -366,6 +477,14 @@ function analyzeFaab(input, profile = {}) {
   const teamsAlive = Math.max(2, n(input.teamsAlive || input.teams_alive, profile.teams || 18));
   const initialTeams = Math.max(teamsAlive, n(input.initialTeams || input.initial_teams, profile.teams || teamsAlive));
   const aggression = clamp(n(input.aggression, 0.8), 0.4, 1.1);
+  const historyRows = calibrationRows(input);
+  const overrides = managerOverrides(input);
+  const budgetRows = Array.isArray(input.competitorBudgets) ? input.competitorBudgets : input.budgets && Array.isArray(input.budgets.teams) ? input.budgets.teams : [];
+  const competitorBalances = budgetRows.filter((row) => !row.mine).map((row) => n(row.faabBalance ?? row.balance, NaN)).filter(Number.isFinite);
+  const competitorMedian = median(competitorBalances);
+  const competitorMax = competitorBalances.length ? Math.max(...competitorBalances) : null;
+  const expectedBudgetShare = clamp(1 - (currentWeek - 1) * 0.055, 0.35, 1);
+  const budgetPressure = competitorMedian == null ? 1 : clamp(competitorMedian / startingBudget / expectedBudgetShare, 0.65, 1.12);
   const pool = playerPoolMap(profile);
   const rosterRaw = Array.isArray(input.roster) ? input.roster : parseCsvObjects(input.rosterCsv || input.roster_csv || "");
   const availableRaw = Array.isArray(input.available) ? input.available : parseCsvObjects(input.availableCsv || input.available_csv || "");
@@ -377,21 +496,46 @@ function analyzeFaab(input, profile = {}) {
     const withPlayer = starterLineup([...roster, { ...p, adjustedWeek }], profile);
     const upgrade = Math.max(0, withPlayer.total - baseLineup.total);
     const displaced = baseLineup.starters.find((x) => !withPlayer.starters.some((y) => y.name === x.name));
-    const suggestedDrop = suggestedWaiverDrop(roster, baseLineup, p);
+    const modelDrop = suggestedWaiverDrop(roster, baseLineup, p);
+    const manager = overrides.get(p.name.toLowerCase()) || {};
+    const suggestedDropName = manager.primaryDrop || (modelDrop ? modelDrop.name : null);
+    const suggestedDropClass = manager.primaryDrop ? "manager priority" : modelDrop ? modelDrop.dropClass : null;
     const need = clamp(upgrade / 6 + (displaced ? 0.12 : 0));
     const immediate = clamp(adjustedWeek / 18);
     const tier = tierFor(p, upgrade);
     const scarcity = clamp((teamsAlive - 10) / 10) * ({ RB: 1, WR: 0.88, TE: 0.55, QB: 0.35 }[p.pos] || 0.5);
     const phaseFactor = 0.78 + 0.22 * teamsAlive / initialTeams;
     const marketShare = marketShareFor(p, tier, teamsAlive) * phaseFactor * (0.82 + 0.18 * p.role) * (1 + (p.schedule - 3) * 0.025) * (1 - p.injuryRisk * 0.2);
-    const projectedWinningBid = Math.max(0, Math.round(startingBudget * marketShare));
+    const baseMarketBid = Math.max(0, Math.round(startingBudget * marketShare));
+    const historicalMarket = historicalMarketFor(p, tier, teamsAlive, startingBudget, historyRows);
+    const historicalExpected = historicalMarket.sampleSize ? historicalMarket.competitiveBid + 0.35 * Math.max(0, historicalMarket.winningBid - historicalMarket.competitiveBid) : baseMarketBid;
+    let projectedWinningBid = Math.max(0, Math.round((historicalMarket.sampleSize ? baseMarketBid * 0.35 + historicalExpected * 0.65 : baseMarketBid) * budgetPressure));
+    let competitiveMarketBid = historicalMarket.sampleSize ? Math.round(historicalMarket.competitiveBid * budgetPressure) : Math.round(projectedWinningBid * 0.85);
+    let outlierWinningBid = historicalMarket.sampleSize ? Math.max(projectedWinningBid, Math.round(historicalMarket.winningBid * budgetPressure)) : Math.round(projectedWinningBid * 1.35);
+    if (competitorMax != null) {
+      const beatMax = Math.max(0, Math.min(startingBudget, competitorMax + 1));
+      projectedWinningBid = Math.min(projectedWinningBid, beatMax);
+      competitiveMarketBid = Math.min(competitiveMarketBid, beatMax);
+      outlierWinningBid = Math.min(outlierWinningBid, beatMax);
+    }
     const utilityMultiplier = 0.7 + 0.45 * need + 0.2 * p.endgame + 0.1 * immediate + 0.06 * scarcity + 0.05 * p.teammateOpportunity;
     const rawFair = Math.min(maxShareFor(p, tier, teamsAlive), marketShare * utilityMultiplier) * remainingBudget * aggression;
     const fairBid = Math.max(0, Math.round(rawFair));
     const chaseThreshold = tier === "elite" ? 1.15 : tier === "core" ? 1.2 : 1.6;
     const marketReachable = projectedWinningBid + 1 <= fairBid * chaseThreshold;
-    const recommendedBid = Math.min(remainingBudget, Math.max(0, Math.round(marketReachable ? Math.max(fairBid, projectedWinningBid + 1) : fairBid)));
-    const stretchBid = Math.min(remainingBudget, Math.max(recommendedBid, Math.round(marketReachable ? Math.max(fairBid * 1.2, projectedWinningBid + (tier === "starter" ? 3 : 1)) : fairBid * 1.15)));
+    let recommendedBid = Math.min(remainingBudget, Math.max(0, Math.round(marketReachable ? Math.max(fairBid, projectedWinningBid + 1) : fairBid)));
+    let stretchBid = Math.min(remainingBudget, Math.max(recommendedBid, Math.round(marketReachable ? Math.max(fairBid * 1.2, projectedWinningBid + (tier === "starter" ? 3 : 1)) : fairBid * 1.15)));
+    if (manager.targetBid != null) {
+      recommendedBid = Math.min(remainingBudget, manager.targetBid);
+      stretchBid = Math.max(stretchBid, recommendedBid);
+    }
+    if (manager.maxBid != null) {
+      stretchBid = Math.min(manager.maxBid, remainingBudget);
+      recommendedBid = Math.min(recommendedBid, stretchBid);
+    }
+    const managerPass = ["pass", "exclude", "no_bid", "no bid"].includes(manager.decision);
+    if (managerPass) recommendedBid = stretchBid = 0;
+    const backupBid = manager.secondaryDrop ? Math.min(stretchBid, Math.round(recommendedBid * manager.secondaryMultiplier)) : null;
     const reasons = [];
     if (p.endgame >= 0.8) reasons.push("endgame-caliber profile");
     else if (p.endgame >= 0.55) reasons.push("possible long-term starter");
@@ -404,8 +548,13 @@ function analyzeFaab(input, profile = {}) {
     if (p.teammateOpportunity >= 0.4) reasons.push("teammate news raises opportunity");
     if (p.rosterPct != null) reasons.push(`${p.rosterPct.toFixed(1)}% rostered`);
     if (p.rosterTrend != null) reasons.push(p.trendMetric === "adds" ? `${Math.round(p.rosterTrend)} recent adds` : p.trendMetric === "roster_pct_delta" ? `${p.rosterTrend >= 0 ? "+" : ""}${p.rosterTrend.toFixed(1)} ownership-point trend` : `market trend ${p.rosterTrend}`);
-    if (suggestedDrop) reasons.push(`drop candidate: ${suggestedDrop.name} (${suggestedDrop.dropClass})`);
+    if (suggestedDropName) reasons.push(`drop candidate: ${suggestedDropName} (${suggestedDropClass})`);
     else reasons.push("drop path is unresolved; do not infer a cut from lineup displacement");
+    if (manager.secondaryDrop) reasons.push(`backup claim: $${backupBid} dropping ${manager.secondaryDrop}`);
+    if (historicalMarket.sampleSize) reasons.push(`${historicalMarket.match} history: $${historicalMarket.competitiveBid} competitive / $${historicalMarket.winningBid} winner (${historicalMarket.sampleSize} observation${historicalMarket.sampleSize === 1 ? "" : "s"})`);
+    if (manager.maxBid != null) reasons.push(`manager ceiling applied at $${manager.maxBid}`);
+    if (manager.targetBid != null) reasons.push(`manager target applied at $${manager.targetBid}`);
+    if (managerPass) reasons.push("manager marked this player as a pass");
     if (!marketReachable) reasons.push("projected market exceeds this roster's disciplined price");
     return {
       ...p,
@@ -413,16 +562,23 @@ function analyzeFaab(input, profile = {}) {
       replacement: displaced ? displaced.name : null,
       replacementProjection: displaced ? Number(displaced.adjustedWeek.toFixed(1)) : null,
       lineupDisplaced: displaced ? displaced.name : null,
-      suggestedDrop: suggestedDrop ? suggestedDrop.name : null,
-      suggestedDropClass: suggestedDrop ? suggestedDrop.dropClass : null,
+      suggestedDrop: suggestedDropName,
+      suggestedDropClass,
+      backupDrop: manager.secondaryDrop || null,
+      backupBid,
       adjustedWeekProjection: Number(adjustedWeek.toFixed(1)),
       lineupUpgrade: Number(upgrade.toFixed(1)),
       projectedWinningBid,
+      competitiveMarketBid,
+      outlierWinningBid,
+      historicalMarket,
       fairBid,
       recommendedBid,
       stretchBid,
       marketReachable,
       reasons,
+      managerNotes: manager.notes || "",
+      managerOverrideApplied: Boolean(manager.targetBid != null || manager.maxBid != null || manager.primaryDrop || manager.secondaryDrop || manager.decision || manager.notes),
       confidence: p.weekProjection && p.rosRank < 999 ? "medium" : "low"
     };
   }).sort((a, b) => b.recommendedBid - a.recommendedBid || b.lineupUpgrade - a.lineupUpgrade);
@@ -469,14 +625,17 @@ function analyzeFaab(input, profile = {}) {
     teamsAlive,
     startingBudget,
     remainingBudget,
+    competitorBudgetSummary: competitorBalances.length ? { count: competitorBalances.length, median: competitorMedian, max: competitorMax, pressure: Number(budgetPressure.toFixed(2)) } : null,
+    managerNotes: String(input.managerNotes || input.manager_notes || "").trim(),
     claimOrderRule: "bid_descending",
     bidOrderLocked: true,
     calibrationVersion: FAAB_CALIBRATION_VERSION,
     assumptions: [
       "Market-discovery rank uses roster percentage plus source/metric-local trend percentile only to decide who deserves review; it is not a player-value score.",
       "For bid-based waivers, higher dollar bids execute before lower dollar bids; a lower bid cannot be manually promoted ahead of a higher bid.",
-      "Projected winning bids use the 2025 Off With Their Heads history plus the Sep. 16, 2026 18-team and 12-team bid stacks.",
-      "Competitor remaining budgets are not yet modeled; projected market prices use calibrated opening-budget shares with a modest season-phase adjustment.",
+      "The market view separates the next-highest competitive bid from the actual winner so a single aggressive manager does not silently redefine every future recommendation.",
+      `Projected winning bids use ${historyRows.length} preserved Off With Their Heads observations through Sep. 30, 2026, split by league size, position, tier, and same-player history when available.`,
+      competitorBalances.length ? `Yahoo supplied ${competitorBalances.length} competitor FAAB balances; the market adjustment uses their median and caps the win estimate at one dollar above the largest balance.` : "Competitor remaining budgets were unavailable, so market prices use calibrated opening-budget shares with a season-phase adjustment.",
       "Schedule, injury, bye, role, and teammate-opportunity inputs are applied when supplied; missing fields use conservative defaults."
     ],
     recommendations
@@ -489,6 +648,10 @@ function flattenYahooMeta(value, out = {}) {
     if (v == null || typeof v !== "object") out[k] = v;
     else if (k === "name" && v.full) out.name = v.full;
     else if (k === "bye_weeks" && v.week) out.bye_week = v.week;
+    else if (k === "selected_position") {
+      const selected = flattenYahooMeta(v, {});
+      if (selected.position) out.roster_slot = selected.position;
+    }
     else if (k === "percent_owned") {
       const pct = flattenYahooMeta(v, {});
       if (pct.value != null) out.percent_owned = pct.value;
@@ -509,6 +672,24 @@ function collectYahooEntities(value, entityName, found = []) {
   return found;
 }
 __name(collectYahooEntities, "collectYahooEntities");
+function collectYahooEntityNodes(value, entityName, found = []) {
+  if (Array.isArray(value)) value.forEach((v) => collectYahooEntityNodes(v, entityName, found));
+  else if (value && typeof value === "object") Object.entries(value).forEach(([k, v]) => {
+    if (k === entityName) found.push(v);
+    collectYahooEntityNodes(v, entityName, found);
+  });
+  return found;
+}
+__name(collectYahooEntityNodes, "collectYahooEntityNodes");
+function yahooErrorDetails(error) {
+  const message = String(error && error.message || error || "Yahoo source failed.");
+  if (/Yahoo API 403/.test(message) && /not authorized to perform this action/i.test(message)) {
+    return { ok: false, code: "YAHOO_FANTASY_ACCESS_DENIED", error: "Yahoo rejected Fantasy Sports access for this application (HTTP 403).", action: "Confirm the AEO Draft Lab Client ID is approved for Yahoo Fantasy Sports, then disconnect and reconnect Yahoo." };
+  }
+  if (/Yahoo account is not connected/i.test(message)) return { ok: false, code: "YAHOO_NOT_CONNECTED", error: message, action: "Connect Yahoo from the Leagues tab." };
+  return { ok: false, code: "YAHOO_SYNC_FAILED", error: message };
+}
+__name(yahooErrorDetails, "yahooErrorDetails");
 async function yahooJson(token, endpoint) {
   const r = await fetch(`https://fantasysports.yahooapis.com/fantasy/v2/${endpoint}${endpoint.includes("?") ? "&" : "?"}format=json`, { headers: { Authorization: `Bearer ${token}` } });
   const text = await r.text();
@@ -529,24 +710,62 @@ async function resolveYahooLeagueKey(token, profile) {
   return hit.league_key;
 }
 __name(resolveYahooLeagueKey, "resolveYahooLeagueKey");
-function yahooPlayerRows(raw) {
+function yahooPlayerRows(raw, availabilityStatus = "") {
   const seen = new Set();
   return collectYahooEntities(raw, "player").filter((p) => p.player_key && !seen.has(p.player_key) && seen.add(p.player_key)).map((p) => ({
     name: p.name || "Unknown",
     player_key: p.player_key || "",
+    provider_player_id: p.player_key || "",
     pos: String(p.display_position || p.position || "").replace(/\s*,\s*/g, "/"),
     team: p.editorial_team_abbr || "",
-    status: p.status || "",
+    status: p.status || availabilityStatus,
+    availability_status: availabilityStatus || p.status || "",
     bye_week: p.bye_week || "",
     roster_pct: p.percent_owned == null ? "" : p.percent_owned,
     roster_trend: p.percent_owned_delta == null ? "" : p.percent_owned_delta,
     trend_metric: p.percent_owned_delta == null ? "" : "roster_pct_delta",
     trend_source: p.percent_owned == null ? "" : "yahoo",
     metadata_updated_at: p.percent_owned == null ? "" : new Date().toISOString(),
+    roster_slot: p.roster_slot || "",
     notes: p.injury_note || ""
   }));
 }
 __name(yahooPlayerRows, "yahooPlayerRows");
+function yahooRecentDrops(raw, available, now = Date.now()) {
+  const availableByKey = new Map((available || []).map((p) => [p.provider_player_id || p.player_key, p]));
+  const cutoffSeconds = Math.floor(now / 1e3) - 36 * 60 * 60;
+  const drops = [];
+  for (const transactionNode of collectYahooEntityNodes(raw, "transaction")) {
+    const transaction = flattenYahooMeta(transactionNode);
+    const timestamp = n(transaction.timestamp, 0);
+    if (!timestamp || timestamp < cutoffSeconds) continue;
+    for (const playerNode of collectYahooEntityNodes(transactionNode, "player")) {
+      const player = flattenYahooMeta(playerNode);
+      const transactionData = collectYahooEntityNodes(playerNode, "transaction_data").map((v) => flattenYahooMeta(v))[0] || {};
+      const transactionType = String(transactionData.type || player.type || transaction.type || "").toLowerCase();
+      if (transactionType !== "drop" && transactionType !== "add/drop" && String(transaction.type || "").toLowerCase() !== "commish") continue;
+      const current = availableByKey.get(player.player_key);
+      if (!current) continue;
+      drops.push({ ...current, newly_dropped: true, dropped_at: timestamp * 1e3, source_team_key: transactionData.source_team_key || "" });
+    }
+  }
+  if (!drops.length) return [];
+  const groups = new Map();
+  for (const drop of drops) {
+    const groupKey = drop.source_team_key || "unknown";
+    const group = groups.get(groupKey) || [];
+    group.push(drop);
+    groups.set(groupKey, group);
+  }
+  const candidates = [...groups.values()].map((group) => {
+    const latest = Math.max(...group.map((p) => p.dropped_at));
+    return { latest, batch: group.filter((p) => latest - p.dropped_at <= 2 * 60 * 60 * 1e3) };
+  }).filter((group) => group.batch.length >= 3).sort((a, b) => b.latest - a.latest || b.batch.length - a.batch.length);
+  if (!candidates.length) return [];
+  const seen = new Set();
+  return candidates[0].batch.filter((p) => !seen.has(p.provider_player_id) && seen.add(p.provider_player_id));
+}
+__name(yahooRecentDrops, "yahooRecentDrops");
 async function yahooLeagueEligibility(token, leagueKey, limit = 500) {
   const rows = [], seen = new Set(), batch = 25;
   for (let start = 0; start < limit; start += batch) {
@@ -563,6 +782,22 @@ async function yahooLeagueEligibility(token, leagueKey, limit = 500) {
   return rows;
 }
 __name(yahooLeagueEligibility, "yahooLeagueEligibility");
+async function yahooAvailablePlayers(token, leagueKey, status, limit = 100) {
+  const rows = [], seen = new Set(), batch = 25;
+  for (let start = 0; start < limit; start += batch) {
+    const raw = await yahooJson(token, `league/${leagueKey}/players;status=${status};sort=OR;start=${start};count=${batch}/percent_owned`);
+    const got = yahooPlayerRows(raw, status).filter((p) => {
+      const key = p.provider_player_id || p.player_key;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    rows.push(...got);
+    if (got.length < batch) break;
+  }
+  return rows;
+}
+__name(yahooAvailablePlayers, "yahooAvailablePlayers");
 function clientPlayerIdNameMap(profile) {
   const rows = csvMatrix(profile && profile.playersCsv || "");
   const out = new Map();
@@ -704,19 +939,42 @@ async function yahooFaabSnapshot(env, kv, originUrl, profile) {
   const teams = collectYahooEntities(teamsRaw, "team").filter((t) => t.team_key);
   const mine = teams.find((t) => String(t.is_owned_by_current_login) === "1") || teams.find((t) => String(t.name || "").toLowerCase() === String(profile.meOwner || "").toLowerCase());
   if (!mine || !mine.team_key) throw new Error("Yahoo league matched, but the current user's team could not be identified.");
-  const [rosterRaw, waiversRaw] = await Promise.all([
+  const [rosterRaw, waivers, freeAgents] = await Promise.all([
     yahooJson(token, `team/${mine.team_key}/roster`),
-    yahooJson(token, `league/${key}/players;status=W;sort=OR;count=100/percent_owned`)
+    yahooAvailablePlayers(token, key, "W", 100),
+    yahooAvailablePlayers(token, key, "FA", 100)
   ]);
+  let transactionsRaw = null;
+  let transactionError = "";
+  try {
+    transactionsRaw = await yahooJson(token, `league/${key}/transactions;types=drop,commish;count=50`);
+  } catch (e) {
+    transactionError = e.message;
+  }
   const roster = yahooPlayerRows(rosterRaw);
-  const available = yahooPlayerRows(waiversRaw);
-  if (!available.length) throw new Error("Yahoo returned no players currently on waivers; the eliminated roster may not be released yet.");
+  const seen = new Set();
+  const fullAvailable = [...waivers, ...freeAgents].filter((p) => !seen.has(p.provider_player_id) && seen.add(p.provider_player_id));
+  const newlyDropped = transactionsRaw ? yahooRecentDrops(transactionsRaw, fullAvailable) : [];
+  const recentIds = new Set(newlyDropped.map((p) => p.provider_player_id));
+  const available = [...newlyDropped, ...fullAvailable.filter((p) => !recentIds.has(p.provider_player_id))];
+  const teamBudgets = teams.map((team) => ({
+    teamKey: team.team_key,
+    name: team.name || "",
+    faabBalance: team.faab_balance === "" || team.faab_balance == null ? null : Math.max(0, n(team.faab_balance, 0)),
+    mine: team.team_key === mine.team_key
+  })).filter((team) => team.faabBalance != null);
   return {
     yahooLeagueKey: key,
     syncedAt: Date.now(),
     roster,
     available,
-    marketMetadata: available.some((p) => p.roster_pct !== "" || p.roster_trend !== "") ? "yahoo" : "none"
+    availabilityKind: newlyDropped.length ? "newly_dropped_plus_available" : waivers.length ? "waivers_plus_free_agents" : freeAgents.length ? "free_agents" : "none",
+    newlyDroppedCount: newlyDropped.length,
+    waiverCount: waivers.length,
+    freeAgentCount: freeAgents.length,
+    budgets: { mine: teamBudgets.find((team) => team.mine)?.faabBalance ?? null, teams: teamBudgets },
+    marketMetadata: available.some((p) => p.roster_pct !== "" || p.roster_trend !== "") ? "yahoo" : "none",
+    transactionError
   };
 }
 __name(yahooFaabSnapshot, "yahooFaabSnapshot");
@@ -729,9 +987,24 @@ async function syncLeagueSnapshot(env, kv, originUrl, profile) {
   if (config.yahooEnabled !== false) {
     try {
       yahoo = await yahooFaabSnapshot(env, kv, originUrl, profile);
-      sourceStatus.yahoo = { ok: true, syncedAt: yahoo.syncedAt };
+      sourceStatus.yahoo = {
+        ok: true,
+        syncedAt: yahoo.syncedAt,
+        yahooLeagueKey: yahoo.yahooLeagueKey,
+        availabilityKind: yahoo.availabilityKind,
+        availableCount: yahoo.available.length,
+        newlyDroppedCount: yahoo.newlyDroppedCount,
+        waiverCount: yahoo.waiverCount,
+        freeAgentCount: yahoo.freeAgentCount,
+        budgetCount: yahoo.budgets && yahoo.budgets.teams.length || 0,
+        warning: [
+          !yahoo.roster.length ? "Yahoo returned an empty roster; Draft Lab used the configured roster fallback." : "",
+          yahoo.transactionError ? `Recent-drop transactions failed: ${yahoo.transactionError}` : "",
+          !(yahoo.budgets && yahoo.budgets.teams.length) ? "Yahoo did not expose FAAB balances for this league." : ""
+        ].filter(Boolean).join(" ") || void 0
+      };
     } catch (e) {
-      sourceStatus.yahoo = { ok: false, error: e.message };
+      sourceStatus.yahoo = yahooErrorDetails(e);
     }
   }
   if (config.fantasyProsEnabled !== false && config.fantasyProsLeagueKey) {
@@ -745,8 +1018,10 @@ async function syncLeagueSnapshot(env, kv, originUrl, profile) {
   let roster = yahoo && yahoo.roster && yahoo.roster.length ? yahoo.roster : fantasyPros && fantasyPros.roster && fantasyPros.roster.length ? fantasyPros.roster : previous.roster || [];
   if (fantasyPros && fantasyPros.roster && roster.length) roster = mergePlayerRows(roster, fantasyPros.roster);
   const available = yahoo && yahoo.available && yahoo.available.length ? yahoo.available : previous.available || [];
-  const rosterSource = yahoo && yahoo.roster && yahoo.roster.length ? "yahoo" : fantasyPros && fantasyPros.roster && fantasyPros.roster.length ? "fantasypros" : previous.coverage && previous.coverage.roster || "saved";
-  const availabilitySource = yahoo && yahoo.available && yahoo.available.length ? "yahoo" : previous.coverage && previous.coverage.available || (available.length ? "saved" : "none");
+  const rosterCurrent = !!(yahoo && yahoo.roster && yahoo.roster.length || fantasyPros && fantasyPros.roster && fantasyPros.roster.length);
+  const availableCurrent = !!(yahoo && yahoo.available && yahoo.available.length);
+  const rosterSource = yahoo && yahoo.roster && yahoo.roster.length ? "yahoo" : fantasyPros && fantasyPros.roster && fantasyPros.roster.length ? "fantasypros" : roster.length ? "saved" : "none";
+  const availabilitySource = availableCurrent ? "yahoo" : available.length ? "saved" : "none";
   if (!roster.length && !available.length) {
     const failures = Object.entries(sourceStatus).filter(([, s]) => !s.ok).map(([name, s]) => `${name}: ${s.error}`).join("; ");
     throw new Error(failures || "No configured data source returned league data.");
@@ -757,12 +1032,18 @@ async function syncLeagueSnapshot(env, kv, originUrl, profile) {
     syncedAt: Date.now(),
     roster,
     available,
+    budgets: yahoo && yahoo.budgets || previous.budgets || null,
     lineup: fantasyPros && fantasyPros.lineup || previous.lineup || null,
     coverage: {
       roster: rosterSource,
       available: availabilitySource,
       projections: fantasyPros ? "fantasypros" : previous.coverage && previous.coverage.projections || "embedded",
-      marketMetadata: yahoo && yahoo.marketMetadata && yahoo.marketMetadata !== "none" ? yahoo.marketMetadata : previous.coverage && previous.coverage.marketMetadata || "none"
+      marketMetadata: yahoo && yahoo.marketMetadata && yahoo.marketMetadata !== "none" ? yahoo.marketMetadata : previous.coverage && previous.coverage.marketMetadata || "none",
+      budgets: yahoo && yahoo.budgets && yahoo.budgets.teams.length ? "yahoo" : previous.coverage && previous.coverage.budgets || "none"
+    },
+    freshness: {
+      roster: rosterCurrent ? { current: true, source: rosterSource, syncedAt: Date.now() } : { ...(previous.freshness && previous.freshness.roster || {}), current: false, source: roster.length ? "saved" : "none" },
+      available: availableCurrent ? { current: true, source: "yahoo", syncedAt: Date.now(), kind: yahoo.availabilityKind } : { ...(previous.freshness && previous.freshness.available || {}), current: false, source: available.length ? "saved" : "none" }
     },
     sourceStatus
   };
@@ -875,8 +1156,8 @@ async function saveWaiverTicket(kv, lg, ticket, me) {
 __name(saveWaiverTicket, "saveWaiverTicket");
 function reportEmailHtml(report) {
   const h = /* @__PURE__ */ __name((v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]), "h");
-  const rows = report.recommendations.slice(0, 20).map((p) => `<tr><td>${h(p.name)}</td><td>${h(p.pos)}</td><td>$${p.recommendedBid}</td><td>$${p.projectedWinningBid}</td><td>$${p.stretchBid}</td><td>${h(p.reasons.join("; "))}</td></tr>`).join("");
-  return `<h1>${h(report.leagueName)} — Week ${report.week} FAAB</h1><p>Budget remaining: $${report.remainingBudget}. Calibration: ${h(report.calibrationVersion)}</p><table border="1" cellpadding="6" cellspacing="0"><thead><tr><th>Player</th><th>Pos</th><th>Bid</th><th>Projected win</th><th>Stretch</th><th>Why</th></tr></thead><tbody>${rows}</tbody></table><p>${h(report.assumptions.join(" "))}</p>`;
+  const rows = report.recommendations.slice(0, 20).map((p) => `<tr><td>${h(p.name)}</td><td>${h(p.pos)}</td><td>$${p.recommendedBid}</td><td>$${p.competitiveMarketBid}</td><td>$${p.projectedWinningBid}</td><td>$${p.outlierWinningBid}</td><td>$${p.stretchBid}</td><td>${h(p.reasons.join("; "))}</td></tr>`).join("");
+  return `<h1>${h(report.leagueName)} — Week ${report.week} FAAB</h1><p>Budget remaining: $${report.remainingBudget}. Calibration: ${h(report.calibrationVersion)}</p><table border="1" cellpadding="6" cellspacing="0"><thead><tr><th>Player</th><th>Pos</th><th>Suggested</th><th>Competitive market</th><th>Projected win</th><th>Outlier winner</th><th>Stretch</th><th>Why</th></tr></thead><tbody>${rows}</tbody></table><p>${h(report.assumptions.join(" "))}</p>`;
 }
 __name(reportEmailHtml, "reportEmailHtml");
 async function emailInSeasonReport(env, to, report) {
@@ -896,10 +1177,26 @@ function pacificParts(date = /* @__PURE__ */ new Date()) {
   return Object.fromEntries(parts.map((p) => [p.type, p.value]));
 }
 __name(pacificParts, "pacificParts");
-async function runScheduledFaab(env) {
+function sourceFailureSummary(sourceStatus = {}) {
+  return Object.entries(sourceStatus).filter(([, status]) => status && !status.ok).map(([name, status]) => `${name}: ${status.error}`).join("; ");
+}
+__name(sourceFailureSummary, "sourceFailureSummary");
+function faabAvailableRows(input = {}) {
+  const csvRows = parseCsvObjects(input.availableCsv || input.available_csv || "");
+  if (csvRows.length) return csvRows;
+  return Array.isArray(input.available) ? input.available.filter((p) => p && (p.name || p.player)) : [];
+}
+__name(faabAvailableRows, "faabAvailableRows");
+async function savedCalibrationRows(kv, lg) {
+  const saved = await kv.get(faabCalibrationKey(lg), { type: "json" }) || [];
+  return Array.isArray(saved) ? saved.map((row) => normalizeCalibrationRow(row, "custom")) : [];
+}
+__name(savedCalibrationRows, "savedCalibrationRows");
+async function runScheduledFaab(env, scheduledDate = /* @__PURE__ */ new Date()) {
   if (!env.MOCKS) return;
-  const local = pacificParts();
-  if (local.weekday !== "Tue" || n(local.hour, -1) !== 1) return;
+  const local = pacificParts(scheduledDate);
+  const localHour = n(local.hour, -1);
+  if (local.weekday !== "Tue" || localHour < 1 || localHour > 5) return;
   const kv = env.MOCKS;
   const list = await kv.list({ prefix: "league:" });
   const profiles = (await Promise.all(list.keys.map((k) => kv.get(k.name, { type: "json" })))).filter((p) => p && p.leagueType === "guillotine");
@@ -907,28 +1204,57 @@ async function runScheduledFaab(env) {
   for (const profile of profiles) {
     const state = await kv.get(inSeasonStateKey(profile.id), { type: "json" }) || {};
     if (state.scheduleEnabled === false) continue;
-    const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(/* @__PURE__ */ new Date());
-    if (state.lastScheduledDate === dateKey) continue;
+    const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(scheduledDate);
+    if (state.lastScheduledDate === dateKey && state.lastScheduledRun && state.lastScheduledRun.status === "created") continue;
     let input = { ...state };
+    let outcome = { date: dateKey, ranAt: Date.now(), status: "skipped", reason: "No current authoritative Yahoo available-player pool was returned." };
     try {
       const snapshot = await syncLeagueSnapshot(env, kv, originUrl, profile);
-      input = { ...input, roster: snapshot.roster && snapshot.roster.length ? snapshot.roster : input.roster, available: snapshot.available && snapshot.available.length ? snapshot.available : input.available, dataSyncedAt: snapshot.syncedAt, dataCoverage: snapshot.coverage, dataSourceStatus: snapshot.sourceStatus };
-    } catch (e) {
-      input.dataSyncError = e.message;
-    }
-    if ((input.available && input.available.length) || String(input.availableCsv || "").trim()) {
-      const report = await saveInSeasonReport(kv, profile.id, analyzeFaab(input, profile));
-      if (state.emailEnabled) {
-        try {
-          report.email = await emailInSeasonReport(env, state.emailTo, report);
-          await kv.put(inSeasonReportKey(profile.id, report.id), JSON.stringify(report));
-        } catch (e) {
-          report.email = { sent: false, reason: e.message };
+      input = {
+        ...input,
+        roster: snapshot.roster && snapshot.roster.length ? snapshot.roster : input.roster,
+        remainingBudget: snapshot.budgets && snapshot.budgets.mine != null ? snapshot.budgets.mine : input.remainingBudget,
+        competitorBudgets: snapshot.budgets && snapshot.budgets.teams || [],
+        bidHistory: await savedCalibrationRows(kv, profile.id),
+        dataSyncedAt: snapshot.syncedAt,
+        dataCoverage: snapshot.coverage,
+        dataFreshness: snapshot.freshness,
+        dataSourceStatus: snapshot.sourceStatus,
+        dataSyncError: sourceFailureSummary(snapshot.sourceStatus)
+      };
+      const currentPool = snapshot.freshness && snapshot.freshness.available && snapshot.freshness.available.current && snapshot.coverage && snapshot.coverage.available === "yahoo" ? snapshot.available : [];
+      if (currentPool.length) {
+        input.available = currentPool;
+        const report = await saveInSeasonReport(kv, profile.id, analyzeFaab(input, profile));
+        outcome = { date: dateKey, ranAt: Date.now(), status: "created", reportId: report.id, count: report.recommendations.length, source: "yahoo", poolKind: snapshot.freshness.available.kind || "available" };
+        if (state.emailEnabled) {
+          try {
+            report.email = await emailInSeasonReport(env, state.emailTo, report);
+          } catch (e) {
+            report.email = { sent: false, reason: e.message };
+            outcome.emailError = e.message;
+          }
           await kv.put(inSeasonReportKey(profile.id, report.id), JSON.stringify(report));
         }
       }
+    } catch (e) {
+      input.dataSyncError = e.message;
+      outcome = { date: dateKey, ranAt: Date.now(), status: "failed", reason: e.message };
     }
-    await kv.put(inSeasonStateKey(profile.id), JSON.stringify({ ...state, dataSyncedAt: input.dataSyncedAt || state.dataSyncedAt, dataCoverage: input.dataCoverage || state.dataCoverage, dataSourceStatus: input.dataSourceStatus || state.dataSourceStatus, dataSyncError: input.dataSyncError || "", lastScheduledDate: dateKey }));
+    console.log({ event: "scheduled_faab", leagueId: profile.id, ...outcome });
+    await kv.put(inSeasonStateKey(profile.id), JSON.stringify({
+      ...state,
+      remainingBudget: input.remainingBudget ?? state.remainingBudget,
+      competitorBudgets: input.competitorBudgets || state.competitorBudgets || [],
+      dataSyncedAt: input.dataSyncedAt || state.dataSyncedAt,
+      dataCoverage: input.dataCoverage || state.dataCoverage,
+      dataFreshness: input.dataFreshness || state.dataFreshness,
+      dataSourceStatus: input.dataSourceStatus || state.dataSourceStatus,
+      dataSyncError: input.dataSyncError || "",
+      lastScheduledAttemptDate: dateKey,
+      lastScheduledDate: outcome.status === "created" ? dateKey : state.lastScheduledDate,
+      lastScheduledRun: outcome
+    }));
   }
 }
 __name(runScheduledFaab, "runScheduledFaab");
@@ -944,7 +1270,8 @@ async function runScheduledLeagueRefresh(env) {
     if (!config.fantasyProsLeagueKey && !profile.yahooLeagueId && !profile.yahooLeagueKey && profile.leagueType !== "guillotine") continue;
     try {
       await syncLeagueSnapshot(env, kv, originUrl, profile);
-    } catch {
+    } catch (e) {
+      console.error({ event: "scheduled_league_refresh_failed", leagueId: profile.id, error: e.message });
     }
   }
 }
@@ -1768,6 +2095,8 @@ var worker_default = {
             fantasyProsConfigured: !!config.fantasyProsLeagueKey,
             syncedAt: snapshot && snapshot.syncedAt || null,
             coverage: snapshot && snapshot.coverage || null,
+            freshness: snapshot && snapshot.freshness || null,
+            budgets: snapshot && snapshot.budgets || null,
             sourceStatus: snapshot && snapshot.sourceStatus || null
           });
         }
@@ -1800,6 +2129,25 @@ var worker_default = {
         if (request.method !== "GET") return J({ error: "method" }, 405);
         const snapshot = await kv.get(leagueSnapshotKey(lg), { type: "json" });
         return snapshot ? J(snapshot) : J({ error: "no league snapshot yet" }, 404);
+      }
+      if (path === "/api/inseason/calibration") {
+        const custom = await savedCalibrationRows(kv, lg);
+        if (request.method === "GET") return J({ version: FAAB_CALIBRATION_VERSION, baseline: FAAB_CALIBRATION_SEED.map((row) => normalizeCalibrationRow(row, "baseline")), custom, baselineCount: FAAB_CALIBRATION_SEED.length, customCount: custom.length });
+        if (request.method === "PUT") {
+          const denied = requireAdmin();
+          if (denied) return denied;
+          let b;
+          try {
+            b = await request.json();
+          } catch {
+            return J({ error: "bad json" }, 400);
+          }
+          const rows = Array.isArray(b.rows) ? b.rows : parseCsvObjects(b.historyCsv || "");
+          const normalized = rows.map((row) => normalizeCalibrationRow(row, "custom")).filter((row) => row.player);
+          await kv.put(faabCalibrationKey(lg), JSON.stringify(normalized.slice(0, 500)));
+          return J({ ok: true, version: FAAB_CALIBRATION_VERSION, baselineCount: FAAB_CALIBRATION_SEED.length, customCount: normalized.length });
+        }
+        return J({ error: "method" }, 405);
       }
       if (path === "/api/inseason/state") {
         const key = scoped(inSeasonStateKey(lg), me);
@@ -1844,18 +2192,31 @@ var worker_default = {
           const stateKey = scoped(inSeasonStateKey(lg), me);
           const saved = await kv.get(stateKey, { type: "json" }) || {};
           let input = { ...saved, ...b };
+          input.bidHistory = await savedCalibrationRows(kv, lg);
           if (b.syncSources || b.syncYahoo) {
             const denied = requireAdmin();
             if (denied) return denied;
             try {
               const snapshot = await syncLeagueSnapshot(env, kv, url, profile);
-              input = { ...input, roster: snapshot.roster && snapshot.roster.length ? snapshot.roster : input.roster, available: snapshot.available && snapshot.available.length ? snapshot.available : input.available, dataSyncedAt: snapshot.syncedAt, dataCoverage: snapshot.coverage, dataSourceStatus: snapshot.sourceStatus, dataSyncError: "" };
+              input = {
+                ...input,
+                roster: snapshot.roster && snapshot.roster.length ? snapshot.roster : input.roster,
+                available: snapshot.available && snapshot.available.length ? snapshot.available : input.available,
+                remainingBudget: snapshot.budgets && snapshot.budgets.mine != null ? snapshot.budgets.mine : input.remainingBudget,
+                competitorBudgets: snapshot.budgets && snapshot.budgets.teams || input.competitorBudgets || [],
+                dataSyncedAt: snapshot.syncedAt,
+                dataCoverage: snapshot.coverage,
+                dataFreshness: snapshot.freshness,
+                dataSourceStatus: snapshot.sourceStatus,
+                dataSyncError: sourceFailureSummary(snapshot.sourceStatus)
+              };
             } catch (e) {
               return J({ error: e.message, fallback: "Use the most recent saved snapshot or paste the roster and waiver pool CSV, then run without source sync." }, 502);
             }
           }
+          if (!faabAvailableRows(input).length) return J({ error: "No current available-player pool was provided, so no report was stored.", sourceStatus: input.dataSourceStatus || null, fallback: "Refresh Yahoo after the eliminated roster is released, or paste the current available-player CSV and run the pasted pool." }, 422);
           const report = await saveInSeasonReport(kv, lg, analyzeFaab(input, profile), me);
-          const nextState = { ...saved, ...b, dataSyncedAt: input.dataSyncedAt || saved.dataSyncedAt, dataCoverage: input.dataCoverage || saved.dataCoverage, dataSourceStatus: input.dataSourceStatus || saved.dataSourceStatus, dataSyncError: input.dataSyncError || "", updatedAt: Date.now() };
+          const nextState = { ...saved, ...b, remainingBudget: input.remainingBudget, competitorBudgets: input.competitorBudgets || saved.competitorBudgets || [], dataSyncedAt: input.dataSyncedAt || saved.dataSyncedAt, dataCoverage: input.dataCoverage || saved.dataCoverage, dataFreshness: input.dataFreshness || saved.dataFreshness, dataSourceStatus: input.dataSourceStatus || saved.dataSourceStatus, dataSyncError: input.dataSyncError || "", updatedAt: Date.now() };
           delete nextState.syncYahoo;
           delete nextState.syncSources;
           if (input.roster) nextState.roster = input.roster;
@@ -2046,8 +2407,9 @@ var worker_default = {
   },
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => {
+      const scheduledDate = new Date(event.scheduledTime || Date.now());
       await runScheduledLeagueRefresh(env);
-      await runScheduledFaab(env);
+      await runScheduledFaab(env, scheduledDate);
     })());
   }
 };

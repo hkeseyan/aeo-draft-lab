@@ -65,13 +65,16 @@ assert.deepEqual(fantasyProsSnapshot.lineup.starters, ['Josh Allen']);
 const report = analyzeFaab(input, profile);
 const byName = Object.fromEntries(report.recommendations.map((p) => [p.name, p]));
 
-assert.equal(report.calibrationVersion, 'off-with-their-heads-2025-plus-2026-09-16');
+assert.equal(report.calibrationVersion, 'off-with-their-heads-through-2026-09-30-v2');
 assert.equal(byName['Puka Nacua'].tier, 'elite');
 assert.ok(byName['Puka Nacua'].projectedWinningBid >= 300);
 assert.ok(byName['Puka Nacua'].recommendedBid < byName['Puka Nacua'].projectedWinningBid);
 assert.ok(byName['Malik Nabers'].projectedWinningBid >= 150 && byName['Malik Nabers'].projectedWinningBid <= 220);
 assert.ok(byName['Emeka Egbuka'].projectedWinningBid >= 45 && byName['Emeka Egbuka'].projectedWinningBid <= 70);
 assert.ok(byName['Tucker Kraft'].projectedWinningBid >= 15 && byName['Tucker Kraft'].projectedWinningBid <= 30);
+assert.equal(byName['Puka Nacua'].competitiveMarketBid, 350);
+assert.equal(byName['Puka Nacua'].outlierWinningBid, 400);
+assert.ok(byName['Puka Nacua'].historicalMarket.sampleSize >= 1);
 assert.ok(byName['Puka Nacua'].lineupUpgrade > byName['Emeka Egbuka'].lineupUpgrade);
 assert.ok(byName['Tucker Kraft'].lineupUpgrade < byName['Emeka Egbuka'].lineupUpgrade);
 
@@ -99,5 +102,24 @@ assert.deepEqual(report.recommendations.map(p => p.claimOrder), report.recommend
 const twelve = analyzeFaab({ ...input, teamsAlive: 12 }, { ...profile, teams: 12 });
 const twelvePuka = twelve.recommendations.find((p) => p.name === 'Puka Nacua');
 assert.ok(twelvePuka.projectedWinningBid < byName['Puka Nacua'].projectedWinningBid);
+
+const managed = analyzeFaab({
+  ...input,
+  remainingBudget: 699,
+  competitorBudgets: [{ name: 'Me', faabBalance: 699, mine: true }, { name: 'Rival A', faabBalance: 225 }, { name: 'Rival B', faabBalance: 180 }],
+  playerOverridesCsv: `name,suggested_bid,max_bid,drop_first,drop_second,secondary_multiplier,decision,notes
+Puka Nacua,250,266,Tate,Sutton,0.5,,endgame lock without emptying the bank
+Tucker Kraft,0,0,,,,pass,already strong at tight end`
+}, profile);
+const managedByName = Object.fromEntries(managed.recommendations.map((p) => [p.name, p]));
+assert.equal(managedByName['Puka Nacua'].recommendedBid, 250);
+assert.equal(managedByName['Puka Nacua'].stretchBid, 266);
+assert.equal(managedByName['Puka Nacua'].suggestedDrop, 'Tate');
+assert.equal(managedByName['Puka Nacua'].backupDrop, 'Sutton');
+assert.equal(managedByName['Puka Nacua'].backupBid, 125);
+assert.equal(managedByName['Puka Nacua'].projectedWinningBid, 226);
+assert.equal(managedByName['Tucker Kraft'].recommendedBid, 0);
+assert.equal(managedByName['Tucker Kraft'].stretchBid, 0);
+assert.equal(managed.competitorBudgetSummary.max, 225);
 
 console.log('FAAB engine tests passed');
