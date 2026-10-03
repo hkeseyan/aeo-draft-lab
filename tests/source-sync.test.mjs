@@ -108,6 +108,18 @@ assert.equal(ticketList[0].zeroBidAllowed, true);
 assert.equal(ticketList[0].claimOrderRule, 'bid_descending');
 assert.equal(ticketList[0].bidOrderLocked, true);
 
+response = await worker.fetch(new Request(`https://draft.test/api/inseason/calibration?league=${leagueId}`, {
+  method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    historyCsv: 'date,week,team_count,player,pos,tier,winning_bid,losing_bids,winning_manager,notes\n2026-10-07,5,18,Example Runner,RB,starter,44,31|22,Rival,complete stack'
+  })
+}), env, {});
+assert.equal(response.status, 200);
+assert.equal((await response.json()).customCount, 1);
+response = await worker.fetch(new Request(`https://draft.test/api/inseason/calibration?league=${leagueId}`), env, {});
+const calibration = await response.json();
+assert.equal(calibration.baselineCount, 22);
+assert.equal(calibration.custom[0].competitiveBid, 31);
+
 response = await worker.fetch(new Request(`https://draft.test/api/inseason/tickets/${encodeURIComponent(draftedTicket.id)}?league=${leagueId}`, {
   method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'submitted' })
 }), env, {});
