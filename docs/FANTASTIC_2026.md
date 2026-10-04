@@ -57,7 +57,7 @@ On first load, all finalized keepers are assigned automatically. When the app en
 
 # 2026 post-draft tendencies
 
-Status: **final post-draft calibration**. Raw results are preserved in `docs/fantastic-2026-auction-results.tsv`.
+Status: **final post-draft calibration**. Raw **live-auction** results (picks 1-118) are preserved in `docs/fantastic-2026-auction-results.tsv`; the finalized keeper snapshot remains in the app profile and the pre-draft sections above.
 
 ## Reconciliation
 
