@@ -392,6 +392,7 @@
         <label class="small">Starting FAAB $<input id="faabStartingBudget" type="number" min="1" value="1000" style="width:80px"></label>
         <label class="small">Remaining $<input id="faabRemainingBudget" type="number" min="0" value="1000" style="width:80px"></label>
         <label class="small">Teams alive <input id="faabTeamsAlive" type="number" min="2" max="32" value="18" style="width:65px" title="Used by the guillotine bid model; leave at full league size for non-guillotine leagues."></label>
+        <label class="small">Open roster spots <input id="faabOpenRosterSpots" type="number" min="0" max="20" value="0" style="width:60px" title="Count only spots that require no drop after your planned cuts. Used to separate worthwhile $0 claims from passes."></label>
         <label class="small">Discipline <select id="faabAggression"><option value="0.65">Conservative</option><option value="0.8" selected>Balanced</option><option value="0.95">Aggressive</option></select></label>
       </div>
       <div class="row" style="margin-top:8px">
@@ -429,7 +430,7 @@
     </div>
     <div class="card">
       <h2>League data sources</h2>
-      <p class="small muted">One normalized league snapshot powers FAAB now and is the foundation for future lineup, waiver, trade, and roster tools. Yahoo is the authoritative source for ownership and newly dropped players. FantasyPros MyPlaybook supplies a fallback roster plus weekly projections, injuries, opponents, ECR, and schedule context. If neither source returns a current waiver pool, Draft Lab keeps the last good pool instead of replacing it with an empty result.</p>
+      <p class="small muted">One normalized league snapshot powers FAAB now and is the foundation for future lineup, waiver, trade, and roster tools. Yahoo is the authoritative source for ownership and newly dropped players. FantasyPros MyPlaybook supplies the roster plus its weekly projections, injuries, opponents, ECR, and schedule context; its matchup feed does not enrich every Yahoo waiver player. When an available player lacks projection/ECR, Draft Lab shows a low-confidence Yahoo-ownership fallback instead of silently treating him as a zero-point player. If neither source returns a current waiver pool, Draft Lab keeps the last good pool instead of replacing it with an empty result.</p>
       <div class="row">
         <label class="small"><input id="faabYahooEnabled" type="checkbox" checked> use Yahoo</label>
         <label class="small"><input id="faabFantasyProsEnabled" type="checkbox" checked> use FantasyPros fallback</label>
@@ -5953,6 +5954,7 @@ function faabStateFromForm(){return {
   startingBudget:+el('faabStartingBudget').value||1000,
   remainingBudget:+el('faabRemainingBudget').value||0,
   teamsAlive:+el('faabTeamsAlive').value||LEAGUE.teams||12,
+  openRosterSpots:Math.max(0,+el('faabOpenRosterSpots').value||0),
   initialTeams:LEAGUE.teams||12,
   aggression:+el('faabAggression').value||0.8,
   rosterCsv:el('faabRosterCsv').value,
@@ -5984,6 +5986,7 @@ function applyFaabState(s={}){
   el('faabStartingBudget').value=s.startingBudget||1000;
   el('faabRemainingBudget').value=s.remainingBudget==null?(s.startingBudget||1000):s.remainingBudget;
   el('faabTeamsAlive').value=s.teamsAlive||LEAGUE.teams||12;
+  el('faabOpenRosterSpots').value=Math.max(0,+s.openRosterSpots||0);
   el('faabAggression').value=String(s.aggression||0.8);
   el('faabScheduleEnabled').checked=s.scheduleEnabled!==false;
   el('faabEmailEnabled').checked=!!s.emailEnabled;
@@ -6107,8 +6110,8 @@ function renderFaabReport(report){
   el('faabReportMeta').textContent=showFaab?`Week ${report.week} · ${report.teamsAlive} alive · $${report.remainingBudget} left · ${new Date(report.createdAt).toLocaleString()}`:`Week ${report.week} · claim route: ${(el('waiverMethod').value||'unknown').replace(/_/g,' ')} · ${new Date(report.createdAt).toLocaleString()}`;
   const body=el('faabResults'),rows=waiverReviewRows(report);
   body.innerHTML=rows.map((p)=>{const key=waiverReviewKey(report,p),fb=WAIVER_REVIEW_FEEDBACK[key]||'';return `<tr>
-    <td><b>${faabEsc(p.name)}</b><div class="small muted">${faabEsc(p.team)} · ${faabEsc(p.pos)} · ${faabEsc(p.tier)}${p.discoveryRank?' · discovery #'+p.discoveryRank:''}</div><div class="small muted">${p.rosterPct!=null?p.rosterPct.toFixed(1)+'% rostered':'roster % —'}${p.rosterTrend!=null?' · '+(p.trendMetric==='adds'?Math.round(p.rosterTrend)+' adds':(p.rosterTrend>=0?'+':'')+p.rosterTrend.toFixed(1)+' own. trend'):''}${p.trendSource?' · '+faabEsc(p.trendSource):''}${p.trendWindowHours?' / '+p.trendWindowHours+'h':''}</div><div class="small ${showFaab?(p.marketReachable?'faab-good':'faab-pass'):'muted'}">${showFaab?(p.marketReachable?'Market is within your ceiling':'Disciplined pass at projected market'):'Candidate for manual claim review'}</div></td>
-    <td><b>${p.adjustedWeekProjection} pts</b><div class="small muted">lineup upgrade +${p.lineupUpgrade}${p.lineupDisplaced?' · lineup displaced '+faabEsc(p.lineupDisplaced):''}</div><div class="small muted">${p.suggestedDrop?'drop '+faabEsc(p.suggestedDrop)+' ('+faabEsc(p.suggestedDropClass||'')+')':'drop unresolved'}${p.backupDrop?' · backup $'+p.backupBid+' dropping '+faabEsc(p.backupDrop):''} · ROS rank ${p.rosRank<999?p.rosRank:'—'} · endgame ${Math.round(p.endgame*100)}%</div></td>
+    <td><b>${faabEsc(p.name)}</b><div class="small muted">${faabEsc(p.team)} · ${faabEsc(p.pos)} · ${faabEsc(p.tier)}${p.discoveryRank?' · discovery #'+p.discoveryRank:''}</div><div class="small muted">${p.rosterPct!=null?p.rosterPct.toFixed(1)+'% rostered':'roster % —'}${p.rosterTrend!=null?' · '+(p.trendMetric==='adds'?Math.round(p.rosterTrend)+' adds':(p.rosterTrend>=0?'+':'')+p.rosterTrend.toFixed(1)+' own. trend'):''}${p.trendSource?' · '+faabEsc(p.trendSource):''}${p.trendWindowHours?' / '+p.trendWindowHours+'h':''}</div><div class="small ${p.claimAction==='bid'?'faab-good':'faab-pass'}">${p.claimAction==='zero_claim'?'Worthwhile $0 claim':p.claimAction==='pass'?'Pass — leave as a free agent':showFaab?(p.marketReachable?'Bid — market is within your ceiling':'Bid only at your disciplined price'):'Candidate for manual claim review'}</div></td>
+    <td><b>${p.adjustedWeekProjection} pts</b><div class="small muted">lineup upgrade +${p.lineupUpgrade}${p.lineupDisplaced?' · lineup displaced '+faabEsc(p.lineupDisplaced):''}</div><div class="small muted">${p.suggestedDrop?'drop '+faabEsc(p.suggestedDrop)+' ('+faabEsc(p.suggestedDropClass||'')+')':'drop unresolved'}${p.backupDrop?' · backup $'+p.backupBid+' dropping '+faabEsc(p.backupDrop):''} · ROS rank ${p.rosRank<999?p.rosRank:'—'} · endgame ${Math.round(p.endgame*100)}%</div>${p.weekProjectionSource==='ownership proxy'||p.rosRankSource==='ownership proxy'?'<div class="small faab-pass">Fallback estimate from Yahoo ownership — verify projection/ECR</div>':''}</td>
     <td>${showFaab?`<div class="faab-metrics"><div class="faab-metric"><span class="small muted">Suggested</span><b>$${p.recommendedBid}</b></div><div class="faab-metric"><span class="small muted">Competitive</span><b>$${p.competitiveMarketBid}</b></div><div class="faab-metric"><span class="small muted">Projected win</span><b>$${p.projectedWinningBid}</b></div><div class="faab-metric"><span class="small muted">Outlier win</span><b>$${p.outlierWinningBid}</b></div><div class="faab-metric"><span class="small muted">Stretch max</span><b>$${p.stretchBid}</b></div></div><div class="small muted" style="margin-top:4px">Independent fair value: $${p.fairBid}${p.historicalMarket&&p.historicalMarket.sampleSize?' · history: '+faabEsc(p.historicalMarket.match):''}</div>`:`<div class="small muted">No FAAB bid applied. Confirm the host’s claim route before submission.</div>`}</td>
     <td class="small">${(p.reasons||[]).map(faabEsc).join(' · ')}${p.managerNotes?'<div class="muted" style="margin-top:4px">Manager: '+faabEsc(p.managerNotes)+'</div>':''}${p.notes?'<div class="muted" style="margin-top:4px">'+faabEsc(p.notes)+'</div>':''}</td>
     <td><button class="btn ghost" data-create-ticket="${p._reportIndex}">Create ticket</button><div style="margin-top:6px"><select class="small" data-waiver-feedback="${faabEsc(key)}"><option value="">No verdict</option><option value="agree" ${fb==='agree'?'selected':''}>Agree</option><option value="too_high" ${fb==='too_high'?'selected':''}>Too high</option><option value="too_low" ${fb==='too_low'?'selected':''}>Too low</option><option value="wrong_drop" ${fb==='wrong_drop'?'selected':''}>Wrong drop</option><option value="would_not_claim" ${fb==='would_not_claim'?'selected':''}>Would not claim</option><option value="needs_context" ${fb==='needs_context'?'selected':''}>Needs more context</option></select></div></td>

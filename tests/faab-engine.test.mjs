@@ -162,4 +162,65 @@ assert.ok(weekFiveByName['Tyler Allgeier'].projectedWinningBid < 30);
 assert.ok(weekFiveByName['MarShawn Lloyd'].projectedWinningBid < 30);
 assert.notEqual(weekFiveByName['Jahmyr Gibbs'].competitiveMarketBid, weekFiveByName['Tyler Allgeier'].competitiveMarketBid);
 
+// Yahoo supplies availability and ownership but not weekly projections/ECR for
+// the wire. Missing values must not turn an obviously valuable, highly-owned
+// player into a $0 market asset or a zero-point lineup impact. The explicit
+// current FantasyPros rows below also pin the user's Week 5 calibration.
+const upperStarter = analyzeFaab({
+  week: 5,
+  startingBudget: 1000,
+  remainingBudget: 699,
+  teamsAlive: 12,
+  initialTeams: 18,
+  aggression: 0.8,
+  zeroBidAllowed: true,
+  openRosterSpots: 2,
+  rosterCsv: `name,pos,team,week_proj,ros_rank,drop_class
+Josh Allen,QB,BUF,22.9,1,protected
+Saquon Barkley,RB,PHI,13.4,15,protected
+Aaron Jones Sr.,RB,MIN,10.1,27,protected
+Tony Pollard,RB,TEN,8.9,31,replaceable
+Davante Adams,WR,LAR,13.1,18,protected
+Jameson Williams,WR,DET,10.21,27,conditional
+Emeka Egbuka,WR,TB,8.7,29,conditional
+Tyler Warren,TE,IND,10.4,4,protected
+Tucker Kraft,TE,GB,9.4,8,protected`,
+  availableCsv: `name,pos,team,roster_pct,week_proj,ros_rank,status
+Garrett Wilson,WR,NYJ,99.1,11.65,17,
+Ladd McConkey,WR,LAC,97.0,7.78,30,Q
+Matthew Golden,WR,GB,88.0,10.2,22,
+Jordan Addison,WR,MIN,72.0,8.47,41,
+Braelon Allen,RB,NYJ,45.0,8.15,38,
+KC Concepcion Jr.,WR,CLE,31.0,7.71,40,
+Jonathon Brooks,RB,CAR,22.0,0,61,IR
+Hunter Henry,TE,NE,61.0,5.8,21,`
+}, profile);
+const upperByName = Object.fromEntries(upperStarter.recommendations.map((p) => [p.name, p]));
+assert.ok(upperByName['Garrett Wilson'].lineupUpgrade >= 2.5);
+assert.ok(upperByName['Garrett Wilson'].recommendedBid >= 35 && upperByName['Garrett Wilson'].recommendedBid <= 65);
+assert.ok(upperByName['Garrett Wilson'].competitiveMarketBid >= 80 && upperByName['Garrett Wilson'].competitiveMarketBid <= 135);
+assert.ok(upperByName['Garrett Wilson'].projectedWinningBid >= 100 && upperByName['Garrett Wilson'].projectedWinningBid <= 150);
+assert.ok(upperByName['Garrett Wilson'].outlierWinningBid >= 200);
+assert.ok(upperByName['Ladd McConkey'].recommendedBid <= 8);
+assert.ok(upperByName['Matthew Golden'].recommendedBid >= 10 && upperByName['Matthew Golden'].recommendedBid <= 25);
+assert.ok(upperByName['Jordan Addison'].recommendedBid <= 6);
+assert.ok(upperByName['Braelon Allen'].recommendedBid <= 6);
+assert.equal(upperByName['Jonathon Brooks'].claimAction, 'pass');
+assert.equal(upperByName['Hunter Henry'].claimAction, 'pass');
+assert.equal(upperByName['KC Concepcion Jr.'].claimAction, 'zero_claim');
+
+const yahooOnlyGarrett = analyzeFaab({
+  week: 5, startingBudget: 1000, remainingBudget: 699, teamsAlive: 12, initialTeams: 18,
+  rosterCsv: upperStarter.recommendations.length ? `name,pos,week_proj,ros_rank
+Davante Adams,WR,13.1,18
+Jameson Williams,WR,10.21,27
+Emeka Egbuka,WR,8.7,29` : '',
+  availableCsv: `name,pos,team,roster_pct
+Garrett Wilson,WR,NYJ,99.1`
+}, { ...profile, playersCsv: '' }).recommendations[0];
+assert.ok(yahooOnlyGarrett.weekProjection > 10);
+assert.ok(yahooOnlyGarrett.rosRank < 25);
+assert.ok(yahooOnlyGarrett.lineupUpgrade > 0);
+assert.equal(yahooOnlyGarrett.weekProjectionSource, 'ownership proxy');
+
 console.log('FAAB engine tests passed');

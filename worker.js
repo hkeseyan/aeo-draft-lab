@@ -346,6 +346,27 @@ function playerPoolMap(profile) {
   return map;
 }
 __name(playerPoolMap, "playerPoolMap");
+function inferredRosRankFromOwnership(pos, rosterPct) {
+  if (rosterPct == null || rosterPct < 20) return null;
+  const positionOffset = pos === "QB" || pos === "TE" ? 8 : 16;
+  const positionSlope = pos === "QB" || pos === "TE" ? 0.9 : 1.55;
+  return Math.max(1, Math.round(positionOffset + (99 - rosterPct) * positionSlope));
+}
+__name(inferredRosRankFromOwnership, "inferredRosRankFromOwnership");
+function inferredWeekProjection(pos, rank) {
+  if (!Number.isFinite(rank) || rank >= 999) return 0;
+  const curves = {
+    QB: [23, 0.35, 8],
+    RB: [18, 0.27, 2],
+    WR: [16, 0.21, 2],
+    TE: [14, 0.28, 2],
+    K: [9, 0.08, 4],
+    DST: [9, 0.08, 4]
+  };
+  const [ceiling, slope, floor] = curves[pos] || curves.WR;
+  return Number(Math.max(floor, ceiling - (rank - 1) * slope).toFixed(2));
+}
+__name(inferredWeekProjection, "inferredWeekProjection");
 function normalizeDropClass(value, pos = "") {
   const raw = String(value || "").trim().toLowerCase().replace(/[ -]+/g, "_");
   if (["dead", "drop", "drop_now", "outright"].includes(raw)) return "dead";
@@ -360,16 +381,23 @@ function normalizeFaabPlayer(raw, pool, currentWeek) {
   const named = String(raw.name || raw.player || "").trim();
   const base = pool.get(named.toLowerCase()) || {};
   const pos = String(raw.pos || raw.position || base.pos || "").toUpperCase();
-  const rank = n(raw.ros_rank || raw.rank || raw.ecr, base.rosRank || 999);
+  const rosterPctRaw = raw.roster_pct ?? raw.roster_percent ?? raw.percent_owned ?? raw.ownership_pct;
+  const rosterPct = rosterPctRaw === "" || rosterPctRaw == null ? null : clamp(n(rosterPctRaw, 0), 0, 100);
+  const explicitRank = raw.ros_rank ?? raw.rank ?? raw.ecr;
+  const hasExplicitRank = explicitRank !== "" && explicitRank != null;
+  const hasPoolRank = base.rosRank < 999;
+  const ownershipRank = inferredRosRankFromOwnership(pos, rosterPct);
+  const rank = hasExplicitRank ? n(explicitRank, 999) : hasPoolRank ? base.rosRank : ownershipRank || 999;
   const seasonProjection = n(raw.season_projection || raw.proj, base.seasonProjection || 0);
-  const weekProjection = n(raw.week_proj || raw.week_projection, base.weekProjection || (seasonProjection ? seasonProjection / 17 : 0));
+  const explicitWeek = raw.week_proj ?? raw.week_projection;
+  const hasExplicitWeek = explicitWeek !== "" && explicitWeek != null;
+  const pooledWeek = base.weekProjection || (seasonProjection ? seasonProjection / 17 : 0);
+  const weekProjection = hasExplicitWeek ? n(explicitWeek, 0) : pooledWeek || inferredWeekProjection(pos, rank);
   const status = String(raw.status || "").toUpperCase();
   const rosterSlot = String(raw.roster_slot || raw.selected_position || "").toUpperCase();
   const byeWeek = n(raw.bye_week || raw.bye, 0);
   const unavailable = status === "O" || status === "IR" || status === "SUSP" || status === "NA" || byeWeek === currentWeek;
   const injuryRisk = raw.injury === "" || raw.injury == null ? status === "Q" || status === "D" ? 0.45 : unavailable ? 1 : 0.08 : ratio(raw.injury);
-  const rosterPctRaw = raw.roster_pct ?? raw.roster_percent ?? raw.percent_owned ?? raw.ownership_pct;
-  const rosterPct = rosterPctRaw === "" || rosterPctRaw == null ? null : clamp(n(rosterPctRaw, 0), 0, 100);
   const trendRaw = raw.roster_trend ?? raw.trend ?? raw.adds ?? raw.add_count ?? raw.percent_change ?? raw.roster_pct_delta;
   const rosterTrend = trendRaw === "" || trendRaw == null ? null : n(trendRaw, 0);
   const trendMetric = String(raw.trend_metric || (raw.adds !== "" && raw.adds != null ? "adds" : raw.add_count !== "" && raw.add_count != null ? "adds" : raw.percent_change !== "" && raw.percent_change != null ? "roster_pct_delta" : raw.roster_pct_delta !== "" && raw.roster_pct_delta != null ? "roster_pct_delta" : "")).trim().toLowerCase();
@@ -384,6 +412,8 @@ function normalizeFaabPlayer(raw, pool, currentWeek) {
     team: String(raw.team || base.team || "").toUpperCase(),
     rosRank: rank,
     weekProjection,
+    rosRankSource: hasExplicitRank ? "supplied" : hasPoolRank ? "player pool" : ownershipRank ? "ownership proxy" : "missing",
+    weekProjectionSource: hasExplicitWeek ? "supplied" : pooledWeek ? "player pool" : weekProjection ? "ownership proxy" : "missing",
     endgame: raw.endgame === "" || raw.endgame == null ? derivedEndgame : ratio(raw.endgame),
     role: raw.role === "" || raw.role == null ? 0.75 : ratio(raw.role),
     schedule: clamp(n(raw.schedule || raw.schedule_grade, 3), 1, 5),
@@ -450,17 +480,18 @@ function marketQualityFactor(player, tier) {
     if (player.rosRank <= 6 || player.endgame >= 0.85) return 1.06;
   }
   if (tier === "core" && (player.rosRank <= 10 || player.endgame >= 0.75)) return 1.04;
+  if (tier === "core" && player.rosRank > 12 && player.endgame < 0.65) return 0.7;
   if (tier === "starter" && player.rosRank > 35) return 0.9;
   return 1;
 }
 __name(marketQualityFactor, "marketQualityFactor");
 function tierFor(player, upgrade) {
   if ((player.pos === "RB" || player.pos === "WR") && (player.endgame >= 0.85 || player.rosRank <= 5)) return "elite";
-  if ((player.pos === "RB" || player.pos === "WR") && (player.endgame >= 0.65 || player.rosRank <= 12)) return "core";
+  if ((player.pos === "RB" || player.pos === "WR") && (player.endgame >= 0.65 || player.rosRank <= 20)) return "core";
   // Market tier is a property of the player, not this particular roster. A
   // replacement-level player can improve an incomplete lineup without
   // suddenly acquiring a starter-tier league-wide clearing price.
-  if (player.rosRank <= 40 || player.endgame >= 0.4 || player.role >= 0.8 && player.rosRank < 60) return "starter";
+  if (player.rosRank <= 50 || player.endgame >= 0.4 || player.role >= 0.8 && player.rosRank < 60) return "starter";
   return "depth";
 }
 __name(tierFor, "tierFor");
@@ -496,6 +527,7 @@ function analyzeFaab(input, profile = {}) {
   const remainingBudget = clamp(n(input.remainingBudget || input.remaining_budget, startingBudget), 0, startingBudget);
   const teamsAlive = Math.max(2, n(input.teamsAlive || input.teams_alive, profile.teams || 18));
   const initialTeams = Math.max(teamsAlive, n(input.initialTeams || input.initial_teams, profile.teams || teamsAlive));
+  const openRosterSpots = Math.max(0, n(input.openRosterSpots ?? input.open_roster_spots, 0));
   const aggression = clamp(n(input.aggression, 0.8), 0.4, 1.1);
   const historyRows = calibrationRows(input);
   const overrides = managerOverrides(input);
@@ -539,8 +571,9 @@ function analyzeFaab(input, profile = {}) {
     const historyWeight = samePlayerHistory ? Math.min(0.85, 0.65 + historicalMarket.sampleSize * 0.05) : Math.min(0.4, 0.1 + historicalMarket.sampleSize * 0.08);
     const competitiveBase = baseMarketBid * 0.95;
     let competitiveMarketBid = samePlayerHistory ? Math.round(historicalMarket.competitiveBid * budgetPressure) : historicalMarket.sampleSize ? Math.round((competitiveBase * (1 - historyWeight) + historicalMarket.competitiveBid * historyWeight) * budgetPressure) : Math.round(competitiveBase * budgetPressure);
-    let projectedWinningBid = Math.max(0, Math.round((historicalMarket.sampleSize ? baseMarketBid * (1 - historyWeight) + historicalExpected * historyWeight : baseMarketBid) * budgetPressure));
-    let outlierWinningBid = samePlayerHistory ? Math.max(projectedWinningBid, Math.round(historicalMarket.winningBid * budgetPressure)) : Math.max(Math.round(projectedWinningBid * 1.28), historicalMarket.sampleSize ? Math.round(historicalMarket.winningBid * budgetPressure) : 0);
+    let projectedWinningBid = Math.max(0, Math.round((samePlayerHistory ? historicalExpected : historicalMarket.sampleSize ? baseMarketBid * (1 - historyWeight) + historicalExpected * historyWeight : baseMarketBid) * budgetPressure));
+    const outlierMultiplier = tier === "core" ? 1.7 : tier === "elite" ? 1.4 : 1.28;
+    let outlierWinningBid = samePlayerHistory ? Math.max(projectedWinningBid, Math.round(historicalMarket.winningBid * budgetPressure)) : Math.max(Math.round(projectedWinningBid * outlierMultiplier), historicalMarket.sampleSize ? Math.round(historicalMarket.winningBid * budgetPressure) : 0);
     if (competitorMax != null) {
       const beatMax = Math.max(0, Math.min(startingBudget, competitorMax + 1));
       projectedWinningBid = Math.min(projectedWinningBid, beatMax);
@@ -548,14 +581,22 @@ function analyzeFaab(input, profile = {}) {
       outlierWinningBid = Math.min(outlierWinningBid, beatMax);
     }
     let utilityMultiplier = 0.2 + 0.6 * need + 0.25 * p.endgame + 0.12 * immediate + 0.06 * scarcity + 0.05 * p.teammateOpportunity;
+    if (upgrade < 0.25) utilityMultiplier *= tier === "elite" ? 0.75 : tier === "core" ? 0.6 : tier === "starter" ? 0.35 : 0.2;
     if (upgrade < 0.25 && adjustedWeek < 3) utilityMultiplier *= 0.35;
     let rawFair = Math.min(maxShareFor(p, tier, initialTeams), marketShare * utilityMultiplier) * remainingBudget * aggression * managerByeFactor;
     if (upgrade < 0.25 && p.endgame < 0.4 && adjustedWeek < 3) rawFair = Math.min(rawFair, input.zeroBidAllowed ? 0 : 1);
+    const samePositionCount = roster.filter((player) => player.pos === p.pos).length;
+    const blockedByRosterDepth = upgrade < 0.25 && (p.pos === "TE" && samePositionCount >= 2 && p.rosRank > 12 || p.pos === "QB" && samePositionCount >= 1 && p.rosRank > 10);
+    const lowPrioritySpeculation = upgrade < 0.25 && p.rosterPct != null && p.rosterPct < 40 && p.rosRank >= 35;
+    if (blockedByRosterDepth || lowPrioritySpeculation) rawFair = 0;
     const fairBid = Math.max(0, Math.round(rawFair));
     const chaseThreshold = tier === "elite" ? 1.15 : tier === "core" ? 1.2 : 1.6;
     const marketReachable = projectedWinningBid + 1 <= fairBid * chaseThreshold;
     let recommendedBid = Math.min(remainingBudget, Math.max(0, Math.round(marketReachable ? Math.max(fairBid, projectedWinningBid + 1) : fairBid)));
     let stretchBid = Math.min(remainingBudget, Math.max(recommendedBid, Math.round(marketReachable ? Math.max(fairBid * 1.2, projectedWinningBid + (tier === "starter" ? 3 : 1)) : fairBid * 1.15)));
+    if (!blockedByRosterDepth && !lowPrioritySpeculation && tier === "starter" && upgrade < 0.25 && adjustedWeek >= 5) {
+      stretchBid = Math.min(remainingBudget, Math.max(stretchBid, Math.round(projectedWinningBid * 0.2)));
+    }
     if (manager.targetBid != null) {
       recommendedBid = Math.min(remainingBudget, manager.targetBid);
       stretchBid = Math.max(stretchBid, recommendedBid);
@@ -566,6 +607,8 @@ function analyzeFaab(input, profile = {}) {
     }
     const managerPass = ["pass", "exclude", "no_bid", "no bid"].includes(manager.decision);
     if (managerPass) recommendedBid = stretchBid = 0;
+    const viableFreeClaim = p.pos === "RB" || p.pos === "WR" ? p.rosRank <= 60 : p.pos === "TE" || p.pos === "QB" ? p.rosRank <= 15 : false;
+    const claimAction = managerPass ? "pass" : recommendedBid > 0 ? "bid" : input.zeroBidAllowed && openRosterSpots > 0 && viableFreeClaim ? "zero_claim" : "pass";
     const backupBid = manager.secondaryDrop ? Math.min(stretchBid, Math.round(recommendedBid * manager.secondaryMultiplier)) : null;
     const reasons = [];
     if (p.endgame >= 0.8) reasons.push("endgame-caliber profile");
@@ -588,6 +631,8 @@ function analyzeFaab(input, profile = {}) {
     if (manager.maxBid != null) reasons.push(`manager ceiling applied at $${manager.maxBid}`);
     if (manager.targetBid != null) reasons.push(`manager target applied at $${manager.targetBid}`);
     if (managerPass) reasons.push("manager marked this player as a pass");
+    else if (claimAction === "zero_claim") reasons.push(`worth a $0 speculative claim with ${openRosterSpots} open roster spot${openRosterSpots === 1 ? "" : "s"}`);
+    else if (claimAction === "pass" && recommendedBid === 0) reasons.push("leave unclaimed; not worth using a roster spot even at $0");
     if (!marketReachable) reasons.push("projected market exceeds this roster's disciplined price");
     return {
       ...p,
@@ -609,12 +654,13 @@ function analyzeFaab(input, profile = {}) {
       recommendedBid,
       stretchBid,
       marketReachable,
+      claimAction,
       reasons,
       managerNotes: manager.notes || "",
       managerOverrideApplied: Boolean(manager.targetBid != null || manager.maxBid != null || manager.primaryDrop || manager.secondaryDrop || manager.decision || manager.notes),
-      confidence: p.weekProjection && p.rosRank < 999 ? "medium" : "low"
+      confidence: p.weekProjection && p.rosRank < 999 && p.weekProjectionSource !== "ownership proxy" ? "medium" : "low"
     };
-  }).sort((a, b) => b.recommendedBid - a.recommendedBid || b.lineupUpgrade - a.lineupUpgrade);
+  }).sort((a, b) => b.recommendedBid - a.recommendedBid || ({ bid: 2, zero_claim: 1, pass: 0 }[b.claimAction] - { bid: 2, zero_claim: 1, pass: 0 }[a.claimAction]) || b.lineupUpgrade - a.lineupUpgrade || a.rosRank - b.rosRank);
 
   // Market-attention is a discovery/triage layer, not player value. Trend counts
   // are normalized only against candidates with the same source + metric so we
@@ -658,6 +704,7 @@ function analyzeFaab(input, profile = {}) {
     teamsAlive,
     startingBudget,
     remainingBudget,
+    openRosterSpots,
     competitorBudgetSummary: competitorBalances.length ? { count: competitorBalances.length, median: competitorMedian, max: competitorMax, pressure: Number(budgetPressure.toFixed(2)) } : null,
     managerNotes: String(input.managerNotes || input.manager_notes || "").trim(),
     claimOrderRule: "bid_descending",
@@ -1070,7 +1117,7 @@ async function syncLeagueSnapshot(env, kv, originUrl, profile) {
     coverage: {
       roster: rosterSource,
       available: availabilitySource,
-      projections: fantasyPros ? "fantasypros" : previous.coverage && previous.coverage.projections || "embedded",
+      projections: fantasyPros ? "fantasypros roster; waiver pool falls back to embedded data or Yahoo ownership" : previous.coverage && previous.coverage.projections || "embedded / Yahoo ownership fallback",
       marketMetadata: yahoo && yahoo.marketMetadata && yahoo.marketMetadata !== "none" ? yahoo.marketMetadata : previous.coverage && previous.coverage.marketMetadata || "none",
       budgets: yahoo && yahoo.budgets && yahoo.budgets.teams.length ? "yahoo" : previous.coverage && previous.coverage.budgets || "none"
     },
