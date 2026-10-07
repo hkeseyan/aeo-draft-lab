@@ -201,8 +201,10 @@ assert.ok(upperByName['Garrett Wilson'].recommendedBid >= 35 && upperByName['Gar
 assert.ok(upperByName['Garrett Wilson'].competitiveMarketBid >= 80 && upperByName['Garrett Wilson'].competitiveMarketBid <= 135);
 assert.ok(upperByName['Garrett Wilson'].projectedWinningBid >= 100 && upperByName['Garrett Wilson'].projectedWinningBid <= 150);
 assert.ok(upperByName['Garrett Wilson'].outlierWinningBid >= 200);
+assert.ok(upperByName['Garrett Wilson'].stretchBid >= 65 && upperByName['Garrett Wilson'].stretchBid <= 75);
 assert.ok(upperByName['Ladd McConkey'].recommendedBid <= 8);
 assert.ok(upperByName['Matthew Golden'].recommendedBid >= 10 && upperByName['Matthew Golden'].recommendedBid <= 25);
+assert.ok(upperByName['Matthew Golden'].stretchBid >= 40 && upperByName['Matthew Golden'].stretchBid <= 50);
 assert.ok(upperByName['Jordan Addison'].recommendedBid <= 6);
 assert.ok(upperByName['Braelon Allen'].recommendedBid <= 6);
 assert.equal(upperByName['Jonathon Brooks'].claimAction, 'pass');
