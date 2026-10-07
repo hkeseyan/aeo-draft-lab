@@ -290,11 +290,18 @@ function calibrationRows(input = {}) {
   });
 }
 __name(calibrationRows, "calibrationRows");
-function historicalMarketFor(player, tier, teamsAlive, startingBudget, rows) {
-  const exact = rows.filter((row) => Math.abs(row.teamCount - teamsAlive) <= 1 && row.player.toLowerCase() === player.name.toLowerCase());
-  const tierPos = rows.filter((row) => Math.abs(row.teamCount - teamsAlive) <= 1 && row.pos === player.pos && row.tier === tier);
-  const position = rows.filter((row) => Math.abs(row.teamCount - teamsAlive) <= 1 && row.pos === player.pos);
-  const matches = exact.length ? exact : tierPos.length ? tierPos : position;
+function historicalMarketFor(player, tier, initialTeams, startingBudget, rows) {
+  // League size and teams alive are different signals. An 18-team guillotine
+  // league does not become the separate 12-team market merely because six
+  // teams have been eliminated. Mixing those histories produced repeated
+  // position-wide prices that ignored the actual player tier.
+  const sameLeague = rows.filter((row) => Math.abs(row.teamCount - initialTeams) <= 1);
+  const exact = sameLeague.filter((row) => row.player.toLowerCase() === player.name.toLowerCase());
+  const tierPos = sameLeague.filter((row) => row.pos === player.pos && row.tier === tier);
+  // A broad position-only median is too coarse for guillotine bidding: an RB1
+  // and a replacement-level RB are not useful comparables. Fall back to the
+  // player model when no same-player or same-tier sample exists.
+  const matches = exact.length ? exact : tierPos;
   if (!matches.length) return { sampleSize: 0, match: "fallback", competitiveBid: null, winningBid: null, outlierRate: null };
   const normalize = (row, value) => value / row.startingBudget * startingBudget;
   const competitive = matches.map((row) => normalize(row, row.competitiveBid));
@@ -302,7 +309,7 @@ function historicalMarketFor(player, tier, teamsAlive, startingBudget, rows) {
   const outliers = matches.filter((row) => row.competitiveBid >= 0 && row.winningBid >= row.competitiveBid + Math.max(20, row.competitiveBid * 0.5)).length;
   return {
     sampleSize: matches.length,
-    match: exact.length ? "same player" : tierPos.length ? "same position and tier" : "same position",
+    match: exact.length ? "same player" : "same position and tier",
     competitiveBid: Math.round(median(competitive)),
     winningBid: Math.round(median(winning)),
     outlierRate: Number((outliers / matches.length).toFixed(2))
@@ -437,10 +444,23 @@ function marketShareFor(player, tier, teamsAlive) {
   return is12 ? lo : lo + (hi - lo) * t;
 }
 __name(marketShareFor, "marketShareFor");
+function marketQualityFactor(player, tier) {
+  if (tier === "elite") {
+    if (player.rosRank <= 3 || player.endgame >= 0.95) return 1.12;
+    if (player.rosRank <= 6 || player.endgame >= 0.85) return 1.06;
+  }
+  if (tier === "core" && (player.rosRank <= 10 || player.endgame >= 0.75)) return 1.04;
+  if (tier === "starter" && player.rosRank > 35) return 0.9;
+  return 1;
+}
+__name(marketQualityFactor, "marketQualityFactor");
 function tierFor(player, upgrade) {
   if ((player.pos === "RB" || player.pos === "WR") && (player.endgame >= 0.85 || player.rosRank <= 5)) return "elite";
   if ((player.pos === "RB" || player.pos === "WR") && (player.endgame >= 0.65 || player.rosRank <= 12)) return "core";
-  if (player.rosRank <= 40 || upgrade >= 0.75) return "starter";
+  // Market tier is a property of the player, not this particular roster. A
+  // replacement-level player can improve an incomplete lineup without
+  // suddenly acquiring a starter-tier league-wide clearing price.
+  if (player.rosRank <= 40 || player.endgame >= 0.4 || player.role >= 0.8 && player.rosRank < 60) return "starter";
   return "depth";
 }
 __name(tierFor, "tierFor");
@@ -505,21 +525,32 @@ function analyzeFaab(input, profile = {}) {
     const tier = tierFor(p, upgrade);
     const scarcity = clamp((teamsAlive - 10) / 10) * ({ RB: 1, WR: 0.88, TE: 0.55, QB: 0.35 }[p.pos] || 0.5);
     const phaseFactor = 0.78 + 0.22 * teamsAlive / initialTeams;
-    const marketShare = marketShareFor(p, tier, teamsAlive) * phaseFactor * (0.82 + 0.18 * p.role) * (1 + (p.schedule - 3) * 0.025) * (1 - p.injuryRisk * 0.2);
+    const weeksToBye = p.byeWeek ? p.byeWeek - currentWeek : null;
+    const marketByeFactor = weeksToBye === 0 ? 0.45 : weeksToBye === 1 ? 0.96 : 1;
+    const managerByeFactor = weeksToBye === 0 ? 0.2 : weeksToBye === 1 ? 0.85 : weeksToBye === 2 ? 0.94 : 1;
+    // Initial league size describes the bidding culture and scarcity. Teams
+    // alive affects phase and available budgets, but must not import a
+    // different league's calibration table.
+    const marketShare = marketShareFor(p, tier, initialTeams) * marketQualityFactor(p, tier) * phaseFactor * (0.82 + 0.18 * p.role) * (1 + (p.schedule - 3) * 0.025) * (1 - p.injuryRisk * 0.2) * marketByeFactor;
     const baseMarketBid = Math.max(0, Math.round(startingBudget * marketShare));
-    const historicalMarket = historicalMarketFor(p, tier, teamsAlive, startingBudget, historyRows);
+    const historicalMarket = historicalMarketFor(p, tier, initialTeams, startingBudget, historyRows);
     const historicalExpected = historicalMarket.sampleSize ? historicalMarket.competitiveBid + 0.35 * Math.max(0, historicalMarket.winningBid - historicalMarket.competitiveBid) : baseMarketBid;
-    let projectedWinningBid = Math.max(0, Math.round((historicalMarket.sampleSize ? baseMarketBid * 0.35 + historicalExpected * 0.65 : baseMarketBid) * budgetPressure));
-    let competitiveMarketBid = historicalMarket.sampleSize ? Math.round(historicalMarket.competitiveBid * budgetPressure) : Math.round(projectedWinningBid * 0.85);
-    let outlierWinningBid = historicalMarket.sampleSize ? Math.max(projectedWinningBid, Math.round(historicalMarket.winningBid * budgetPressure)) : Math.round(projectedWinningBid * 1.35);
+    const samePlayerHistory = historicalMarket.match === "same player";
+    const historyWeight = samePlayerHistory ? Math.min(0.85, 0.65 + historicalMarket.sampleSize * 0.05) : Math.min(0.4, 0.1 + historicalMarket.sampleSize * 0.08);
+    const competitiveBase = baseMarketBid * 0.95;
+    let competitiveMarketBid = samePlayerHistory ? Math.round(historicalMarket.competitiveBid * budgetPressure) : historicalMarket.sampleSize ? Math.round((competitiveBase * (1 - historyWeight) + historicalMarket.competitiveBid * historyWeight) * budgetPressure) : Math.round(competitiveBase * budgetPressure);
+    let projectedWinningBid = Math.max(0, Math.round((historicalMarket.sampleSize ? baseMarketBid * (1 - historyWeight) + historicalExpected * historyWeight : baseMarketBid) * budgetPressure));
+    let outlierWinningBid = samePlayerHistory ? Math.max(projectedWinningBid, Math.round(historicalMarket.winningBid * budgetPressure)) : Math.max(Math.round(projectedWinningBid * 1.28), historicalMarket.sampleSize ? Math.round(historicalMarket.winningBid * budgetPressure) : 0);
     if (competitorMax != null) {
       const beatMax = Math.max(0, Math.min(startingBudget, competitorMax + 1));
       projectedWinningBid = Math.min(projectedWinningBid, beatMax);
       competitiveMarketBid = Math.min(competitiveMarketBid, beatMax);
       outlierWinningBid = Math.min(outlierWinningBid, beatMax);
     }
-    const utilityMultiplier = 0.7 + 0.45 * need + 0.2 * p.endgame + 0.1 * immediate + 0.06 * scarcity + 0.05 * p.teammateOpportunity;
-    const rawFair = Math.min(maxShareFor(p, tier, teamsAlive), marketShare * utilityMultiplier) * remainingBudget * aggression;
+    let utilityMultiplier = 0.2 + 0.6 * need + 0.25 * p.endgame + 0.12 * immediate + 0.06 * scarcity + 0.05 * p.teammateOpportunity;
+    if (upgrade < 0.25 && adjustedWeek < 3) utilityMultiplier *= 0.35;
+    let rawFair = Math.min(maxShareFor(p, tier, initialTeams), marketShare * utilityMultiplier) * remainingBudget * aggression * managerByeFactor;
+    if (upgrade < 0.25 && p.endgame < 0.4 && adjustedWeek < 3) rawFair = Math.min(rawFair, input.zeroBidAllowed ? 0 : 1);
     const fairBid = Math.max(0, Math.round(rawFair));
     const chaseThreshold = tier === "elite" ? 1.15 : tier === "core" ? 1.2 : 1.6;
     const marketReachable = projectedWinningBid + 1 <= fairBid * chaseThreshold;
@@ -543,6 +574,8 @@ function analyzeFaab(input, profile = {}) {
     else if (upgrade > 0) reasons.push(`small ${upgrade.toFixed(1)}-point immediate upgrade`);
     else reasons.push("does not currently improve the optimal starting lineup");
     if (p.byeWeek === currentWeek) reasons.push("on bye this week");
+    else if (p.byeWeek === currentWeek + 1) reasons.push(`Week ${p.byeWeek} bye is a guaranteed next-week zero and lowers this roster's bid ceiling`);
+    else if (p.byeWeek === currentWeek + 2) reasons.push(`Week ${p.byeWeek} bye slightly lowers near-term roster value`);
     if (p.injuryRisk >= 0.45) reasons.push("material injury/availability risk");
     if (p.schedule >= 4) reasons.push("favorable upcoming schedule input");
     if (p.teammateOpportunity >= 0.4) reasons.push("teammate news raises opportunity");

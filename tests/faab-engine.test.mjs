@@ -122,4 +122,44 @@ assert.equal(managedByName['Tucker Kraft'].recommendedBid, 0);
 assert.equal(managedByName['Tucker Kraft'].stretchBid, 0);
 assert.equal(managed.competitorBudgetSummary.max, 225);
 
+// A shrinking 18-team guillotine league must retain its 18-team market
+// calibration. "Teams alive = 12" is season phase, not permission to import
+// the separate 12-team league's RB/WR medians. It should also distinguish an
+// elite RB from replacement-level players and treat next week's bye as a
+// roster-specific discount rather than erasing the broader market.
+const weekFive = analyzeFaab({
+  week: 5,
+  startingBudget: 1000,
+  remainingBudget: 699,
+  teamsAlive: 12,
+  initialTeams: 18,
+  aggression: 0.8,
+  zeroBidAllowed: true,
+  rosterCsv: `name,pos,team,week_proj,ros_rank,status,bye_week,roster_slot,drop_class
+Josh Allen,QB,BUF,22.9,1,,7,QB,protected
+Saquon Barkley,RB,PHI,13.4,16,,10,RB,protected
+Tony Pollard,RB,TEN,8.8,29,,9,RB,replaceable
+Emeka Egbuka,WR,TB,8.5,33,,10,WR,conditional
+Davante Adams,WR,LAR,13,13,,11,WR,protected
+Jameson Williams,WR,DET,9.9,26,,6,FLEX,conditional`,
+  availableCsv: `name,pos,team,week_proj,ros_rank,endgame,role,schedule,injury,bye_week,status
+Jahmyr Gibbs,RB,DET,19.3,1,100,100,3,8,6,W
+Ladd McConkey,WR,LAC,0,28,35,70,3,60,7,W
+J.K. Dobbins,RB,DEN,0,80,10,30,3,100,10,W
+Tyler Allgeier,RB,ARI,4,55,15,45,3,8,14,W
+MarShawn Lloyd,RB,GB,3,65,10,35,3,20,11,W`
+}, profile);
+const weekFiveByName = Object.fromEntries(weekFive.recommendations.map((p) => [p.name, p]));
+assert.ok(weekFiveByName['Jahmyr Gibbs'].competitiveMarketBid >= 280);
+assert.ok(weekFiveByName['Jahmyr Gibbs'].projectedWinningBid >= 300);
+assert.ok(weekFiveByName['Jahmyr Gibbs'].outlierWinningBid >= 375);
+assert.ok(weekFiveByName['Jahmyr Gibbs'].recommendedBid >= 150 && weekFiveByName['Jahmyr Gibbs'].recommendedBid <= 220);
+assert.ok(weekFiveByName['Jahmyr Gibbs'].reasons.some((reason) => reason.includes('guaranteed next-week zero')));
+assert.ok(weekFiveByName['Ladd McConkey'].projectedWinningBid >= 20 && weekFiveByName['Ladd McConkey'].projectedWinningBid <= 80);
+assert.ok(weekFiveByName['Ladd McConkey'].recommendedBid <= 10);
+assert.equal(weekFiveByName['J.K. Dobbins'].recommendedBid, 0);
+assert.ok(weekFiveByName['Tyler Allgeier'].projectedWinningBid < 30);
+assert.ok(weekFiveByName['MarShawn Lloyd'].projectedWinningBid < 30);
+assert.notEqual(weekFiveByName['Jahmyr Gibbs'].competitiveMarketBid, weekFiveByName['Tyler Allgeier'].competitiveMarketBid);
+
 console.log('FAAB engine tests passed');
