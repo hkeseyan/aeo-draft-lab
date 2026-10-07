@@ -594,6 +594,12 @@ function analyzeFaab(input, profile = {}) {
     const marketReachable = projectedWinningBid + 1 <= fairBid * chaseThreshold;
     let recommendedBid = Math.min(remainingBudget, Math.max(0, Math.round(marketReachable ? Math.max(fairBid, projectedWinningBid + 1) : fairBid)));
     let stretchBid = Math.min(remainingBudget, Math.max(recommendedBid, Math.round(marketReachable ? Math.max(fairBid * 1.2, projectedWinningBid + (tier === "starter" ? 3 : 1)) : fairBid * 1.15)));
+    if (!marketReachable && tier === "core" && upgrade >= 0.25) {
+      stretchBid = Math.min(remainingBudget, Math.max(stretchBid, Math.round(fairBid * 1.35)));
+    }
+    if (!marketReachable && tier === "starter" && upgrade >= 0.25) {
+      stretchBid = Math.min(remainingBudget, Math.max(stretchBid, Math.round(projectedWinningBid * 0.45)));
+    }
     if (!blockedByRosterDepth && !lowPrioritySpeculation && tier === "starter" && upgrade < 0.25 && adjustedWeek >= 5) {
       stretchBid = Math.min(remainingBudget, Math.max(stretchBid, Math.round(projectedWinningBid * 0.2)));
     }
