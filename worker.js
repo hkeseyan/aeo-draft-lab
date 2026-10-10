@@ -33,6 +33,7 @@ var inSeasonTicketsKey = /* @__PURE__ */ __name((lg) => `inseasonTickets:${lg}`,
 var inSeasonTicketKey = /* @__PURE__ */ __name((lg, id) => `inseasonTicket:${lg}:${id}`, "inSeasonTicketKey");
 var leagueSourceConfigKey = /* @__PURE__ */ __name((lg) => `leagueSource:${lg}`, "leagueSourceConfigKey");
 var leagueSnapshotKey = /* @__PURE__ */ __name((lg) => `leagueSnapshot:${lg}`, "leagueSnapshotKey");
+var rankingsKey = /* @__PURE__ */ __name((sport) => `rankings:${sport}`, "rankingsKey");
 var faabCalibrationKey = /* @__PURE__ */ __name((lg) => `faabCalibration:${lg}`, "faabCalibrationKey");
 var FAAB_CALIBRATION_VERSION = "off-with-their-heads-through-2026-09-30-v2";
 // The preserved bid stacks are observations, not universal price rules. Keeping
@@ -68,6 +69,39 @@ function slugify(s) {
   return String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-+|-+$)/g, "").slice(0, 40) || "league";
 }
 __name(slugify, "slugify");
+function rankingSport(url) {
+  const sport = String(url.searchParams.get("sport") || "nfl").toLowerCase();
+  return /^[a-z0-9-]{1,20}$/.test(sport) ? sport : null;
+}
+__name(rankingSport, "rankingSport");
+function rankingPlayer(raw) {
+  const id = String(raw && raw.id || "").slice(0, 80);
+  const name = String(raw && raw.name || "").trim().slice(0, 100);
+  if (!id || !name) return null;
+  return {
+    id,
+    name,
+    pos: String(raw && raw.pos || "").toUpperCase().slice(0, 20),
+    team: String(raw && raw.team || "").toUpperCase().slice(0, 20)
+  };
+}
+__name(rankingPlayer, "rankingPlayer");
+function rankingContext(raw) {
+  const value = (key, fallback) => {
+    const v = String(raw && raw[key] || fallback).trim().toLowerCase();
+    return /^[a-z0-9_-]{1,40}$/.test(v) ? v : fallback;
+  };
+  // Context is deliberately recorded with every event even though the first board
+  // is one-dimensional. Future views can filter/re-weight the same raw events
+  // without guessing what a past choice meant.
+  return {
+    decision: value("decision", "overall"),
+    timeframe: value("timeframe", "season"),
+    teamWindow: value("teamWindow", "neutral"),
+    format: value("format", "generic")
+  };
+}
+__name(rankingContext, "rankingContext");
 var ACCOUNTS_ON = /* @__PURE__ */ __name((env) => !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), "ACCOUNTS_ON");
 var SESSION_COOKIE = "aeo_session";
 var OAUTH_STATE_COOKIE = "aeo_oauth_state";
@@ -1634,6 +1668,54 @@ var worker_default = {
           return J({ ok: true });
         }
         return J({ error: "method" }, 405);
+      }
+      if (path === "/api/rankings") {
+        const sport = rankingSport(url);
+        if (!sport) return J({ error: "bad sport" }, 400);
+        const key = scoped(rankingsKey(sport), me);
+        if (request.method === "GET") {
+          const state = await kv.get(key, { type: "json" }) || { version: 1, sport, events: [] };
+          return J({ version: 1, sport, events: Array.isArray(state.events) ? state.events : [] });
+        }
+        if (request.method === "POST") {
+          let body;
+          try {
+            body = await request.json();
+          } catch {
+            return J({ error: "bad json" }, 400);
+          }
+          const winner = rankingPlayer(body.winner);
+          const loser = rankingPlayer(body.loser);
+          if (!winner || !loser || winner.id === loser.id) return J({ error: "winner and loser must be different players" }, 400);
+          const state = await kv.get(key, { type: "json" }) || { version: 1, sport, events: [] };
+          const events = Array.isArray(state.events) ? state.events : [];
+          const event = {
+            id: Date.now().toString(36) + "-" + crypto.randomUUID().slice(0, 8),
+            createdAt: Date.now(),
+            sport,
+            winner,
+            loser,
+            context: rankingContext(body.context)
+          };
+          // A compact event ledger is both auditable and cheap to recompute. It is
+          // intentionally capped before community aggregation moves to a database.
+          events.push(event);
+          await kv.put(key, JSON.stringify({ version: 1, sport, events: events.slice(-2000) }));
+          return J({ ok: true, event });
+        }
+        return J({ error: "method" }, 405);
+      }
+      if (path.startsWith("/api/rankings/")) {
+        const sport = rankingSport(url);
+        if (!sport) return J({ error: "bad sport" }, 400);
+        if (request.method !== "DELETE") return J({ error: "method" }, 405);
+        const id = decodeURIComponent(path.split("/").pop()).slice(0, 80);
+        const key = scoped(rankingsKey(sport), me);
+        const state = await kv.get(key, { type: "json" }) || { version: 1, sport, events: [] };
+        const events = Array.isArray(state.events) ? state.events : [];
+        if (!events.some((event) => event.id === id)) return J({ error: "not found" }, 404);
+        await kv.put(key, JSON.stringify({ version: 1, sport, events: events.filter((event) => event.id !== id) }));
+        return J({ ok: true });
       }
       if (path === "/api/leagues") {
         if (request.method !== "GET") {

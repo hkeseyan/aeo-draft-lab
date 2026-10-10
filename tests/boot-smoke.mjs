@@ -23,6 +23,7 @@ html = html.replace(/<script src="\/auction-values\.js"><\/script>/,
   '<script>' + fs.readFileSync('public/auction-values.js', 'utf8') + '</script>');
 const errors = [];
 const store = {};
+const rankingEvents = [];
 let liveSetupOverride = null;
 
 const dom = new JSDOM(html, {
@@ -42,6 +43,16 @@ const dom = new JSDOM(html, {
       if (u.startsWith('/api/setup')) return j(liveSetupOverride || {});
       if (u.startsWith('/api/commish')) return j({});
       if (u.startsWith('/api/mocks')) return j([]);
+      if (u.startsWith('/api/rankings')) {
+        if (opts?.method === 'POST') {
+          const body = JSON.parse(opts.body || '{}');
+          const event = { id: 'rank-' + (rankingEvents.length + 1), createdAt: Date.now(), sport: 'nfl', ...body };
+          rankingEvents.push(event);
+          return j({ ok: true, event });
+        }
+        if (opts?.method === 'DELETE') { rankingEvents.pop(); return j({ ok: true }); }
+        return j({ version: 1, sport: 'nfl', events: rankingEvents });
+      }
       if (u.startsWith('/api/nhl/schedule')) return j(SCHED);
       if (u.startsWith('/api/nhl/fantrax-adp')) return j([
         { name:'MacKinnon, Nathan', adp:1.55, pos:'C', id:'02f9l' },
@@ -519,6 +530,18 @@ ev('switchLeague("aeo-keepers")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('football unaffected after switching back', () => ev('SPORT.id') + ' ' + slots(), 'nfl QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');
 ok &= check('radar tab hidden for football', () => w.document.querySelector('nav button[data-view="radar"]').style.display, 'none');
+ok &= check('player ranker is available for NFL', () => w.document.querySelector('nav button[data-view="ranker"]').style.display, '');
+await ev('loadRanker()');
+ok &= check('ranker renders a binary matchup', () => w.document.getElementById('rankerLeft').textContent && w.document.getElementById('rankerRight').textContent, v => !!v);
+w.document.getElementById('rankerDecision').value = 'trade';
+w.document.getElementById('rankerTimeframe').value = 'long_term';
+w.document.getElementById('rankerWindow').value = 'rebuilding';
+w.document.getElementById('rankerFormat').value = 'dynasty';
+await ev('rankerChoose("left")');
+ok &= check('ranker persists a comparison event with scenario context', () => JSON.stringify(rankingEvents[0]?.context), '{"decision":"trade","timeframe":"long_term","teamWindow":"rebuilding","format":"dynasty"}');
+ok &= check('ranker derives a one-dimensional board', () => w.document.querySelectorAll('#rankerBoard tbody tr').length, v => v >= 2);
+await ev('undoRanker()');
+ok &= check('ranker can undo its latest comparison', () => ev('RANKER_EVENTS.length'), 0);
 ok &= check('no errors after all the switching', () => errors.slice(0, 3).join(' | '), v => v === '');
 
 console.log(ok ? '\nALL CHECKS PASSED' : '\nSOME CHECKS FAILED');

@@ -160,6 +160,24 @@
   .ticket-status.verified{border-color:var(--good);color:var(--good)}
   .ticket-status.not_won,.ticket-status.cancelled{border-color:var(--muted);color:var(--muted)}
   .ticket-actions{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+  /* Player Ranker: deliberately phone-first, since the useful moment is a spare
+     thirty seconds between other things, not a desktop research session. */
+  .ranker{max-width:760px;margin:0 auto}
+  .ranker-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .ranker-controls label{display:grid;gap:3px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.35px}
+  .ranker-duel{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+  .ranker-player{min-height:215px;text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:16px;color:var(--ink);padding:18px;cursor:pointer;touch-action:pan-y;display:flex;flex-direction:column;justify-content:space-between}
+  .ranker-player:hover,.ranker-player:focus{border-color:var(--accent);outline:none;background:#203050}
+  .ranker-player .ranker-name{font-size:24px;line-height:1.05;font-weight:750;letter-spacing:-.5px}
+  .ranker-player .ranker-meta{font-size:13px;color:var(--muted)}
+  .ranker-player .ranker-choose{font-size:12px;color:#a8c7ff;font-weight:700}
+  .ranker-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .ranker-actions button{min-height:54px;font-size:14px}
+  .ranker-board{margin-top:12px}
+  @media(max-width:560px){
+    header{padding:10px 12px;gap:8px} header h1{width:100%} nav{margin-left:0;overflow:auto;max-width:100%;padding-bottom:2px;flex-wrap:nowrap} nav button{white-space:nowrap;padding:7px 10px}
+    main{padding:12px}.ranker-player{min-height:245px;padding:16px}.ranker-player .ranker-name{font-size:22px}.ranker-duel{gap:8px}.ranker-actions{gap:8px}
+  }
 </style>
 </head>
 <body>
@@ -172,6 +190,7 @@
   <span class="seedwarn" id="seedWarn">⚠ Baseline ranking (SEED) — replace with FantasyPros/Yahoo ADP in the Data tab</span>
   <nav>
     <button data-view="room" class="active">Draft Room</button>
+    <button data-view="ranker">Player Ranker</button>
     <button data-view="inseason">Waiver Lab</button>
     <button data-view="teams">Teams & Keepers</button>
     <button data-view="trades">Trades</button>
@@ -185,6 +204,42 @@
   <div class="acct" id="acctBox"></div>
 </header>
 <main>
+  <!-- PLAYER RANKER -->
+  <section class="view" id="view-ranker">
+    <div class="ranker">
+      <div class="card">
+        <h2>Quick NFL player ranking</h2>
+        <p class="small muted">Pick the player you would rather have. Every answer is saved with its scenario; the MVP board combines all choices into one personal ranking.</p>
+        <div class="ranker-controls">
+          <label>Decision
+            <select id="rankerDecision"><option value="overall">Overall value</option><option value="trade">Trade value</option><option value="start_sit">Start / sit</option><option value="waiver">Waiver decision</option><option value="draft">Draft decision</option></select>
+          </label>
+          <label>Timeframe
+            <select id="rankerTimeframe"><option value="season">This season</option><option value="week">This week</option><option value="long_term">Long term</option></select>
+          </label>
+          <label>Team window
+            <select id="rankerWindow"><option value="neutral">Neutral</option><option value="competing">Competing</option><option value="rebuilding">Rebuilding</option></select>
+          </label>
+          <label>Format
+            <select id="rankerFormat"><option value="generic">Generic</option><option value="redraft">Redraft</option><option value="dynasty">Dynasty</option><option value="keeper">Keeper</option><option value="guillotine">Guillotine</option><option value="best_ball">Best ball</option></select>
+          </label>
+        </div>
+        <div class="ranker-duel" aria-live="polite">
+          <button class="ranker-player" id="rankerLeft" type="button"></button>
+          <button class="ranker-player" id="rankerRight" type="button"></button>
+        </div>
+        <div class="ranker-actions">
+          <button class="btn" id="rankerChooseLeft" type="button">Choose left</button>
+          <button class="btn" id="rankerChooseRight" type="button">Choose right</button>
+        </div>
+        <div class="row" style="margin-top:10px"><button class="btn ghost" id="rankerSkip" type="button">Skip matchup</button><span class="small muted" id="rankerStatus">Loading your NFL ranker…</span></div>
+      </div>
+      <div class="card ranker-board">
+        <div class="row"><h2 style="margin:0">Your board</h2><span class="muted small" id="rankerSummary"></span><button class="btn ghost" id="rankerUndo" type="button" style="margin-left:auto">Undo last</button></div>
+        <div class="scroll"><table><thead><tr><th>#</th><th>Player</th><th>Rating</th><th>Choices</th></tr></thead><tbody id="rankerBoard"></tbody></table></div>
+      </div>
+    </div>
+  </section>
   <!-- DRAFT ROOM -->
   <section class="view active" id="view-room">
     <div class="card" id="snakeControlsCard">
@@ -6158,7 +6213,105 @@ async function loadInSeasonState(){
   loadWaiverTickets();
 }
 
+// ---------- PLAYER RANKER ----------
+// The raw comparison event is the source of truth. Ratings are derived locally
+// from that ledger, so later scenario-specific boards can reuse every answer.
+const RANKER_SPORT='nfl', RANKER_K=28;
+let RANKER_EVENTS=[], RANKER_MATCHUP=null, RANKER_LAST_PAIR='', RANKER_SAVING=false;
+function rankerLocalKey(){return 'aeo-player-ranker:'+RANKER_SPORT;}
+function rankerPlayer(p){return {id:String(p.id),name:p.name,pos:p.pos,team:p.team};}
+function rankerContext(){return {decision:el('rankerDecision').value,timeframe:el('rankerTimeframe').value,teamWindow:el('rankerWindow').value,format:el('rankerFormat').value};}
+function rankerRows(events=RANKER_EVENTS){
+  const rows=new Map();
+  const row=(p)=>{if(!rows.has(p.id))rows.set(p.id,{...p,rating:1500,wins:0,comparisons:0});return rows.get(p.id);};
+  events.slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).forEach(e=>{
+    if(!e||!e.winner||!e.loser||e.winner.id===e.loser.id)return;
+    const winner=row(e.winner),loser=row(e.loser);
+    const expected=1/(1+Math.pow(10,(loser.rating-winner.rating)/400));
+    winner.rating+=RANKER_K*(1-expected);loser.rating-=RANKER_K*(1-expected);
+    winner.wins++;winner.comparisons++;loser.comparisons++;
+  });
+  return [...rows.values()].sort((a,b)=>b.rating-a.rating||b.comparisons-a.comparisons||a.name.localeCompare(b.name));
+}
+function rankerCounts(){const c=new Map();RANKER_EVENTS.forEach(e=>{[e.winner,e.loser].forEach(p=>c.set(String(p.id),(c.get(String(p.id))||0)+1));});return c;}
+function rankerCandidates(){return PLAYERS.filter(p=>p&&p.id!=null&&p.name&&SPORT.id==='nfl'&&['QB','RB','WR','TE'].includes(p.pos));}
+function nextRankerMatchup(){
+  const pool=rankerCandidates();if(pool.length<2){RANKER_MATCHUP=null;return;}
+  const counts=rankerCounts(), ratings=new Map(rankerRows().map(r=>[String(r.id),r.rating]));
+  const shuffled=pool.slice().sort(()=>Math.random()-.5);
+  const left=shuffled.slice().sort((a,b)=>(counts.get(String(a.id))||0)-(counts.get(String(b.id))||0))[0];
+  const leftRating=ratings.get(String(left.id))||1500;
+  const right=pool.filter(p=>p.id!==left.id).sort((a,b)=>{
+    const aCount=counts.get(String(a.id))||0,bCount=counts.get(String(b.id))||0;
+    const aGap=Math.abs((ratings.get(String(a.id))||1500)-leftRating),bGap=Math.abs((ratings.get(String(b.id))||1500)-leftRating);
+    const pairA=[String(left.id),String(a.id)].sort().join(':'),pairB=[String(left.id),String(b.id)].sort().join(':');
+    const aRepeat=pairA===RANKER_LAST_PAIR?1:0,bRepeat=pairB===RANKER_LAST_PAIR?1:0;
+    return aRepeat-bRepeat||aCount-bCount||aGap-bGap||Math.random()-.5;
+  })[0];
+  RANKER_MATCHUP={left,right};
+}
+function renderRankerCard(id,p,label){
+  const card=el(id);if(!card)return;card.innerHTML='';
+  if(!p){card.disabled=true;card.textContent='No NFL players available.';return;}
+  card.disabled=false;
+  const meta=document.createElement('span');meta.className='ranker-meta';meta.textContent=[p.pos,p.team].filter(Boolean).join(' · ');
+  const name=document.createElement('span');name.className='ranker-name';name.textContent=p.name;
+  const choose=document.createElement('span');choose.className='ranker-choose';choose.textContent=`Tap or swipe to choose ${label}`;
+  card.append(meta,name,choose);
+}
+function renderRanker(){
+  if(!el('rankerBoard'))return;
+  if(!RANKER_MATCHUP)nextRankerMatchup();
+  renderRankerCard('rankerLeft',RANKER_MATCHUP&&RANKER_MATCHUP.left,'left');
+  renderRankerCard('rankerRight',RANKER_MATCHUP&&RANKER_MATCHUP.right,'right');
+  const rows=rankerRows(),body=el('rankerBoard');body.innerHTML='';
+  rows.slice(0,50).forEach((r,i)=>{const tr=document.createElement('tr');[String(i+1),r.name,Math.round(r.rating),`${r.wins}–${r.comparisons-r.wins}`].forEach((value,j)=>{const td=document.createElement('td');td.textContent=value;if(j===1){const small=document.createElement('div');small.className='small muted';small.textContent=[r.pos,r.team].filter(Boolean).join(' · ');td.appendChild(small);}tr.appendChild(td);});body.appendChild(tr);});
+  if(!rows.length)body.innerHTML='<tr><td colspan="4" class="muted small">Make your first choice to start the board.</td></tr>';
+  el('rankerSummary').textContent=RANKER_EVENTS.length?`${RANKER_EVENTS.length} choice${RANKER_EVENTS.length===1?'':'s'} · Elo-style, one board`:'No choices yet';
+  el('rankerUndo').disabled=!RANKER_EVENTS.length;
+}
+function rankerFallback(){try{return JSON.parse(localStorage.getItem(rankerLocalKey())||'[]');}catch(e){return [];}}
+function rankerSaveFallback(){try{localStorage.setItem(rankerLocalKey(),JSON.stringify(RANKER_EVENTS));}catch(e){}}
+async function loadRanker(){
+  if(!el('rankerBoard')||SPORT.id!=='nfl')return;
+  const status=el('rankerStatus');status.textContent='Loading your NFL ranker…';
+  try{const r=await fetch('/api/rankings?sport='+RANKER_SPORT,{headers:tokenHdr()});const d=await r.json();if(!r.ok)throw new Error(d.error||'HTTP '+r.status);RANKER_EVENTS=Array.isArray(d.events)?d.events:[];status.textContent='☁ Synced across your devices.';}
+  catch(e){RANKER_EVENTS=rankerFallback();status.textContent='Local-only until cloud sync is available.';}
+  RANKER_MATCHUP=null;renderRanker();
+}
+async function rankerChoose(side){
+  if(!RANKER_MATCHUP||RANKER_SAVING)return;
+  RANKER_SAVING=true;
+  const winner=side==='left'?RANKER_MATCHUP.left:RANKER_MATCHUP.right,loser=side==='left'?RANKER_MATCHUP.right:RANKER_MATCHUP.left;
+  const event={id:'local-'+Date.now(),createdAt:Date.now(),sport:RANKER_SPORT,winner:rankerPlayer(winner),loser:rankerPlayer(loser),context:rankerContext()};
+  const status=el('rankerStatus');status.textContent='Saving choice…';
+  try{const r=await fetch('/api/rankings?sport='+RANKER_SPORT,{method:'POST',headers:{'Content-Type':'application/json',...tokenHdr()},body:JSON.stringify({winner:event.winner,loser:event.loser,context:event.context})});const d=await r.json();if(!r.ok)throw new Error(d.error||'HTTP '+r.status);event.id=d.event.id;event.createdAt=d.event.createdAt;status.textContent='☁ Choice saved.';}
+  catch(e){status.textContent='Saved only on this device.';}
+  RANKER_EVENTS.push(event);rankerSaveFallback();RANKER_LAST_PAIR=[winner.id,loser.id].sort().join(':');RANKER_MATCHUP=null;RANKER_SAVING=false;renderRanker();
+}
+async function undoRanker(){
+  const event=RANKER_EVENTS[RANKER_EVENTS.length-1];if(!event)return;
+  const status=el('rankerStatus');status.textContent='Undoing…';
+  try{const r=await fetch('/api/rankings/'+encodeURIComponent(event.id)+'?sport='+RANKER_SPORT,{method:'DELETE',headers:tokenHdr()});if(!r.ok)throw new Error('HTTP '+r.status);status.textContent='☁ Last choice removed.';}
+  catch(e){status.textContent='Removed locally; cloud history may still contain it.';}
+  RANKER_EVENTS.pop();rankerSaveFallback();RANKER_MATCHUP=null;renderRanker();
+}
+function wireRanker(){
+  const left=el('rankerLeft'),right=el('rankerRight');if(!left||!right)return;
+  el('rankerChooseLeft').onclick=()=>rankerChoose('left');el('rankerChooseRight').onclick=()=>rankerChoose('right');
+  const tap=(card,side)=>{if(card.dataset.swiped==='1'){card.dataset.swiped='';return;}rankerChoose(side);};
+  left.onclick=()=>tap(left,'left');right.onclick=()=>tap(right,'right');el('rankerSkip').onclick=()=>{RANKER_MATCHUP=null;nextRankerMatchup();renderRanker();};el('rankerUndo').onclick=undoRanker;
+  // A deliberate horizontal swipe is the same binary action as tapping a card;
+  // vertical movement remains available for ordinary mobile scrolling.
+  [[left,'left'],[right,'right']].forEach(([card,side])=>{let start=null;card.addEventListener('pointerdown',e=>{start={x:e.clientX,y:e.clientY};});card.addEventListener('pointerup',e=>{if(start&&Math.abs(e.clientX-start.x)>58&&Math.abs(e.clientY-start.y)<45){card.dataset.swiped='1';rankerChoose(side);}start=null;});card.addEventListener('pointercancel',()=>{start=null;});});
+}
+function applyRankerVisibility(){
+  const btn=document.querySelector('nav button[data-view="ranker"]'),visible=SPORT.id==='nfl'&&!roomOnly();if(btn)btn.style.display=visible?'':'none';
+  const section=el('view-ranker');if(section&&!visible&&section.classList.contains('active')){const room=document.querySelector('nav button[data-view="room"]');if(room)room.click();}
+}
+
 // ---------- EVENTS ----------
+wireRanker();
 wireRadar();
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
@@ -6171,6 +6324,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   if(b.dataset.view==='leagues')renderLeaguesTab();
   if(b.dataset.view==='commish')renderCommish();
   if(b.dataset.view==='inseason')loadInSeasonState();
+  if(b.dataset.view==='ranker')loadRanker();
 });
 el('faabYahooRun').onclick=()=>runFaab(true);
 el('faabManualRun').onclick=()=>runFaab(false);
@@ -6711,7 +6865,7 @@ function applyLeagueProfile(id){
     curPick=nextOpenPick(1);render();
   }
   renderHeader(); renderSportBar(); fillLeagueSelect(); updateKeeperCopy();
-  applyRadarVisibility(); RADAR_SCHED=null; renderRadar();
+  applyRadarVisibility(); applyRankerVisibility(); RADAR_SCHED=null; renderRadar();
   loadMarketAdp();
   loadNhlPreseasonProjections();
   loadDraftScheduleContext();
