@@ -68,6 +68,12 @@ assert.equal(contextRun.recommendations[0].name,'Sidney Crosby');
 assert.equal(contextRun.recommendations[0].pos,'C/LW','Context must not overwrite platform eligibility');
 const injured=contextRun.recommendations.find(p=>p.name==='Igor Shesterkin');
 assert.equal(injured.lane,'excluded');assert.equal(injured.claimAction,'pass');assert.equal(injured.usableGames,0);assert.match(injured.injurySource,/nhl.com/);
+for(const name of ['New season-out skater','Another future injured star']){
+  const general=run({openRosterSpots:1,available:[{name,pos:'LW',team:'COL',ros_rank:1,roster_pct:99,target_class:'core_add',injury_outlook:'season_out',injury_confidence:'confirmed',injury_source:'https://example.test/verified-team-announcement',injury_checked_at:'2026-10-12'}]});
+  assert.equal(general.recommendations[0].lane,'excluded','Season-ending exclusion is based on evidence, not name');
+  assert.equal(general.recommendations[0].claimAction,'pass');
+}
+assert.equal(run({available:[{...input.available[0],status:'IR',injury_outlook:'temporary'}]}).recommendations[0].lane,'injury_watch','IR alone is not a season-ending exclusion');
 const noGames=run({openRosterSpots:1,available:[{name:'Sidney Crosby',pos:'LW',team:'NONE',fppg:9}]});
 assert.equal(noGames.recommendations[0].lane,'streamer','Position incompatible with known identity cannot inherit Crosby context');
 const coreZero=run({openRosterSpots:1,available:[{name:'Core target',pos:'LW',team:'NONE',target_class:'core_add'}]});
