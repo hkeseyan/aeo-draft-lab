@@ -728,3 +728,7 @@ Q/DTD players are assumed to play. Definite OUT/IR players are not immediate str
 
 Later valuation work: league/team-specific ROS value, line/PP deployment, ice time, shot volume, shooting percentage versus a stabilized baseline, confirmed recovery dates, joint multi-slot streaming sequences and acquisition-budget optimization.
 
+# Decision reasoning reference (2026-10-11)
+
+`docs/WAIVER_DECISION_LOGIC.md` preserves the manager's reusable rationale and counterfactual acceptance cases. Named hold/drop examples are temporary supervised labels. Future valuation must distinguish intrinsic ROS value from team holding value, account for positional shortage and reliable goalie volume, and reevaluate conditional holds as injured teammates return. The existing confirmed-season-out exclusion is player-independent; tests include previously unknown 99%-owned core targets plus a temporary IR case. Dynamic value/role protection and comprehensive news ingestion are not yet implemented and must not be presented as learned behavior.
+
