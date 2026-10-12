@@ -521,5 +521,13 @@ ok &= check('football unaffected after switching back', () => ev('SPORT.id') + '
 ok &= check('radar tab hidden for football', () => w.document.querySelector('nav button[data-view="radar"]').style.display, 'none');
 ok &= check('no errors after all the switching', () => errors.slice(0, 3).join(' | '), v => v === '');
 
+ev(`renderScheduleWaiverReport({planner:'schedule',plannerVersion:2,sport:'nhl',window:{start:'2026-10-12',end:'2026-10-18'},lineupPeriod:'daily',scheduleSource:'fixture',rosterDays:[{date:'2026-10-12',started:1,assignments:[{slot:'RW',player:'Josh Doan'}],benched:[],openSlots:['C']}],rosterOpportunity:[{name:'Josh Doan',pos:'RW/LW',dropClass:'replaceable',scheduledDates:['2026-10-12','2026-10-13'],scheduledGames:2,usableGames:1,usableDates:['2026-10-12'],contingentDates:['2026-10-13'],contingentGames:1,contingentCredit:0.1,firstUsableDate:'2026-10-12',lastUsableDate:'2026-10-12'}],dropCandidates:[],recommendations:[{name:'Sidney Crosby',pos:'C',team:'PIT',lane:'core_add',targetClass:'core_add',scheduledGames:0,usableGames:0,usableDates:[],netGames:null,dropResolved:false,reasons:['Long-term priority'],claimAction:'pass'},{name:'Igor Shesterkin',pos:'G',team:'NYR',lane:'excluded',targetClass:'streamer',scheduledGames:3,usableGames:0,usableDates:[],netGames:null,reasons:['Season-ending absence'],claimAction:'pass',injurySource:'https://www.nhl.com/news/new-york-rangers-goalie-igor-shesterkin-out-for-season'}]})`);
+ok &= check('roster-first report exposes the actual position assignment', () => w.document.getElementById('waiverRosterCoverage').textContent.includes('RW: Josh Doan'), true);
+ok &= check('backup credit remains separate from starts', () => w.document.getElementById('waiverRosterCoverage').textContent.includes('provisional backup credit 0.1'), true);
+ok &= check('long-term adds remain above excluded injuries', () => {const text=w.document.getElementById('faabResults').textContent;return text.indexOf('Sidney Crosby')<text.indexOf('Igor Shesterkin');}, true);
+ok &= check('unresolved cut is not labeled zero net games', () => w.document.getElementById('faabResults').textContent.includes('Net games unresolved'), true);
+ok &= check('excluded injury cannot create a claim ticket', () => {const row=[...w.document.querySelectorAll('#faabResults tr')].find(r=>r.textContent.includes('Igor Shesterkin'));return row&&!row.querySelector('[data-create-ticket]')&&row.textContent.includes('Do not claim');}, true);
+
 console.log(ok ? '\nALL CHECKS PASSED' : '\nSOME CHECKS FAILED');
 process.exit(ok ? 0 : 1);
+

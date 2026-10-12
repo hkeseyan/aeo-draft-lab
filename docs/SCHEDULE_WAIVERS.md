@@ -1,5 +1,13 @@
 # NHL/NBA Waiver Lab
 
+Version 2 starts with **Sunday claims → Monday week** and the full roster table. For each player, inspect every scheduled date, positional assignment, usable starts, backup games and first/last usable dates. Select a hold/drop disposition directly in that table; IR stashes stay protected. A missing drop path now reads unresolved instead of making every candidate a zero-game player.
+
+Choose one or two **Streaming slots** and set **Adds remaining**. With four adds and all-new Sunday streamers, one slot leaves three follow-up acquisitions; two leave two follow-ups total. An existing Monday streamer costs nothing to retain, and the report can show a next-day replacement alternative after its early usable games. Each next-leg alternative costs one add and must be checked against the host cutoff.
+
+Backup games carry provisional 0.1 credit, kept separate from guaranteed starts. For one-slot plans, early usable games receive a small tie preference. No weekday is hardcoded as crowded: actual eligible-position lineup fit decides.
+
+Use the target selector to distinguish long-term priority, schedule streamer, longer-term watch, IR stash watch or avoid. Q/DTD is treated as playing. OUT/IR players appear separately from immediate streamers; confirmed season-ending absences are excluded. Source links/check dates appear when reviewed evidence exists; other recent news remains explicitly unverified.
+
 1. Select the league, then open **Waiver Lab**. On Sunday use **Next week**; midweek use **Remaining week**.
 2. Refresh/paste the roster and available-player pool. Classify roster drop_class: protected, conditional, replaceable or dead. Optional lineup_priority is higher-first; otherwise points leagues use per-game points, category leagues fall back to ROS rank.
 3. Set **Adds active from** to the first scoring date after the host’s waiver processing and lineup cutoff. Candidate available_from can override it. Put the submission deadline in Decision context. Enter **Adds remaining** for this period.

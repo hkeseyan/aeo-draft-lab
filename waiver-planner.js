@@ -1,3 +1,4 @@
+import { reviewedContext, leagueRosterPreference } from './player-context.js';
 // Schedule opportunity is separate from the NFL guillotine bid model.
 const number = (v, fallback = 0) => v !== '' && v != null && Number.isFinite(Number(v)) ? Number(v) : fallback;
 export function localDate(now = new Date()) {
@@ -11,10 +12,11 @@ export function shiftDate(date, days) {
 }
 export function planningWindow(input = {}, now = new Date()) {
   const today = localDate(now), weekday = new Date(today+'T12:00:00Z').getUTCDay();
-  const mode = input.planningMode || (weekday === 0 ? 'next_week' : 'remaining_week');
+  const mode = input.planningMode || 'sunday_monday';
   const monday = shiftDate(today, -(weekday + 6) % 7);
-  const start = input.planStart || (mode === 'next_week' ? shiftDate(monday, 7) : today);
-  const end = input.planEnd || (mode === 'next_week' ? shiftDate(monday, 13) : shiftDate(monday, 6));
+  const upcomingMonday=weekday===1?today:shiftDate(monday,7);
+  const start = input.planStart || (mode === 'sunday_monday'?upcomingMonday:mode === 'next_week' ? shiftDate(monday, 7) : today);
+  const end = input.planEnd || (mode === 'sunday_monday'?shiftDate(upcomingMonday,6):mode === 'next_week' ? shiftDate(monday, 13) : shiftDate(monday, 6));
   if (![start,end].every(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d+'T12:00:00Z')) && shiftDate(d,0)===d) || end < start || (Date.parse(end)-Date.parse(start))/86400000 > 20) throw new Error('Choose a valid planning window of at most 21 days.');
   const days = []; for (let d=start; d<=end; d=shiftDate(d,1)) days.push(d);
   return {start,end,days,mode};
@@ -48,11 +50,14 @@ export function fitLineup(players, profile, weight = p => p.priority) {
   players.slice().sort((a,b)=>weight(b)-weight(a)||a.name.localeCompare(b.name)).forEach(p=>insert(p,new Set()));
   return {players:assigned.filter(Boolean), openSlots:slots.filter((_,i)=>!assigned[i]), assignments:assigned.map((p,i)=>({slot:slots[i],player:p?.name||null}))};
 }
-function normalize(raw, pool, profile) {
+function normalize(raw, pool, profile, date, overrides) {
   // Identity includes position, so the two Elias Petterssons cannot share inputs.
   const matches=pool.filter(p=>String(p.name).toLowerCase()===String(raw.name||raw.player||'').toLowerCase());
-  const base=matches.find(p=>!raw.pos||split(p.pos).some(pos=>split(raw.pos).includes(pos)))||{};
-  const row={...base,...Object.fromEntries(Object.entries(raw).filter(([,v])=>v!==''&&v!=null))};
+  const base=matches.find(p=>!raw.pos||split(p.pos).some(pos=>split(raw.pos).includes(pos)||(profile.sport==='nhl'&&split(raw.pos).includes('F')&&['C','LW','RW'].includes(pos))))||{};
+  const context=reviewedContext({...base,...raw},profile,date,overrides);
+  const {name:contextName,pos:contextPos,sport:contextSport,nhl_id:contextId,...contextFields}=context;
+  const row={...base,...Object.fromEntries(Object.entries(raw).filter(([,v])=>v!==''&&v!=null)),...contextFields};
+  if(raw.target_class)row.target_class=raw.target_class;
   let fppg=number(row.fppg ?? row.per_game_projection, NaN);
   if(!Number.isFinite(fppg)&&profile.scoringMode!=='categories'&&profile.scoringMode!=='roto'&&number(row.gp)>0){
     const scoring=Object.entries(profile.scoring||{});
@@ -64,7 +69,8 @@ function normalize(raw, pool, profile) {
   const priority=number(row.lineup_priority, Number.isFinite(fppg)&&profile.scoringMode!=='categories'&&profile.scoringMode!=='roto'?fppg:1000-rank);
   const suppliedTeam=String(row.team||'').toUpperCase();
   const aliases=profile.sport==='nhl'?{LA:'LAK',NJ:'NJD',SJ:'SJS',TB:'TBL',MON:'MTL',CLB:'CBJ',ANH:'ANA',WAS:'WSH'}:{GS:'GSW',NY:'NYK',NO:'NOP',SA:'SAS',PHO:'PHX',UTAH:'UTA'};
-  return {...row,name:String(row.name||row.player||''),pos:String(row.pos||row.position||'').toUpperCase(),team:aliases[suppliedTeam]||suppliedTeam,fppg,rosRank:rank,priority,dropClass:String(row.drop_class||'unclassified').toLowerCase(),rosterSlot:String(row.roster_slot||'').toUpperCase()};
+  const reserve=['IR','IR+','IL','IL+','NA'].includes(String(row.roster_slot||'').toUpperCase());
+  return {...row,name:String(row.name||row.player||''),pos:String(row.pos||row.position||'').toUpperCase(),team:aliases[suppliedTeam]||suppliedTeam,fppg,rosRank:rank,priority,dropClass:reserve?'protected':String(row.drop_class||'unclassified').toLowerCase(),rosterSlot:String(row.roster_slot||'').toUpperCase()};
 }
 function opportunities(p,schedule,window,from) {
   const teamDates = schedule.teams[p.team];
@@ -73,9 +79,10 @@ function opportunities(p,schedule,window,from) {
   const hasStarts = p.start_dates != null && p.start_dates !== '';
   const gameDates = (teamDates||[]).filter(d=>window.days.includes(d));
   const dates=(goalie?(hasStarts?split(p.start_dates):[]):gameDates).filter(d=>window.days.includes(d)&&gameDates.includes(d)&&(!from||d>=from));
-  const unavailable=['IR','IR+','IL','IL+','NA'].includes(p.rosterSlot)||['O','OUT','IR','IL','SUSP','NA'].includes(String(p.status||'').toUpperCase());
+  const seasonOut=p.injury_outlook==='season_out'&&p.injury_confidence==='confirmed';
+  const unavailable=seasonOut||['IR','IR+','IL','IL+','NA'].includes(p.rosterSlot)||['O','OUT','IR','IR+','IL','IL+','SUSP','NA'].includes(String(p.status||'').toUpperCase());
   const unknown=missingTeam || !p.pos || (goalie&&!hasStarts);
-  return {gameDates, dates:unavailable?[]:dates,unknown,goalie};
+  return {gameDates, dates:unavailable?[]:dates,unknown,goalie,unavailable,seasonOut};
 }
 function evaluate(roster,profile,window) {
   const weekly=profile.lineupPeriod==='weekly';
@@ -83,7 +90,7 @@ function evaluate(roster,profile,window) {
   const days=window.days.map(date=>{
     const active=roster.filter(p=>p.dates.includes(date));
     const fit=weekly?fitLineup(weeklyLineup.players.filter(p=>p.dates.includes(date)),profile):fitLineup(active,profile);
-    return {date,scheduled:active.length,started:fit.players.length,benched:active.filter(p=>!fit.players.includes(p)).map(p=>p.name),openSlots:fit.openSlots,starters:fit.players.map(p=>p.name),_players:fit.players};
+    return {date,scheduled:active.length,started:fit.players.length,benched:active.filter(p=>!fit.players.includes(p)).map(p=>p.name),openSlots:fit.openSlots,starters:fit.players.map(p=>p.name),assignments:fit.assignments,_players:fit.players};
   });
   const counts=new Map(roster.map(p=>[p,days.filter(d=>d._players.includes(p)).map(d=>d.date)]));
   const total=days.reduce((s,d)=>s+d.started,0);
@@ -97,8 +104,14 @@ export function analyzeScheduleWaivers(input,profile,parseRows,now=new Date()) {
   if (['lock_in','lockin','bestball'].includes(profile.lineupPeriod)||profile.leagueType==='bestball') throw new Error('This planner supports daily and weekly lineups; Lock-In and Best Ball need their own opportunity rules.');
   const rows=key=>{const parsed=parseRows(input[key+'Csv']||'');return parsed.length?parsed:Array.isArray(input[key])?input[key]:[];};
   const pool=parseRows(profile.playersCsv||'');
-  const roster=rows('roster').map(p=>normalize(p,pool,profile));
-  const available=rows('available').map(p=>normalize(p,pool,profile));
+  const today=localDate(now);
+  const roster=rows('roster').map(p=>{
+    const normalized=normalize(p,pool,profile,today,input.playerContext);
+    const preference=(input.rosterPreferences||[]).find(t=>t.name===normalized.name&&t.pos===normalized.pos)||leagueRosterPreference(normalized,profile);
+    if(preference&&!['IR','IR+','IL','IL+','NA'].includes(normalized.rosterSlot)){normalized.dropClass=preference.dropClass;normalized.dropNotes=preference.dropNotes||'';}
+    return normalized;
+  });
+  const available=rows('available').map(p=>normalize(p,pool,profile,today,input.playerContext));
   const warnings=[];
   if(input.dataFreshness?.roster?.current===false||input.dataFreshness?.available?.current===false)warnings.push('Saved roster/availability fallback is not current; refresh the host or verify the pasted pool before claiming.');
   if(roster.some(p=>!Number.isFinite(p.fppg)&&p.lineup_priority==null))warnings.push('Lineup order falls back to ROS rank where per-game points/lineup_priority are missing; review that order before submitting.');
@@ -107,20 +120,31 @@ export function analyzeScheduleWaivers(input,profile,parseRows,now=new Date()) {
   roster.forEach(p=>Object.assign(p,opportunities(p,schedule,window)));
   if(roster.some(p=>p.goalie&&p.unknown)) warnings.push('Goalie team games are not starts. Supply start_dates (semicolon-separated YYYY-MM-DD) to evaluate goalies; unknown goalies are excluded.');
   const base=evaluate(roster,profile,window);
+  const rosterOpportunity=roster.map(p=>{
+    const usableDates=base.counts.get(p),contingentDates=p.unknown||p.unavailable?[]:p.dates.filter(d=>!usableDates.includes(d));
+    return {name:p.name,pos:p.pos,team:p.team,rosterSlot:p.rosterSlot,dropClass:p.dropClass,dropNotes:p.dropNotes||'',scheduledDates:p.gameDates,scheduledGames:p.gameDates.length,usableGames:p.unavailable?0:p.unknown?null:usableDates.length,usableDates,contingentDates,contingentGames:contingentDates.length,contingentCredit:Number((contingentDates.length*0.1).toFixed(1)),firstUsableDate:usableDates[0]||null,lastUsableDate:usableDates.at(-1)||null,injuryStatus:p.status||'',reserve:['IR','IR+','IL','IL+','NA'].includes(p.rosterSlot)};
+  });
   const droppable=roster.filter(p=>['dead','replaceable','conditional'].includes(p.dropClass)&&!p.unknown).sort((a,b)=>base.counts.get(a).length-base.counts.get(b).length||b.rosRank-a.rosRank);
   const drops=droppable.map(p=>({name:p.name,pos:p.pos,dropClass:p.dropClass,scheduledGames:p.gameDates.length,usableGames:base.counts.get(p).length,usableDates:base.counts.get(p),benchedGames:p.dates.length-base.counts.get(p).length,rosRank:p.rosRank}));
   const openSpots=Math.max(0,number(input.openRosterSpots));
   const addsRemaining=input.acquisitionsRemaining===''||input.acquisitionsRemaining==null?null:Math.max(0,number(input.acquisitionsRemaining));
+  const plannedSlots=Math.max(1,Math.min(4,number(input.streamingSlots,1)));
+  const planningBudget=addsRemaining??profile.maxAcquisitionsPerWeek??null;
+  const streamingPlan={plannedSlots,planningBudget,budgetAssumed:addsRemaining==null,initialAdds:planningBudget==null?plannedSlots:Math.min(plannedSlots,planningBudget),followUpAdds:planningBudget==null?null:Math.max(0,planningBudget-plannedSlots),contingentWeight:0.1,note:'For new Sunday acquisitions, initial adds consume this budget. Keeping an existing Monday streamer uses no new acquisition; its first replacement costs one add. This is a next-step plan, not a verified full-week transaction chain.'};
+  if(planningBudget!=null&&planningBudget<plannedSlots)warnings.push('The available acquisition budget cannot fill all selected streaming slots with new adds.');
   if(addsRemaining===null&&profile.maxAcquisitionsPerWeek)warnings.push('Enter acquisitions remaining to enforce this league’s weekly add limit.');
   if(profile.scoringMode==='categories'||profile.scoringMode==='roto')warnings.push('Usable-game opportunity only; category matchup needs, rate-stat impact and Roto games caps require separate review.');
   if(profile.lineupPeriod==='weekly')warnings.push('Weekly lineups select one lineup for the whole window. Use next week before its lock; current locked lineups cannot be inferred.');
   const mode=input.waiverProcessing&&input.waiverProcessing!=='unknown'?input.waiverProcessing:profile.waiverRules?.mode;
   const continuous=['continuous','continuous_waivers'].includes(mode);
   const recommendations=available.map(p=>{
-    const effectiveFrom=p.available_from||input.acquisitionsActiveFrom||(!continuous?window.start:'');
+    const sundayDefault=window.mode==='sunday_monday';
+    const effectiveFrom=p.available_from||input.acquisitionsActiveFrom||((sundayDefault||!continuous)?window.start:'');
     if(effectiveFrom&&(!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)||shiftDate(effectiveFrom,0)!==effectiveFrom))throw new Error('Acquisition effective dates must be valid YYYY-MM-DD dates.');
     const timingUnknown=!effectiveFrom;
     const op=opportunities(p,schedule,window,effectiveFrom);Object.assign(p,op);
+    const projected=evaluate([...roster,p],profile,window);
+    const potentialDates=projected.counts.get(p);
     let best=null;
     const paths=openSpots?[null]:droppable.filter(drop=>drop.dropClass!=='conditional'||(p.rosRank<999&&p.rosRank<drop.rosRank));
     for(const drop of paths){
@@ -132,13 +156,51 @@ export function analyzeScheduleWaivers(input,profile,parseRows,now=new Date()) {
       const path={drop,usableDates,netGames,netPoints};
       if(!best || netGames>best.netGames || netGames===best.netGames&&(netPoints??0)>(best.netPoints??0))best=path;
     }
-    const reasons=[`${op.gameDates.length} team games; ${best?.usableDates.length||0} usable games`,best?`${best.netGames>=0?'+':''}${best.netGames} net starting games after roster replacement`:'No permitted drop path or open roster spot'];
+    const dates=best?.usableDates||potentialDates;
+    const usable=op.unavailable?0:op.unknown?null:dates.length;
+    const contingentDates=op.unknown||op.unavailable?[]:p.dates.filter(d=>!dates.includes(d));
+    const earlyUsableGames=dates.filter(d=>d<=shiftDate(window.start,1)).length;
+    const streamingScore=Number(((best?.netGames??usable??0)+contingentDates.length*0.1+(plannedSlots===1?earlyUsableGames*0.15:0)).toFixed(2));
+    const ownership=number(p.roster_pct,0),adp=number(p.adp,999);
+    const inferredCore=ownership>=95&&p.rosRank<=60&&adp<=75;
+    const preference=(Array.isArray(input.targetPreferences)?input.targetPreferences:[]).find(t=>t.name===p.name&&t.pos===p.pos);
+    const selectedTarget=preference?.targetClass||p.target_class;
+    const target=['core_add','schedule_watch','streamer','ir_stash','avoid'].includes(selectedTarget)?selectedTarget:inferredCore?'core_add':'streamer';
+    const lane=p.seasonOut||target==='avoid'?'excluded':p.unavailable?'injury_watch':target==='core_add'?'core_add':target==='schedule_watch'||target==='ir_stash'?'watch':'streamer';
+    const reasons=[`${op.gameDates.length} team games; ${usable==null?'usable games unknown':usable+' usable games'}`,best?`${best.netGames>=0?'+':''}${best.netGames} net starting games after roster replacement`:'Drop unresolved: displayed games show lineup fit if acquired, not a completed roster transaction'];
+    if(lane==='core_add')reasons.push(p.target_notes||'High ownership plus established pool value: review as a long-term add independent of schedule');
+    if(lane==='watch')reasons.push('Longer-term watch target: favor a useful schedule, then review whether to keep');
+    if(p.seasonOut)reasons.push('Confirmed season-ending absence: exclude from pickups this season');
+    else if(p.unavailable)reasons.push('Injured/out: not an immediate streamer; review return news and IR capacity before a long-term stash');
+    else if(['Q','DTD','D','DAY-TO-DAY'].includes(String(p.status||'').toUpperCase()))reasons.push('Q/day-to-day: assumed to play for schedule planning');
+    if(!p.injury_source&&!p.injury_checked_at)reasons.push('No separately verified recent injury news; host status may lag');
     if(best?.drop)reasons.push(`Drop ${best.drop.name}: ${base.counts.get(best.drop).length} usable games (${best.drop.dropClass})`);
     if(timingUnknown)reasons.push('Confirm acquisition effective date under this league’s waiver rules');
     if(op.unknown)reasons.push(op.goalie?'Expected goalie starts required':'Player team/position required');
-    const lockedWeek=profile.lineupPeriod==='weekly'&&(window.mode!=='next_week'||effectiveFrom>window.start);
-    const actionable=!!best&&!timingUnknown&&!op.unknown&&!unknownRoster&&!lockedWeek&&addsRemaining!==0&&(best.netGames>0||(best.netPoints??0)>0);
-    return {name:p.name,pos:p.pos,team:p.team,rosRank:p.rosRank,scheduledGames:op.gameDates.length,usableGames:best?.usableDates.length||0,usableDates:best?.usableDates||[],netGames:best?.netGames??0,lineupUpgrade:best?.netPoints,adjustedWeekProjection:Number.isFinite(p.fppg)?Number((p.fppg*(best?.usableDates.length||0)).toFixed(2)):null,suggestedDrop:best?.drop?.name||null,suggestedDropClass:best?.drop?.dropClass||null,acquisitionsActiveFrom:effectiveFrom||null,claimAction:actionable?'review':'pass',requiresReview:true,recommendedBid:null,claimOrderRule:'review_priority',bidOrderLocked:input.waiverMethod==='faab',reasons,notes:p.notes||'',rosterPct:number(p.roster_pct,NaN),tier:'schedule opportunity'};
-  }).sort((a,b)=>(b.claimAction==='review')-(a.claimAction==='review')||b.netGames-a.netGames||(b.lineupUpgrade??0)-(a.lineupUpgrade??0)||b.usableGames-a.usableGames||a.rosRank-b.rosRank);
-  return {id:`${Date.now().toString(36)}-${crypto.randomUUID().slice(0,8)}`,createdAt:Date.now(),leagueId:profile.id,leagueName:profile.name,planner:'schedule',sport:profile.sport,window,lineupPeriod:profile.lineupPeriod||'daily',dataSyncedAt:input.dataSyncedAt||null,dataFreshness:input.dataFreshness||null,scheduleSource:schedule.source||'supplied',scheduleFetchedAt:schedule.fetchedAt||null,rosterDays:base.days,dropCandidates:drops,acquisitionsRemaining:addsRemaining,warnings,recommendations,assumptions:['Protected and unclassified players are never automatic cuts. Conditional cuts need a better supplied ROS rank.','Each add/drop is an independent alternative. Recalculate after a successful acquisition; candidates may compete for the same slot.','FAAB prices are manual for NHL/NBA; NFL guillotine price calibration is not applied.','Available-from dates refer to the first scoring date after host processing and lineup locks; verify the host’s cutoff.']};
+    const lockedWeek=profile.lineupPeriod==='weekly'&&(!['next_week','sunday_monday'].includes(window.mode)||effectiveFrom>window.start);
+    const worthy=lane==='core_add'||(best&&(best.netGames>0||(best.netPoints??0)>0));
+    const actionable=!!best&&!p.unavailable&&lane!=='excluded'&&!timingUnknown&&(!op.unknown||lane==='core_add')&&!unknownRoster&&!lockedWeek&&addsRemaining!==0&&worthy;
+    return {name:p.name,pos:p.pos,team:p.team,rosRank:p.rosRank,lane,targetClass:target,targetClassSource:selectedTarget?'manager/reviewed context':inferredCore?'ownership + established value heuristic':'default streamer',injuryStatus:p.status||'',injuryOutlook:p.injury_outlook||'',injurySource:p.injury_source||'',injuryCheckedAt:p.injury_checked_at||'',injuryNote:p.injury_note||p.notes||'',scheduledGames:op.gameDates.length,scheduledDates:op.gameDates,contingentDates,contingentGames:contingentDates.length,contingentCredit:Number((contingentDates.length*0.1).toFixed(1)),earlyUsableGames,streamingScore,firstUsableDate:dates[0]||null,lastUsableDate:dates.at(-1)||null,usableGames:usable,usableDates:op.unknown?[]:dates,dropResolved:!!best,netGames:best?.netGames??null,lineupUpgrade:best?.netPoints,adjustedWeekProjection:Number.isFinite(p.fppg)&&usable!=null?Number((p.fppg*usable).toFixed(2)):null,suggestedDrop:best?.drop?.name||null,suggestedDropClass:best?.drop?.dropClass||null,acquisitionsActiveFrom:effectiveFrom||null,claimAction:actionable?'review':'pass',requiresReview:true,recommendedBid:null,claimOrderRule:'review_priority',bidOrderLocked:input.waiverMethod==='faab',reasons,notes:p.notes||'',rosterPct:number(p.roster_pct,NaN),tier:lane};
+  }).sort((a,b)=>({core_add:4,streamer:3,watch:2,injury_watch:1,excluded:0}[b.lane]-{core_add:4,streamer:3,watch:2,injury_watch:1,excluded:0}[a.lane])||(b.claimAction==='review')-(a.claimAction==='review')||b.streamingScore-a.streamingScore||(b.netGames??-999)-(a.netGames??-999)||(b.lineupUpgrade??0)-(a.lineupUpgrade??0)||(b.usableGames??-1)-(a.usableGames??-1)||a.rosRank-b.rosRank);
+  const streamingPaths=[];
+  if(profile.lineupPeriod!=='weekly'&&planningBudget!==0){
+    for(const drop of droppable){
+      const usableDates=base.counts.get(drop),last=usableDates.at(-1);
+      if(!last||last>shiftDate(window.start,2))continue;
+      for(const p of available){
+        const recommendation=recommendations.find(r=>r.name===p.name&&r.pos===p.pos);
+        if(!recommendation||!['streamer','watch'].includes(recommendation.lane)||p.unknown||p.unavailable)continue;
+        if(drop.dropClass==='conditional'&&!(p.rosRank<drop.rosRank))continue;
+        const from=[shiftDate(last,1),p.available_from||input.acquisitionsActiveFrom||window.start].sort().at(-1);
+        const incoming={...p,dates:p.dates.filter(d=>d>=from)};
+        const outgoing={...drop,dates:drop.dates.filter(d=>d<from)};
+        const next=evaluate([...roster.filter(r=>r!==drop),outgoing,incoming],profile,window);
+        const netGames=next.total-base.total;
+        if(netGames<=0)continue;
+        streamingPaths.push({hold:drop.name,useThrough:last,replaceWith:p.name,activeFrom:from,usableDates:next.counts.get(incoming),netGames,addsRequired:1,claimTiming:'Submit before the host cutoff for the effective date, after confirming the outgoing game/lock permits the change.'});
+      }
+    }
+  }
+  streamingPaths.sort((a,b)=>b.netGames-a.netGames||a.activeFrom.localeCompare(b.activeFrom));
+  return {id:`${Date.now().toString(36)}-${crypto.randomUUID().slice(0,8)}`,createdAt:Date.now(),leagueId:profile.id,leagueName:profile.name,planner:'schedule',plannerVersion:2,sport:profile.sport,window,lineupPeriod:profile.lineupPeriod||'daily',dataSyncedAt:input.dataSyncedAt||null,dataFreshness:input.dataFreshness||null,scheduleSource:schedule.source||'supplied',scheduleFetchedAt:schedule.fetchedAt||null,rosterDays:base.days,rosterOpportunity,streamingPlan,streamingPaths:streamingPaths.slice(0,6),dropCandidates:drops,acquisitionsRemaining:addsRemaining,warnings,recommendations,assumptions:['Protected and unclassified players are never automatic cuts. Conditional cuts need a better supplied ROS rank.','Each add/drop and keep-then-cycle path is an independent alternative, not a combined claim plan. Recalculate after a successful acquisition.','FAAB prices are manual for NHL/NBA; NFL guillotine price calibration is not applied.','Available-from dates refer to the first scoring date after host processing and lineup locks; verify the host’s cutoff.','Backup games have provisional 0.1 option credit, not guaranteed fractional starts. One-slot streamer ties give early usable games a provisional 0.15 preference.']};
 }

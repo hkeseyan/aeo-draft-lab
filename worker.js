@@ -741,6 +741,11 @@ function flattenYahooMeta(value, out = {}) {
       const selected = flattenYahooMeta(v, {});
       if (selected.position) out.roster_slot = selected.position;
     }
+    else if (k === 'eligible_positions') {
+      const positions=[];
+      const collect=x=>{if(Array.isArray(x))x.forEach(collect);else if(x&&typeof x==='object')Object.entries(x).forEach(([key,val])=>key==='position'&&typeof val==='string'?positions.push(val):collect(val));};
+      collect(v);out.eligible_positions=[...new Set(positions)].filter(pos=>!['BN','IR','IR+','IL','IL+'].includes(pos));
+    }
     else if (k === "percent_owned") {
       const pct = flattenYahooMeta(v, {});
       if (pct.value != null) out.percent_owned = pct.value;
@@ -799,13 +804,13 @@ async function resolveYahooLeagueKey(token, profile) {
   return hit.league_key;
 }
 __name(resolveYahooLeagueKey, "resolveYahooLeagueKey");
-function yahooPlayerRows(raw, availabilityStatus = "") {
+function yahooPlayerRows(raw, availabilityStatus = "", sport = 'nfl') {
   const seen = new Set();
   return collectYahooEntities(raw, "player").filter((p) => p.player_key && !seen.has(p.player_key) && seen.add(p.player_key)).map((p) => ({
     name: p.name || "Unknown",
     player_key: p.player_key || "",
     provider_player_id: p.player_key || "",
-    pos: String(p.display_position || p.position || "").replace(/\s*,\s*/g, "/"),
+    pos: ['nhl','nba'].includes(sport)&&p.eligible_positions?.length ? p.eligible_positions.join('/') : String(p.display_position || p.position || "").replace(/\s*,\s*/g, "/"),
     team: p.editorial_team_abbr || "",
     status: p.status || availabilityStatus,
     availability_status: availabilityStatus || p.status || "",
@@ -871,11 +876,11 @@ async function yahooLeagueEligibility(token, leagueKey, limit = 500) {
   return rows;
 }
 __name(yahooLeagueEligibility, "yahooLeagueEligibility");
-async function yahooAvailablePlayers(token, leagueKey, status, limit = 100) {
+async function yahooAvailablePlayers(token, leagueKey, status, limit = 100, sport = 'nfl') {
   const rows = [], seen = new Set(), batch = 25;
   for (let start = 0; start < limit; start += batch) {
     const raw = await yahooJson(token, `league/${leagueKey}/players;status=${status};sort=OR;start=${start};count=${batch}/percent_owned`);
-    const got = yahooPlayerRows(raw, status).filter((p) => {
+    const got = yahooPlayerRows(raw, status, sport).filter((p) => {
       const key = p.provider_player_id || p.player_key;
       if (!key || seen.has(key)) return false;
       seen.add(key);
@@ -1030,8 +1035,8 @@ async function yahooFaabSnapshot(env, kv, originUrl, profile) {
   if (!mine || !mine.team_key) throw new Error("Yahoo league matched, but the current user's team could not be identified.");
   const [rosterRaw, waivers, freeAgents] = await Promise.all([
     yahooJson(token, `team/${mine.team_key}/roster`),
-    yahooAvailablePlayers(token, key, "W", 100),
-    yahooAvailablePlayers(token, key, "FA", 100)
+    yahooAvailablePlayers(token, key, "W", 100, profile.sport),
+    yahooAvailablePlayers(token, key, "FA", 100, profile.sport)
   ]);
   let transactionsRaw = null;
   let transactionError = "";
@@ -1040,7 +1045,7 @@ async function yahooFaabSnapshot(env, kv, originUrl, profile) {
   } catch (e) {
     transactionError = e.message;
   }
-  const roster = yahooPlayerRows(rosterRaw);
+  const roster = yahooPlayerRows(rosterRaw, '', profile.sport);
   const seen = new Set();
   const fullAvailable = [...waivers, ...freeAgents].filter((p) => !seen.has(p.provider_player_id) && seen.add(p.provider_player_id));
   const newlyDropped = transactionsRaw ? yahooRecentDrops(transactionsRaw, fullAvailable) : [];
