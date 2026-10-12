@@ -25,6 +25,8 @@ jobs:
           for attempt in $(seq 1 24); do
             html="$(curl -fsS --max-time 15 https://aeo-draft-lab.hkeseyan.workers.dev/ || true)"
             if printf '%s' "$html" | grep -q 'Schedule and usable games' \
+              && printf '%s' "$html" | grep -q 'Roster first: schedules, usable games and drop choices' \
+              && printf '%s' "$html" | grep -q 'Priority long-term adds' \
               && printf '%s' "$html" | grep -q 'Drop candidates: fewest usable games first' \
               && printf '%s' "$html" | grep -q 'Exposure across your other drafted leagues in this sport' \
               && printf '%s' "$html" | grep -q "Yahoo Public Prize NHL — H2H Points (12-team reference)" \

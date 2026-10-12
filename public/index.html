@@ -405,15 +405,16 @@
     </div>
     <div class="card" id="sportsWaiverPlanning" style="display:none">
       <h2>Schedule and usable games</h2>
-      <p class="small muted">Plan next week on Sunday; recalculate the remaining week when needed. Games on the bench count as zero. Mark drop_class as dead, replaceable, conditional or protected in the roster below. Use lineup_priority (higher starts first) to override the lineup order. Goalies need explicit start_dates; their team schedule is not a starts projection.</p>
+      <p class="small muted">Plan next week on Sunday; recalculate the remaining week when needed. Benched games are zero guaranteed starts; show backup availability separately with provisional 0.1 credit per game. Mark drop_class as dead, replaceable, conditional or protected in the roster below. Use lineup_priority (higher starts first) to override the lineup order. Goalies need explicit start_dates; their team schedule is not a starts projection.</p>
       <div class="row">
-        <label class="small">Window <select id="waiverPlanningMode"><option value="next_week">Next week</option><option value="remaining_week">Remaining week</option><option value="custom">Custom dates</option></select></label>
+        <label class="small">Window <select id="waiverPlanningMode"><option value="sunday_monday">Sunday claims → Monday week</option><option value="next_week">Next calendar week</option><option value="remaining_week">Remaining week</option><option value="custom">Custom dates</option></select></label>
         <label class="small">From <input id="waiverPlanStart" type="date"></label>
         <label class="small">Through <input id="waiverPlanEnd" type="date"></label>
         <label class="small">Adds active from <input id="waiverActiveFrom" type="date" title="First scoring date after waiver processing and lineup locks. Can also be set per candidate with available_from."></label>
+        <label class="small">Streaming slots <select id="waiverStreamingSlots"><option value="1">1 slot</option><option value="2">2 slots</option><option value="3">3 slots</option></select></label>
         <label class="small">Adds remaining <input id="waiverAddsRemaining" type="number" min="0" style="width:65px" placeholder="unknown"></label>
       </div>
-      <p class="small muted">Continuous waivers need an effective date before a claim is actionable. Enter the host's submission deadline in Decision context below. FAAB prices remain manual for NHL/NBA. Each result is an alternative; rerun after an acquisition.</p>
+      <p class="small muted">Sunday claims default to the selected Monday as the first scoring date; verify the host cutoff. Other windows require an effective date before a claim is actionable. Enter the host's submission deadline in Decision context below. FAAB prices remain manual for NHL/NBA. Each result is an alternative; rerun after an acquisition.</p>
       <details><summary class="small muted">Manual schedule fallback</summary><p class="small muted">CSV headers: date,team. One team per row/date; include both teams for each game. Include every date in the window, using a blank team for an off day. Leave empty to fetch the sport's schedule.</p><textarea id="waiverScheduleCsv" placeholder="date,team" style="min-height:100px"></textarea></details>
       <div id="waiverRosterCoverage" style="margin-top:12px"></div>
     </div>
@@ -5881,8 +5882,10 @@ let INSEASON_STATE={};
 let WAIVER_TICKETS=[];
 let WAIVER_REVIEW_FEEDBACK={};
 let WAIVER_REVIEW_SORT='recommendation';
-const FAAB_ROSTER_HEADERS=['name','pos','team','week_proj','ros_rank','status','bye_week','roster_slot','drop_class','drop_notes','fppg','lineup_priority','start_dates'];
-const FAAB_AVAILABLE_HEADERS=['name','pos','team','roster_pct','roster_trend','trend_metric','trend_window_hours','trend_source','metadata_updated_at','week_proj','ros_rank','endgame','role','schedule','injury','teammate','bye_week','status','notes','fppg','lineup_priority','start_dates','available_from'];
+let WAIVER_TARGET_PREFERENCES=[];
+let WAIVER_ROSTER_PREFERENCES=[];
+const FAAB_ROSTER_HEADERS=['name','pos','team','week_proj','ros_rank','status','bye_week','roster_slot','drop_class','drop_notes','fppg','lineup_priority','start_dates','injury_outlook','injury_confidence','injury_source','injury_checked_at','injury_note'];
+const FAAB_AVAILABLE_HEADERS=['name','pos','team','roster_pct','roster_trend','trend_metric','trend_window_hours','trend_source','metadata_updated_at','week_proj','ros_rank','endgame','role','schedule','injury','teammate','bye_week','status','notes','fppg','lineup_priority','start_dates','available_from','target_class','injury_outlook','injury_confidence','injury_source','injury_checked_at','injury_note'];
 const FAAB_OVERRIDE_HEADERS=['name','suggested_bid','max_bid','drop_first','drop_second','secondary_multiplier','decision','notes'];
 const FAAB_HISTORY_HEADERS=['date','week','team_count','teams_alive','player','pos','tier','winning_bid','losing_bids','winning_manager','notes'];
 function waiverCsvObjects(text){
@@ -5990,12 +5993,20 @@ function waiverShiftDate(date,days){const d=new Date(date+'T12:00:00Z');d.setUTC
 function setWaiverPlanningDates(){
   const mode=el('waiverPlanningMode').value;if(mode==='custom')return;
   const today=waiverPacificDate(),day=waiverPacificWeekday(),monday=waiverShiftDate(today,-((day+6)%7));
-  el('waiverPlanStart').value=mode==='next_week'?waiverShiftDate(monday,7):today;
-  el('waiverPlanEnd').value=waiverShiftDate(monday,mode==='next_week'?13:6);
+  const upcoming=day===1?today:waiverShiftDate(monday,7);
+  el('waiverPlanStart').value=mode==='sunday_monday'?upcoming:mode==='next_week'?waiverShiftDate(monday,7):today;
+  el('waiverPlanEnd').value=mode==='sunday_monday'?waiverShiftDate(upcoming,6):waiverShiftDate(monday,mode==='next_week'?13:6);
+  if(mode==='sunday_monday')el('waiverActiveFrom').value=el('waiverPlanStart').value;
+
 }
 el('waiverPlanningMode').onchange=setWaiverPlanningDates;
 for(const id of ['waiverPlanStart','waiverPlanEnd'])el(id).onchange=()=>el('waiverPlanningMode').value='custom';
 function faabStateFromForm(){return {
+  sportsPlanningPolicy:2,
+  targetPreferences:WAIVER_TARGET_PREFERENCES,
+  rosterPreferences:WAIVER_ROSTER_PREFERENCES,
+  streamingSlots:+el('waiverStreamingSlots').value||1,
+  playerContext:INSEASON_STATE.playerContext||[],
   planningMode:el('waiverPlanningMode').value,
   planStart:el('waiverPlanStart').value,
   planEnd:el('waiverPlanEnd').value,
@@ -6032,6 +6043,9 @@ function faabStateFromForm(){return {
 };}
 function applyFaabState(s={}){
   INSEASON_STATE={...s};
+  WAIVER_TARGET_PREFERENCES=Array.isArray(s.targetPreferences)?s.targetPreferences:[];
+  WAIVER_ROSTER_PREFERENCES=Array.isArray(s.rosterPreferences)?s.rosterPreferences:[];
+  el('waiverStreamingSlots').value=s.streamingSlots||1;
   WAIVER_REVIEW_FEEDBACK=s.reviewFeedback&&typeof s.reviewFeedback==='object'?{...s.reviewFeedback}:{};
   WAIVER_REVIEW_SORT=s.reviewSort||'recommendation';
   const guillotine=LEAGUE.leagueType==='guillotine';
@@ -6042,11 +6056,11 @@ function applyFaabState(s={}){
   el('faabAutoEmailLabel').style.display=sports?'none':'';
   el('faabCalendar').textContent=sports?'Add Sunday planning reminder':'Add Tuesday calendar reminder';
   for(const id of ['faabWeek','faabTeamsAlive','faabAggression'])el(id).closest('label').style.display=sports?'none':'';
-  el('waiverPlanningMode').value=s.planningMode||(waiverPacificWeekday()===0?'next_week':'remaining_week');
+  el('waiverPlanningMode').value=sports&&s.sportsPlanningPolicy!==2?'sunday_monday':s.planningMode||'sunday_monday';
   setWaiverPlanningDates();
-  if(s.planStart)el('waiverPlanStart').value=s.planStart;
-  if(s.planEnd)el('waiverPlanEnd').value=s.planEnd;
-  el('waiverActiveFrom').value=s.acquisitionsActiveFrom||'';
+  if(s.planStart&&(s.sportsPlanningPolicy===2||s.planningMode==='custom'))el('waiverPlanStart').value=s.planStart;
+  if(s.planEnd&&(s.sportsPlanningPolicy===2||s.planningMode==='custom'))el('waiverPlanEnd').value=s.planEnd;
+  el('waiverActiveFrom').value=s.acquisitionsActiveFrom||(el('waiverPlanningMode').value==='sunday_monday'?el('waiverPlanStart').value:'');
   el('waiverAddsRemaining').value=s.acquisitionsRemaining==null?'':s.acquisitionsRemaining;
   el('waiverScheduleCsv').value=s.gameScheduleCsv||'';
   el('faabWeek').value=s.week||2;
@@ -6181,25 +6195,56 @@ async function saveWaiverReviewFeedback(key,value){
   try{await saveFaabState(false);el('waiverTicketStatus').textContent='✓ Review feedback saved';}
   catch(e){el('waiverTicketStatus').textContent='⚠ Could not save review feedback: '+e.message;}
 }
+async function setWaiverTargetPreference(index,targetClass){
+  const p=FAAB_REPORT&&FAAB_REPORT.recommendations[index];if(!p)return;
+  WAIVER_TARGET_PREFERENCES=WAIVER_TARGET_PREFERENCES.filter(t=>t.name!==p.name||t.pos!==p.pos);
+  if(targetClass)WAIVER_TARGET_PREFERENCES.push({name:p.name,pos:p.pos,targetClass});
+  try{await saveFaabState(false);await runFaab(false);}catch(e){el('faabStatus').textContent=e.message;}
+}
+async function setWaiverRosterDisposition(index,dropClass){
+  const p=FAAB_REPORT&&FAAB_REPORT.rosterOpportunity&&FAAB_REPORT.rosterOpportunity[index];if(!p)return;
+  WAIVER_ROSTER_PREFERENCES=WAIVER_ROSTER_PREFERENCES.filter(t=>t.name!==p.name||t.pos!==p.pos);
+  WAIVER_ROSTER_PREFERENCES.push({name:p.name,pos:p.pos,dropClass});
+  const rows=waiverCsvObjects(el('faabRosterCsv').value);
+  const row=rows.find(r=>r.name===p.name&&r.pos===p.pos);if(!row)return;
+  row.drop_class=dropClass;el('faabRosterCsv').value=faabRowsCsv(rows,FAAB_ROSTER_HEADERS);
+  try{await saveFaabState(false);await runFaab(false);}catch(e){el('faabStatus').textContent=e.message;}
+}
 function renderScheduleWaiverReport(report){
   FAAB_REPORT=report;
   const w=report.window||{};
-  el('faabReportMeta').textContent=`${report.sport.toUpperCase()} · ${w.start} through ${w.end} · ${report.lineupPeriod} lineups · ${report.scheduleSource}`;
+  el('faabReportMeta').textContent=`${report.sport.toUpperCase()} · ${w.start} through ${w.end} · ${report.lineupPeriod} lineups · ${report.scheduleSource}${report.plannerVersion!==2?' · Older report — rerun to apply opportunity and injury fixes':''}`;
   el('waiverRosterCoverage').innerHTML=(report.warnings||[]).map(text=>`<p class="small faab-pass">${faabEsc(text)}</p>`).join('')
-    +'<h3>Daily lineup coverage</h3><div class="scroll"><table><thead><tr><th>Day</th><th>Usable starts</th><th>Benched</th><th>Open positions</th></tr></thead><tbody>'
-    +(report.rosterDays||[]).map(d=>`<tr><td>${faabEsc(d.date)}</td><td>${d.started}</td><td>${faabEsc(d.benched.join(', ')||'—')}</td><td>${faabEsc(d.openSlots.join(', ')||'Full')}</td></tr>`).join('')+'</tbody></table></div>'
-    +'<h3>Drop candidates: fewest usable games first</h3><div class="scroll"><table><thead><tr><th>Player</th><th>Disposition</th><th>Scheduled</th><th>Usable</th><th>Usable dates</th></tr></thead><tbody>'
-    +(report.dropCandidates||[]).map(p=>`<tr><td>${faabEsc(p.name)} · ${faabEsc(p.pos)}</td><td>${faabEsc(p.dropClass)}</td><td>${p.scheduledGames}</td><td><b>${p.usableGames}</b></td><td>${faabEsc(p.usableDates.join(', ')||'—')}</td></tr>`).join('')+'</tbody></table></div>'
+    +'<h3>Daily lineup coverage</h3><div class="scroll"><table><thead><tr><th>Day</th><th>Position assignments</th><th>Benched</th><th>Open positions</th></tr></thead><tbody>'
+    +(report.rosterDays||[]).map(d=>`<tr><td>${faabEsc(d.date)}</td><td>${faabEsc((d.assignments||[]).filter(a=>a.player).map(a=>a.slot+': '+a.player).join(' · '))}</td><td>${faabEsc(d.benched.join(', ')||'—')}</td><td>${faabEsc(d.openSlots.join(', ')||'Full')}</td></tr>`).join('')+'</tbody></table></div>'
+    +'<h3>Roster first: schedules, usable games and drop choices</h3><div class="scroll"><table><thead><tr><th>Player / eligible positions</th><th>Disposition</th><th>Schedule / lineup fit</th><th>Usable + backup</th><th>First / last usable</th></tr></thead><tbody>'
+    +(report.rosterOpportunity||report.dropCandidates||[]).map((p,i)=>`<tr><td>${faabEsc(p.name)} · ${faabEsc(p.pos)}${p.reserve?' · IR stash':''}</td><td><select data-roster-disposition="${i}" ${p.reserve?'disabled':''}>${['unclassified','protected','conditional','replaceable','dead'].map(v=>`<option value="${v}" ${p.dropClass===v?'selected':''}>${v}</option>`).join('')}</select></td><td>${faabEsc((p.scheduledDates||[]).map(d=>d+': '+(p.usableDates.includes(d)?'start':(p.contingentDates||[]).includes(d)?'bench backup':p.reserve?'IR':'out / unknown')).join(' · '))}</td><td><b>${p.usableGames==null?'Unknown':p.usableGames}</b> + ${p.contingentGames||0} backup<div class="small muted">provisional backup credit ${p.contingentCredit||0}</div></td><td>${faabEsc((p.firstUsableDate||'—')+' / '+(p.lastUsableDate||'—'))}<div class="small muted">${faabEsc(p.dropNotes||'')}</div></td></tr>`).join('')+'</tbody></table></div>'
+    +'<h3>Drop candidates: fewest usable games first</h3><p class="small">'+faabEsc((report.dropCandidates||[]).map(p=>p.name+': '+p.usableGames+' usable games').join(' · ')||'No drop candidates marked. Candidate lineup fit is still shown; a roster cut must be resolved separately.')+'</p>'
+    +(report.streamingPlan?'<h3>Streaming slot budget</h3><p class="small">'+faabEsc(report.streamingPlan.plannedSlots+' slots · '+(report.streamingPlan.planningBudget==null?'unknown':report.streamingPlan.planningBudget)+' adds '+(report.streamingPlan.budgetAssumed?'(assumed weekly budget)':'remaining')+' · '+report.streamingPlan.initialAdds+' initial adds · '+(report.streamingPlan.followUpAdds==null?'unknown':report.streamingPlan.followUpAdds)+' follow-up adds')+'</p><p class="small muted">'+faabEsc(report.streamingPlan.note)+'</p>':'')
+    +(report.streamingPaths&&report.streamingPaths.length?'<h3>Keep the early game, then reconsider the slot</h3><div class="scroll"><table><thead><tr><th>Current streamer</th><th>Use through</th><th>Next add</th><th>Active from</th><th>Gain / budget</th></tr></thead><tbody>'+report.streamingPaths.map(p=>`<tr><td>${faabEsc(p.hold)}</td><td>${faabEsc(p.useThrough)}</td><td>${faabEsc(p.replaceWith)}</td><td>${faabEsc(p.activeFrom)}</td><td>+${p.netGames} net starts · ${p.addsRequired} add</td></tr>`).join('')+'</tbody></table></div><p class="small muted">Alternatives, not simultaneous claims. Verify game completion and the host’s next-day processing cutoff; rerun as the week changes.</p>':'')
     +'<p class="small muted">'+faabEsc((report.assumptions||[]).join(' '))+'</p>';
-  const body=el('faabResults');
-  body.innerHTML=waiverReviewRows(report).map(p=>{
-    const key=waiverReviewKey(report,p),fb=WAIVER_REVIEW_FEEDBACK[key]||'';
-    const bid=el('waiverMethod').value==='faab'?`<label class="small">Manual bid $<input type="number" min="0" step="1" data-sports-bid="${p._reportIndex}" style="width:70px" value="${p.recommendedBid==null?'':p.recommendedBid}"></label>`:'Confirm host claim route';
-    return `<tr><td><b>${faabEsc(p.name)}</b><div class="small muted">${faabEsc(p.team)} · ${faabEsc(p.pos)}</div></td><td><b>${p.usableGames} usable / ${p.scheduledGames} scheduled</b><div class="small">${p.netGames>=0?'+':''}${p.netGames} net starting games${p.lineupUpgrade==null?'':' · '+p.lineupUpgrade+' net pts'}</div><div class="small muted">${faabEsc(p.usableDates.join(', ')||'No usable dates')}</div><div class="small">${p.suggestedDrop?'Drop '+faabEsc(p.suggestedDrop):'Open slot or unresolved drop'}</div></td><td>${bid}<div class="small muted">${faabEsc(p.acquisitionsActiveFrom?'Active from '+p.acquisitionsActiveFrom:'Effective date required')}</div></td><td class="small">${(p.reasons||[]).map(faabEsc).join(' · ')}</td><td>${p.claimAction==='review'?`<button class="btn ghost" data-create-ticket="${p._reportIndex}">Create ticket</button>`:'Resolve constraints / pass'}<div><select data-waiver-feedback="${faabEsc(key)}"><option value="">No verdict</option>${['agree','too_high','too_low','wrong_drop','would_not_claim','needs_context'].map(v=>`<option value="${v}" ${fb===v?'selected':''}>${v.replace(/_/g,' ')}</option>`).join('')}</select></div></td></tr>`;
-  }).join('')||'<tr><td colspan="5" class="muted">No available players supplied.</td></tr>';
+  const body=el('faabResults'),rows=waiverReviewRows(report);
+  const laneNames={core_add:'Priority long-term adds — schedule independent',streamer:'Schedule streamers',watch:'Longer-term watch — use a good schedule',injury_watch:'Injured — long-term / IR review only',excluded:'Excluded from pickups'};
+  const labels={core_add:'Long-term priority',streamer:'Schedule streamer',schedule_watch:'Longer-term watch',ir_stash:'IR stash watch',avoid:'Avoid'};
+  const html=[];
+  for(const lane of Object.keys(laneNames)){
+    const members=rows.filter(p=>(p.lane||'streamer')===lane);if(!members.length)continue;
+    html.push(`<tr><td colspan="5"><b>${laneNames[lane]}</b></td></tr>`);
+    for(const p of members){
+      const key=waiverReviewKey(report,p),fb=WAIVER_REVIEW_FEEDBACK[key]||'';
+      const bid=el('waiverMethod').value==='faab'&&lane!=='excluded'?`<label class="small">Manual bid $<input type="number" min="0" step="1" data-sports-bid="${p._reportIndex}" style="width:70px" value="${p.recommendedBid==null?'':p.recommendedBid}"></label>`:'Manual claim review';
+      const news=p.injurySource&&p.injurySource.startsWith('https://')?`<a href="${faabEsc(p.injurySource)}" target="_blank" rel="noopener">Injury source</a>${p.injuryCheckedAt?' · checked '+faabEsc(p.injuryCheckedAt):''}`:'Recent news not independently verified';
+      const net=p.netGames==null?'Net games unresolved — choose a drop':(p.netGames>=0?'+':'')+p.netGames+' net starting games';
+      html.push(`<tr><td><b>${faabEsc(p.name)}</b><div class="small muted">${faabEsc(p.team)} · ${faabEsc(p.pos)} · ${faabEsc(p.injuryStatus||'No host injury tag')}</div><select data-waiver-target="${p._reportIndex}">${Object.entries(labels).map(([v,label])=>`<option value="${v}" ${p.targetClass===v?'selected':''}>${label}</option>`).join('')}</select></td><td><b>${p.usableGames==null?'Usable starts unknown':p.usableGames+' usable'} / ${p.scheduledGames} scheduled</b><div class="small">${faabEsc(net)}${p.lineupUpgrade==null?'':' · '+p.lineupUpgrade+' net pts'}</div><div class="small muted">${faabEsc(p.usableDates.join(', ')||'No usable dates')} · ${p.contingentGames||0} backup games (+${p.contingentCredit||0} provisional)${p.earlyUsableGames?' · early-week usable '+p.earlyUsableGames:''}</div><div class="small">${p.suggestedDrop?'Drop '+faabEsc(p.suggestedDrop):p.dropResolved?'Open roster spot':'Drop unresolved'}</div></td><td>${bid}<div class="small muted">${faabEsc(p.acquisitionsActiveFrom?'Active from '+p.acquisitionsActiveFrom:'Effective date required')}</div></td><td class="small">${(p.reasons||[]).map(faabEsc).join(' · ')}<div>${news}</div>${p.injuryNote?'<div>'+faabEsc(p.injuryNote)+'</div>':''}</td><td>${p.claimAction==='review'?`<button class="btn ghost" data-create-ticket="${p._reportIndex}">Create ticket</button>`:lane==='excluded'?'Do not claim':'Review constraints'}<div><select data-waiver-feedback="${faabEsc(key)}"><option value="">No verdict</option>${['agree','too_high','too_low','wrong_drop','would_not_claim','needs_context'].map(v=>`<option value="${v}" ${fb===v?'selected':''}>${v.replace(/_/g,' ')}</option>`).join('')}</select></div></td></tr>`);
+    }
+  }
+  body.innerHTML=html.join('')||'<tr><td colspan="5" class="muted">No available players supplied.</td></tr>';
   body.querySelectorAll('[data-create-ticket]').forEach(b=>b.onclick=()=>createWaiverTicket(+b.dataset.createTicket));
   body.querySelectorAll('[data-waiver-feedback]').forEach(s=>s.onchange=()=>saveWaiverReviewFeedback(s.dataset.waiverFeedback,s.value));
+  body.querySelectorAll('[data-waiver-target]').forEach(s=>s.onchange=()=>setWaiverTargetPreference(+s.dataset.waiverTarget,s.value));
+  el('waiverRosterCoverage').querySelectorAll('[data-roster-disposition]').forEach(s=>s.onchange=()=>setWaiverRosterDisposition(+s.dataset.rosterDisposition,s.value));
 }
+
 function renderFaabReport(report){
   if(report.planner==='schedule'){renderScheduleWaiverReport(report);return;}
   el('waiverRosterCoverage').innerHTML='';
