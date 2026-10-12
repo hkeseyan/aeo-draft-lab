@@ -399,9 +399,23 @@
         <button class="btn" id="faabYahooRun">Sync sources + run</button>
         <button class="btn ghost" id="faabManualRun">Run pasted pool</button>
         <button class="btn ghost" id="faabSave">Save inputs</button>
-        <button class="btn ghost" id="faabCalendar">Add Tuesday calendar reminder</button>
+        <button class="btn ghost" id="faabCalendar">Add planning calendar reminder</button>
         <span class="small muted" id="faabStatus"></span>
       </div>
+    </div>
+    <div class="card" id="sportsWaiverPlanning" style="display:none">
+      <h2>Schedule and usable games</h2>
+      <p class="small muted">Plan next week on Sunday; recalculate the remaining week when needed. Games on the bench count as zero. Mark drop_class as dead, replaceable, conditional or protected in the roster below. Use lineup_priority (higher starts first) to override the lineup order. Goalies need explicit start_dates; their team schedule is not a starts projection.</p>
+      <div class="row">
+        <label class="small">Window <select id="waiverPlanningMode"><option value="next_week">Next week</option><option value="remaining_week">Remaining week</option><option value="custom">Custom dates</option></select></label>
+        <label class="small">From <input id="waiverPlanStart" type="date"></label>
+        <label class="small">Through <input id="waiverPlanEnd" type="date"></label>
+        <label class="small">Adds active from <input id="waiverActiveFrom" type="date" title="First scoring date after waiver processing and lineup locks. Can also be set per candidate with available_from."></label>
+        <label class="small">Adds remaining <input id="waiverAddsRemaining" type="number" min="0" style="width:65px" placeholder="unknown"></label>
+      </div>
+      <p class="small muted">Continuous waivers need an effective date before a claim is actionable. Enter the host's submission deadline in Decision context below. FAAB prices remain manual for NHL/NBA. Each result is an alternative; rerun after an acquisition.</p>
+      <details><summary class="small muted">Manual schedule fallback</summary><p class="small muted">CSV headers: date,team. One team per row/date; include both teams for each game. Include every date in the window, using a blank team for an off day. Leave empty to fetch the sport's schedule.</p><textarea id="waiverScheduleCsv" placeholder="date,team" style="min-height:100px"></textarea></details>
+      <div id="waiverRosterCoverage" style="margin-top:12px"></div>
     </div>
     <div class="card">
       <h2>Decision context</h2>
@@ -464,14 +478,14 @@
         <span class="small muted" id="faabReportMeta"></span>
         <label class="small" style="margin-left:auto">Sort <select id="waiverReviewSort"><option value="recommendation">Model recommendation</option><option value="discovery">Market discovery</option><option value="roster_pct">Roster %</option><option value="trend">Recent trend</option><option value="ros_rank">ROS rank</option></select></label>
         <label class="small">Email <input id="faabEmail" type="email" placeholder="you@example.com" style="min-width:210px"></label>
-        <label class="small"><input id="faabEmailEnabled" type="checkbox"> auto-email Tuesday</label>
-        <label class="small"><input id="faabScheduleEnabled" type="checkbox" checked> run Tuesdays 1am Pacific</label>
+        <label class="small" id="faabAutoEmailLabel"><input id="faabEmailEnabled" type="checkbox"> auto-email Tuesday</label>
+        <label class="small"><input id="faabScheduleEnabled" type="checkbox" checked> <span id="faabScheduleLabel">run Tuesdays 1am Pacific</span></label>
         <button class="btn ghost" id="faabEmailNow">Email this report</button>
       </div>
       <div class="scroll" style="margin-top:8px">
         <table><thead><tr><th>Player</th><th>Roster impact</th><th>Bid levels</th><th>Reasoning</th><th>Test feedback</th></tr></thead><tbody id="faabResults"><tr><td colspan="5" class="muted">Run the analysis after the waiver pool updates.</td></tr></tbody></table>
       </div>
-      <details style="margin-top:10px"><summary class="small muted">Prior Tuesday reports</summary><div class="scroll"><table><thead><tr><th>When</th><th>Week</th><th>Top recommendations</th><th></th></tr></thead><tbody id="faabHistory"></tbody></table></div></details>
+      <details style="margin-top:10px"><summary class="small muted">Prior waiver reports</summary><div class="scroll"><table><thead><tr><th>When</th><th>Window / week</th><th>Top recommendations</th><th></th></tr></thead><tbody id="faabHistory"></tbody></table></div></details>
     </div>
     <div class="card">
       <div class="row"><h2 style="margin:0">Waiver ticket list</h2><span class="small muted" id="waiverTicketStatus" style="margin-left:auto"></span></div>
@@ -2895,6 +2909,10 @@ LEAGUES_DEFAULT['yahoo-prize-cat-3175']={
   rostersRaw:'', playersCsv:PLAYERS_CSV_NHL, poolDataRevision:'nhl-2026-09-28-dedupe-and-position-repair',
 };
 let LEAGUES = {...LEAGUES_DEFAULT};
+// Verified Yahoo NHL Public Prize profiles use continuous FAB waivers.
+for(const profile of Object.values(LEAGUES_DEFAULT)){
+  if(profile.sport==='nhl'&&profile.platform==='yahoo'&&!profile.waiverRules)profile.waiverRules={type:'FAB with continual rolling list tiebreak',waiverDays:2,mode:'continuous'};
+}
 </script>
 <script>
 // ---------- ACCOUNTS + GUEST MODE ----------
@@ -5863,15 +5881,27 @@ let INSEASON_STATE={};
 let WAIVER_TICKETS=[];
 let WAIVER_REVIEW_FEEDBACK={};
 let WAIVER_REVIEW_SORT='recommendation';
-const FAAB_ROSTER_HEADERS=['name','pos','team','week_proj','ros_rank','status','bye_week','roster_slot','drop_class','drop_notes'];
-const FAAB_AVAILABLE_HEADERS=['name','pos','team','roster_pct','roster_trend','trend_metric','trend_window_hours','trend_source','metadata_updated_at','week_proj','ros_rank','endgame','role','schedule','injury','teammate','bye_week','status','notes'];
+const FAAB_ROSTER_HEADERS=['name','pos','team','week_proj','ros_rank','status','bye_week','roster_slot','drop_class','drop_notes','fppg','lineup_priority','start_dates'];
+const FAAB_AVAILABLE_HEADERS=['name','pos','team','roster_pct','roster_trend','trend_metric','trend_window_hours','trend_source','metadata_updated_at','week_proj','ros_rank','endgame','role','schedule','injury','teammate','bye_week','status','notes','fppg','lineup_priority','start_dates','available_from'];
 const FAAB_OVERRIDE_HEADERS=['name','suggested_bid','max_bid','drop_first','drop_second','secondary_multiplier','decision','notes'];
 const FAAB_HISTORY_HEADERS=['date','week','team_count','teams_alive','player','pos','tier','winning_bid','losing_bids','winning_manager','notes'];
+function waiverCsvObjects(text){
+  const rows=[];let row=[],cell='',quoted=false;
+  const src=String(text||'').replace(/\r\n?/g,'\n')+'\n';
+  for(let i=0;i<src.length;i++){
+    const c=src[i];
+    if(quoted){if(c==='"'&&src[i+1]==='"'){cell+='"';i++;}else if(c==='"')quoted=false;else cell+=c;}
+    else if(c==='"')quoted=true;
+    else if(c===','||c==='\n'){row.push(cell.trim());cell='';if(c==='\n'){if(row.some(Boolean))rows.push(row);row=[];}}
+    else cell+=c;
+  }
+  const header=rows.shift()||[];return rows.map(r=>Object.fromEntries(header.map((h,i)=>[h,r[i]||''])));
+}
 function faabEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function faabCsvCell(v){const s=String(v==null?'':v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
 function faabRowsCsv(rows,headers){return headers.join(',')+'\n'+(rows||[]).map(r=>headers.map(h=>faabCsvCell(r[h])).join(',')).join('\n');}
 function defaultFaabRosterCsv(){
-  const rows=effRoster(ME_OWNER).map(r=>{const p=findPlayer(r.player)||{};return {name:r.player,pos:p.pos||'',team:p.team||'',week_proj:p.proj?Math.round((p.proj/17)*10)/10:'',ros_rank:p.ecr||'',status:'',bye_week:''};});
+  const rows=effRoster(ME_OWNER).map(r=>{const p=findPlayer(r.player)||{};return {name:r.player,pos:(rosterEligiblePositions(p).join('/')||p.pos||''),team:p.team||'',week_proj:SPORT.id==='nfl'&&p.proj?Math.round((p.proj/17)*10)/10:'',fppg:p.fppg||'',ros_rank:p.ecr||'',status:'',bye_week:''};});
   return faabRowsCsv(rows,FAAB_ROSTER_HEADERS);
 }
 function faabSourceSummary(d={}){
@@ -5920,7 +5950,11 @@ async function syncFaabSources(){
   try{
     const r=await fetch('/api/data-sources/sync?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method:'POST',headers:tokenHdr()});const d=await r.json();
     if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
-    if(d.roster&&d.roster.length)el('faabRosterCsv').value=faabRowsCsv(d.roster,FAAB_ROSTER_HEADERS);
+    if(d.roster&&d.roster.length){
+      const prior=isScheduleWaiverSport()?waiverCsvObjects(el('faabRosterCsv').value):[];
+      const rows=d.roster.map(p=>{const tag=prior.find(t=>t.name===p.name&&t.pos===p.pos);return tag?{...p,drop_class:tag.drop_class,drop_notes:tag.drop_notes,lineup_priority:tag.lineup_priority,start_dates:tag.start_dates,fppg:tag.fppg}:p;});
+      el('faabRosterCsv').value=faabRowsCsv(rows,FAAB_ROSTER_HEADERS);
+    }
     if(d.available&&d.available.length)el('faabAvailableCsv').value=faabRowsCsv(d.available,FAAB_AVAILABLE_HEADERS);
     if(d.budgets&&d.budgets.mine!=null)el('faabRemainingBudget').value=d.budgets.mine;
     INSEASON_STATE.competitorBudgets=d.budgets&&d.budgets.teams||INSEASON_STATE.competitorBudgets||[];
@@ -5949,7 +5983,26 @@ async function saveFaabCalibration(){
     status.textContent=`✓ ${d.baselineCount} preserved observations · ${d.customCount} added for this league`;
   }catch(e){status.textContent='⚠ '+e.message;}
 }
+function isScheduleWaiverSport(){return ['nhl','nba'].includes(SPORT.id);}
+function waiverPacificDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
+function waiverPacificWeekday(){return new Date(waiverPacificDate()+'T12:00:00Z').getUTCDay();}
+function waiverShiftDate(date,days){const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
+function setWaiverPlanningDates(){
+  const mode=el('waiverPlanningMode').value;if(mode==='custom')return;
+  const today=waiverPacificDate(),day=waiverPacificWeekday(),monday=waiverShiftDate(today,-((day+6)%7));
+  el('waiverPlanStart').value=mode==='next_week'?waiverShiftDate(monday,7):today;
+  el('waiverPlanEnd').value=waiverShiftDate(monday,mode==='next_week'?13:6);
+}
+el('waiverPlanningMode').onchange=setWaiverPlanningDates;
+for(const id of ['waiverPlanStart','waiverPlanEnd'])el(id).onchange=()=>el('waiverPlanningMode').value='custom';
 function faabStateFromForm(){return {
+  planningMode:el('waiverPlanningMode').value,
+  planStart:el('waiverPlanStart').value,
+  planEnd:el('waiverPlanEnd').value,
+  acquisitionsActiveFrom:el('waiverActiveFrom').value,
+  acquisitionsRemaining:el('waiverAddsRemaining').value===''?null:+el('waiverAddsRemaining').value,
+  gameScheduleCsv:el('waiverScheduleCsv').value,
+  sportsScheduleEnabled:isScheduleWaiverSport()&&el('faabScheduleEnabled').checked,
   week:+el('faabWeek').value||1,
   startingBudget:+el('faabStartingBudget').value||1000,
   remainingBudget:+el('faabRemainingBudget').value||0,
@@ -5962,7 +6015,7 @@ function faabStateFromForm(){return {
   managerNotes:el('faabManagerNotes').value.trim(),
   playerOverridesCsv:el('faabPlayerOverridesCsv').value,
   competitorBudgets:INSEASON_STATE.competitorBudgets||[],
-  scheduleEnabled:el('faabScheduleEnabled').checked,
+  scheduleEnabled:!isScheduleWaiverSport()&&el('faabScheduleEnabled').checked,
   emailEnabled:el('faabEmailEnabled').checked,
   emailTo:el('faabEmail').value.trim(),
   teamDirection:el('waiverTeamDirection').value,
@@ -5982,18 +6035,32 @@ function applyFaabState(s={}){
   WAIVER_REVIEW_FEEDBACK=s.reviewFeedback&&typeof s.reviewFeedback==='object'?{...s.reviewFeedback}:{};
   WAIVER_REVIEW_SORT=s.reviewSort||'recommendation';
   const guillotine=LEAGUE.leagueType==='guillotine';
+  const sports=isScheduleWaiverSport();
+  el('sportsWaiverPlanning').style.display=sports?'':'none';
+  el('waiverRosterCoverage').innerHTML='';
+  el('faabScheduleLabel').textContent=sports?'plan Sundays 9am Pacific':'run Tuesdays 1am Pacific';
+  el('faabAutoEmailLabel').style.display=sports?'none':'';
+  el('faabCalendar').textContent=sports?'Add Sunday planning reminder':'Add Tuesday calendar reminder';
+  for(const id of ['faabWeek','faabTeamsAlive','faabAggression'])el(id).closest('label').style.display=sports?'none':'';
+  el('waiverPlanningMode').value=s.planningMode||(waiverPacificWeekday()===0?'next_week':'remaining_week');
+  setWaiverPlanningDates();
+  if(s.planStart)el('waiverPlanStart').value=s.planStart;
+  if(s.planEnd)el('waiverPlanEnd').value=s.planEnd;
+  el('waiverActiveFrom').value=s.acquisitionsActiveFrom||'';
+  el('waiverAddsRemaining').value=s.acquisitionsRemaining==null?'':s.acquisitionsRemaining;
+  el('waiverScheduleCsv').value=s.gameScheduleCsv||'';
   el('faabWeek').value=s.week||2;
   el('faabStartingBudget').value=s.startingBudget||1000;
   el('faabRemainingBudget').value=s.remainingBudget==null?(s.startingBudget||1000):s.remainingBudget;
   el('faabTeamsAlive').value=s.teamsAlive||LEAGUE.teams||12;
   el('faabOpenRosterSpots').value=Math.max(0,+s.openRosterSpots||0);
   el('faabAggression').value=String(s.aggression||0.8);
-  el('faabScheduleEnabled').checked=s.scheduleEnabled!==false;
+  el('faabScheduleEnabled').checked=sports?!!s.sportsScheduleEnabled:s.scheduleEnabled!==false;
   el('faabEmailEnabled').checked=!!s.emailEnabled;
   el('faabEmail').value=s.emailTo||s.emailDefault||(ME.user&&ME.user.email)||'';
   el('waiverTeamDirection').value=s.teamDirection||(guillotine?'survive':'unspecified');
-  el('waiverProcessing').value=s.waiverProcessing||(s.waiverMethod==='free_agency'?'free_agency_only':'unknown');
-  el('waiverMethod').value=s.waiverMethod||(guillotine?'faab':'unknown');
+  el('waiverProcessing').value=s.waiverProcessing||(LEAGUE.waiverRules&&LEAGUE.waiverRules.mode==='continuous'?'continuous_waivers':s.waiverMethod==='free_agency'?'free_agency_only':'unknown');
+  el('waiverMethod').value=s.waiverMethod||(guillotine||/FAB/i.test(LEAGUE.waiverRules&&LEAGUE.waiverRules.type||'')?'faab':'unknown');
   el('waiverPriorityBehavior').value=s.waiverPriorityBehavior||'unknown';
   el('waiverZeroBidAllowed').checked=!!s.zeroBidAllowed;
   el('waiverDeadline').value=s.waiverDeadline||'';
@@ -6004,7 +6071,8 @@ function applyFaabState(s={}){
   if(el('waiverReviewSort'))el('waiverReviewSort').value=WAIVER_REVIEW_SORT;
   el('faabRosterCsv').value=s.rosterCsv||(s.roster?faabRowsCsv(s.roster,FAAB_ROSTER_HEADERS):defaultFaabRosterCsv());
   el('faabAvailableCsv').value=s.availableCsv||(s.available?faabRowsCsv(s.available,FAAB_AVAILABLE_HEADERS):FAAB_AVAILABLE_HEADERS.join(',')+'\n');
-  if(s.lastScheduledRun)el('faabStatus').textContent=`Tuesday run ${s.lastScheduledRun.status}${s.lastScheduledRun.reason?' — '+s.lastScheduledRun.reason:''}`;
+  if(sports&&s.lastSportsScheduledRun)el('faabStatus').textContent=`Sunday plan ${s.lastSportsScheduledRun.status}${s.lastSportsScheduledRun.reason?' — '+s.lastSportsScheduledRun.reason:''}`;
+  else if(!sports&&s.lastScheduledRun)el('faabStatus').textContent=`Tuesday run ${s.lastScheduledRun.status}${s.lastScheduledRun.reason?' — '+s.lastScheduledRun.reason:''}`;
   else if(s.dataSyncedAt)el('faabStatus').textContent='League data last refreshed '+new Date(s.dataSyncedAt).toLocaleString();
   else if(s.yahooSyncedAt)el('faabStatus').textContent='Yahoo last synced '+new Date(s.yahooSyncedAt).toLocaleString();
 }
@@ -6018,7 +6086,7 @@ async function loadFaabHistory(openLatest=false){
   const body=el('faabHistory');if(!body)return;
   try{
     const r=await fetch('/api/inseason/reports?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{headers:tokenHdr()});const rows=await r.json();
-    body.innerHTML=(rows||[]).map(x=>`<tr><td>${new Date(x.createdAt).toLocaleString()}</td><td>${x.week}</td><td>${faabEsc(x.top||'')}</td><td><button class="btn ghost" data-faab-report="${faabEsc(x.id)}">Open</button></td></tr>`).join('')||'<tr><td colspan="4" class="muted">No reports yet.</td></tr>';
+    body.innerHTML=(rows||[]).map(x=>`<tr><td>${new Date(x.createdAt).toLocaleString()}</td><td>${faabEsc(x.window||x.week||'')}</td><td>${faabEsc(x.top||'')}</td><td><button class="btn ghost" data-faab-report="${faabEsc(x.id)}">Open</button></td></tr>`).join('')||'<tr><td colspan="4" class="muted">No reports yet.</td></tr>';
     body.querySelectorAll('[data-faab-report]').forEach(b=>b.onclick=()=>openFaabReport(b.dataset.faabReport));
     if(openLatest && rows && rows[0])await openFaabReport(rows[0].id);
   }catch(e){body.innerHTML='<tr><td colspan="4" class="muted">History unavailable.</td></tr>';}
@@ -6073,6 +6141,14 @@ async function createWaiverTicket(index){
   const duplicate=WAIVER_TICKETS.find(t=>t.player===player.name&&['draft','approved','submitted'].includes(t.status));
   if(duplicate){if(notice)notice.textContent=`An open ticket already exists for ${player.name}.`;return;}
   const context=faabStateFromForm();if(notice)notice.textContent=`Creating ${player.name} ticket…`;
+  if(FAAB_REPORT.planner==='schedule'){
+    if(player.claimAction!=='review'){if(notice)notice.textContent='Resolve schedule, timing and roster constraints before creating a ticket.';return;}
+    if(context.waiverMethod==='faab'){
+      const bid=document.querySelector(`[data-sports-bid="${index}"]`);
+      if(!bid||bid.value===''||!Number.isInteger(+bid.value)||+bid.value<(context.zeroBidAllowed?0:1)){if(notice)notice.textContent='Enter a manual FAAB bid allowed by this league.';return;}
+      player.recommendedBid=+bid.value;
+    }
+  }
   try{
     const payload={
       action:'add',player:player.name,pos:player.pos,team:player.team,suggestedDrop:player.suggestedDrop||'',suggestedDropClass:player.suggestedDropClass||'',
@@ -6081,7 +6157,9 @@ async function createWaiverTicket(index){
       waiverProcessing:context.waiverProcessing,waiverMethod:context.waiverMethod,waiverPriorityBehavior:context.waiverPriorityBehavior,
       zeroBidAllowed:context.zeroBidAllowed,deadline:context.waiverDeadline,teamDirection:context.teamDirection,
       draftOrderRule:context.draftOrderRule,trigger:context.waiverTrigger,rationale:[...(player.reasons||[]),player.notes||''].filter(Boolean).join(' · '),
-      reportId:FAAB_REPORT.id,snapshotAt:INSEASON_STATE.dataSyncedAt||FAAB_REPORT.createdAt
+      reportId:FAAB_REPORT.id,snapshotAt:INSEASON_STATE.dataSyncedAt||FAAB_REPORT.createdAt,
+      planningStart:FAAB_REPORT.window&&FAAB_REPORT.window.start,planningEnd:FAAB_REPORT.window&&FAAB_REPORT.window.end,
+      acquisitionsActiveFrom:player.acquisitionsActiveFrom,usableDates:player.usableDates
     };
     const r=await fetch('/api/inseason/tickets?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method:'POST',headers:{'Content-Type':'application/json',...tokenHdr()},body:JSON.stringify(payload)});const d=await r.json();
     if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
@@ -6103,7 +6181,28 @@ async function saveWaiverReviewFeedback(key,value){
   try{await saveFaabState(false);el('waiverTicketStatus').textContent='✓ Review feedback saved';}
   catch(e){el('waiverTicketStatus').textContent='⚠ Could not save review feedback: '+e.message;}
 }
+function renderScheduleWaiverReport(report){
+  FAAB_REPORT=report;
+  const w=report.window||{};
+  el('faabReportMeta').textContent=`${report.sport.toUpperCase()} · ${w.start} through ${w.end} · ${report.lineupPeriod} lineups · ${report.scheduleSource}`;
+  el('waiverRosterCoverage').innerHTML=(report.warnings||[]).map(text=>`<p class="small faab-pass">${faabEsc(text)}</p>`).join('')
+    +'<h3>Daily lineup coverage</h3><div class="scroll"><table><thead><tr><th>Day</th><th>Usable starts</th><th>Benched</th><th>Open positions</th></tr></thead><tbody>'
+    +(report.rosterDays||[]).map(d=>`<tr><td>${faabEsc(d.date)}</td><td>${d.started}</td><td>${faabEsc(d.benched.join(', ')||'—')}</td><td>${faabEsc(d.openSlots.join(', ')||'Full')}</td></tr>`).join('')+'</tbody></table></div>'
+    +'<h3>Drop candidates: fewest usable games first</h3><div class="scroll"><table><thead><tr><th>Player</th><th>Disposition</th><th>Scheduled</th><th>Usable</th><th>Usable dates</th></tr></thead><tbody>'
+    +(report.dropCandidates||[]).map(p=>`<tr><td>${faabEsc(p.name)} · ${faabEsc(p.pos)}</td><td>${faabEsc(p.dropClass)}</td><td>${p.scheduledGames}</td><td><b>${p.usableGames}</b></td><td>${faabEsc(p.usableDates.join(', ')||'—')}</td></tr>`).join('')+'</tbody></table></div>'
+    +'<p class="small muted">'+faabEsc((report.assumptions||[]).join(' '))+'</p>';
+  const body=el('faabResults');
+  body.innerHTML=waiverReviewRows(report).map(p=>{
+    const key=waiverReviewKey(report,p),fb=WAIVER_REVIEW_FEEDBACK[key]||'';
+    const bid=el('waiverMethod').value==='faab'?`<label class="small">Manual bid $<input type="number" min="0" step="1" data-sports-bid="${p._reportIndex}" style="width:70px" value="${p.recommendedBid==null?'':p.recommendedBid}"></label>`:'Confirm host claim route';
+    return `<tr><td><b>${faabEsc(p.name)}</b><div class="small muted">${faabEsc(p.team)} · ${faabEsc(p.pos)}</div></td><td><b>${p.usableGames} usable / ${p.scheduledGames} scheduled</b><div class="small">${p.netGames>=0?'+':''}${p.netGames} net starting games${p.lineupUpgrade==null?'':' · '+p.lineupUpgrade+' net pts'}</div><div class="small muted">${faabEsc(p.usableDates.join(', ')||'No usable dates')}</div><div class="small">${p.suggestedDrop?'Drop '+faabEsc(p.suggestedDrop):'Open slot or unresolved drop'}</div></td><td>${bid}<div class="small muted">${faabEsc(p.acquisitionsActiveFrom?'Active from '+p.acquisitionsActiveFrom:'Effective date required')}</div></td><td class="small">${(p.reasons||[]).map(faabEsc).join(' · ')}</td><td>${p.claimAction==='review'?`<button class="btn ghost" data-create-ticket="${p._reportIndex}">Create ticket</button>`:'Resolve constraints / pass'}<div><select data-waiver-feedback="${faabEsc(key)}"><option value="">No verdict</option>${['agree','too_high','too_low','wrong_drop','would_not_claim','needs_context'].map(v=>`<option value="${v}" ${fb===v?'selected':''}>${v.replace(/_/g,' ')}</option>`).join('')}</select></div></td></tr>`;
+  }).join('')||'<tr><td colspan="5" class="muted">No available players supplied.</td></tr>';
+  body.querySelectorAll('[data-create-ticket]').forEach(b=>b.onclick=()=>createWaiverTicket(+b.dataset.createTicket));
+  body.querySelectorAll('[data-waiver-feedback]').forEach(s=>s.onchange=()=>saveWaiverReviewFeedback(s.dataset.waiverFeedback,s.value));
+}
 function renderFaabReport(report){
+  if(report.planner==='schedule'){renderScheduleWaiverReport(report);return;}
+  el('waiverRosterCoverage').innerHTML='';
   FAAB_REPORT=report;
   const showFaab=el('waiverMethod').value==='faab';
   if(el('waiverReviewSort'))el('waiverReviewSort').value=WAIVER_REVIEW_SORT;
@@ -6142,11 +6241,14 @@ async function emailFaabNow(){
   }catch(e){status.textContent='⚠ '+e.message;}
 }
 function downloadFaabCalendar(){
-  const d=new Date(),delta=(2-d.getDay()+7)%7||7;d.setDate(d.getDate()+delta);
-  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0'),stamp=`${y}${m}${day}`;
-  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Draft Lab//FAAB Lab//EN','BEGIN:VEVENT','UID:faab-'+CURRENT_LEAGUE_ID+'@draft-lab','DTSTART;TZID=America/Los_Angeles:'+stamp+'T010500','DTEND;TZID=America/Los_Angeles:'+stamp+'T013500','RRULE:FREQ=WEEKLY;BYDAY=TU;COUNT=18','SUMMARY:'+String(LEAGUE.name||'League').replace(/[,;]/g,' ')+' FAAB Lab review','DESCRIPTION:Open Draft Lab after Monday Night Football to review the eliminated roster and Tuesday bid recommendations.','BEGIN:VALARM','TRIGGER:-PT5M','ACTION:DISPLAY','DESCRIPTION:FAAB Lab report is ready','END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download='draft-lab-faab-tuesdays.ics';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  const sports=isScheduleWaiverSport(),target=sports?0:2,today=waiverPacificDate();
+  const date=waiverShiftDate(today,(target-waiverPacificWeekday()+7)%7||7),stamp=date.replace(/-/g,'');
+  const time=sports?'090500':'010500',end=sports?'093500':'013500',day=sports?'SU':'TU';
+  const description=sports?'Review next week’s usable games, crowded lineup days, drop candidates and acquisition deadlines.':'Review Tuesday bid recommendations after Monday Night Football.';
+  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Draft Lab//Waiver Lab//EN','BEGIN:VEVENT','UID:waiver-'+CURRENT_LEAGUE_ID+'@draft-lab','DTSTART;TZID=America/Los_Angeles:'+stamp+'T'+time,'DTEND;TZID=America/Los_Angeles:'+stamp+'T'+end,'RRULE:FREQ=WEEKLY;BYDAY='+day+';COUNT=26','SUMMARY:'+String(LEAGUE.name||'League').replace(/[,;]/g,' ')+' Waiver Lab review','DESCRIPTION:'+description,'BEGIN:VALARM','TRIGGER:-PT5M','ACTION:DISPLAY','DESCRIPTION:Waiver Lab planning review','END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download=sports?'draft-lab-waivers-sundays.ics':'draft-lab-faab-tuesdays.ics';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
+
 async function loadInSeasonState(){
   if(!el('faabWeek'))return;
   FAAB_REPORT=null;
@@ -6763,7 +6865,7 @@ async function fetchCloudLeagues(){
       // already in KV, so production kept running the generic defaults and priced
       // a backup quarterback at $9. Backfill each such field independently, and
       // only where the cloud copy has no value at all.
-      const BACKFILL=['leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','platform','platformEligibility','scoring','scoringMode','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek','rosterPositions','lineupPeriod','marketAdpSource','defaultStreamConfidence','projectionSources','availabilityDiscounts','assumptions'];
+      const BACKFILL=['waiverRules','leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','platform','platformEligibility','scoring','scoringMode','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek','rosterPositions','lineupPeriod','marketAdpSource','defaultStreamConfidence','projectionSources','availabilityDiscounts','assumptions'];
       const isEmpty=v=>v==null||v===''||(Array.isArray(v)&&!v.length)||(typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length);
       const toPatch=[];
       Object.values(LEAGUES_DEFAULT).forEach(def=>{
@@ -6831,3 +6933,4 @@ boot();
 </script>
 </body>
 </html>
+

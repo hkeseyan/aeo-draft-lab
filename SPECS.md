@@ -695,3 +695,20 @@ posture for a hostile viewer.
 
 See `CLAUDE.md` for the Worker/KV architecture — not a feature spec concern,
 kept there to avoid duplication.
+
+# NHL/NBA schedule-aware Waiver Lab (2026-10-11)
+
+NHL and NBA reports use a schedule planner instead of the NFL guillotine pricing engine. Sunday defaults to the upcoming Monday–Sunday; weekdays default to the remaining local Pacific week. Users can choose either window or a custom range (up to 21 days).
+
+The report first fits the roster into the league’s positional starter slots for each day, using supplied lineup_priority, per-game points, then ROS rank as fallback. Multi-position players can be reassigned but never counted twice. NHL F/D/G and NBA PG/SG/SF/PF/C/G/F/UTIL slots are supported. Points rates use supplied fppg or the embedded raw-stat projection rescored through league scoring and divided by projected games. These remain the existing projection inputs, not fresh news-aware forecasts.
+
+Only explicitly dead, replaceable or conditional roster players appear as drop candidates, sorted by fewest usable starts. Protected/unclassified players are never automatic cuts. Conditional cuts require the incoming player’s supplied ROS rank to be better. The add/drop simulation recomputes the full roster and reports candidate usable dates, net starting games and net points when both rosters have complete points inputs. Open roster capacity needs no drop. Each candidate is an independent alternative, not a simultaneous claim plan; rerun after a successful add.
+
+Continuous waivers require a first scoring date after host processing/lineup locks (global acquisitionsActiveFrom or per-player available_from). Games before that date do not count for the incoming player; outgoing players retain those earlier games. The league’s submission deadline is separate. Known zero acquisitions remaining blocks claims; an unknown weekly add balance is flagged. NHL/NBA FAAB bids are entered manually, not copied from NFL calibration. Tickets preserve the planning range, effective date and usable dates.
+
+Weekly lineups select one roster for the whole period rather than cycling by day. Current locked lineups are not inferred, so weekly tickets require a next-week plan and acquisition by the period start. Lock-In/Best Ball are explicitly unsupported by this planner. Category/Roto reports are usable-game opportunity reports; matchup category needs, goalie minimums, rate-stat effects and season games caps still require review. NHL goalie team games are shown as schedule context only; explicit start_dates are required for usable goalie starts. IR/IL and out statuses exclude current playing opportunity, without inventing a recovery date.
+
+Schedules use the NHL regular-season API and an NBA CDN adapter that excludes non-regular-season IDs. The NBA adapter is fixture-tested; live access returned 403 in this development environment and must be verified in the Worker. A manual date,team CSV fallback requires every date, with blank-team rows for off days. Incomplete/failed feeds stop report creation rather than producing a zero-game ranking. Cached feeds expire after six hours.
+
+Optional per-league sportsScheduleEnabled runs a fresh Sunday 9am Pacific report; the former Tuesday schedule checkbox is not inherited. Sunday cron covers both DST offsets, with local-time gating and daily idempotency. Existing NFL Tuesday guillotine processing remains unchanged. On-demand remaining-week calculation is available from the same tab. Calendar exports use Sunday planning for NHL/NBA and Tuesday for NFL. This feature creates reports/draft tickets and does not submit host transactions.
+
