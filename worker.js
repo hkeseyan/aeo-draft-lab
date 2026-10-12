@@ -1,3 +1,5 @@
+import { analyzeScheduleWaivers, planningWindow, localDate } from './waiver-planner.js';
+import { fetchGameSchedule, manualGameSchedule } from './waiver-schedules.js';
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
@@ -522,6 +524,7 @@ function suggestedWaiverDrop(roster, baseLineup, candidate) {
 }
 __name(suggestedWaiverDrop, "suggestedWaiverDrop");
 function analyzeFaab(input, profile = {}) {
+  if (profile.sport === 'nhl' || profile.sport === 'nba') return analyzeScheduleWaivers(input, profile, parseCsvObjects);
   const currentWeek = Math.max(1, n(input.week, 1));
   const startingBudget = Math.max(1, n(input.startingBudget || input.starting_budget, 1e3));
   const remainingBudget = clamp(n(input.remainingBudget || input.remaining_budget, startingBudget), 0, startingBudget);
@@ -785,7 +788,7 @@ async function yahooJson(token, endpoint) {
 __name(yahooJson, "yahooJson");
 async function resolveYahooLeagueKey(token, profile) {
   if (profile.yahooLeagueKey) return profile.yahooLeagueKey;
-  const game = profile.sport === "nhl" ? "nhl" : "nfl";
+  const game = ['nhl','nba','mlb'].includes(profile.sport) ? profile.sport : 'nfl';
   const raw = await yahooJson(token, `users;use_login=1/games;game_keys=${game}/leagues`);
   const leagues = collectYahooEntities(raw, "league");
   const id = String(profile.yahooLeagueId || "");
@@ -1142,7 +1145,7 @@ async function saveInSeasonReport(kv, lg, report, me = null) {
   const reportsKey = me ? scoped(inSeasonReportsKey(lg), me) : inSeasonReportsKey(lg);
   await kv.put(reportKey, JSON.stringify(report));
   const idx = await kv.get(reportsKey, { type: "json" }) || [];
-  idx.unshift({ id: report.id, createdAt: report.createdAt, week: report.week, count: report.recommendations.length, top: report.recommendations.slice(0, 3).map((p) => `${p.name} $${p.recommendedBid}`).join(", ") });
+  idx.unshift({ id: report.id, createdAt: report.createdAt, week: report.week, window:report.window?`${report.window.start} – ${report.window.end}`:null, count: report.recommendations.length, top: report.recommendations.slice(0, 3).map((p) => report.planner==='schedule'?`${p.name}: ${p.usableGames} usable (${p.netGames} net)`:`${p.name} $${p.recommendedBid}`).join(", ") });
   await kv.put(reportsKey, JSON.stringify(idx.slice(0, 30)));
   return report;
 }
@@ -1221,6 +1224,10 @@ function normalizeWaiverTicket(body = {}, previous = null) {
     rationale: ticketText(body.rationale == null ? previous && previous.rationale : body.rationale, 2e3),
     executionNote: ticketText(body.executionNote == null ? previous && previous.executionNote : body.executionNote, 1e3),
     reportId: ticketText(body.reportId == null ? previous && previous.reportId : body.reportId, 80),
+    planningStart: ticketText(body.planningStart ?? previous?.planningStart, 10),
+    planningEnd: ticketText(body.planningEnd ?? previous?.planningEnd, 10),
+    acquisitionsActiveFrom: ticketText(body.acquisitionsActiveFrom ?? previous?.acquisitionsActiveFrom, 10),
+    usableDates: Array.isArray(body.usableDates) ? body.usableDates.slice(0,21).map(d=>ticketText(d,10)) : previous?.usableDates || [],
     snapshotAt: Math.max(0, n(body.snapshotAt == null ? previous && previous.snapshotAt : body.snapshotAt, 0)) || null
   };
   if (!ticket.player && action !== "hold" && action !== "wait") throw new Error("A player is required for an add or drop ticket.");
@@ -1242,6 +1249,7 @@ async function saveWaiverTicket(kv, lg, ticket, me) {
 __name(saveWaiverTicket, "saveWaiverTicket");
 function reportEmailHtml(report) {
   const h = /* @__PURE__ */ __name((v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]), "h");
+  if(report.planner==='schedule') return `<h1>${h(report.leagueName)} — ${h(report.window.start)} through ${h(report.window.end)}</h1><p>${h((report.warnings||[]).join(' '))}</p><table border="1" cellpadding="6"><tr><th>Player</th><th>Usable games</th><th>Net games</th><th>Drop</th><th>Reason</th></tr>${report.recommendations.slice(0,20).map(p=>`<tr><td>${h(p.name)}</td><td>${p.usableGames}</td><td>${p.netGames}</td><td>${h(p.suggestedDrop)}</td><td>${h(p.reasons.join('; '))}</td></tr>`).join('')}</table>`;
   const rows = report.recommendations.slice(0, 20).map((p) => `<tr><td>${h(p.name)}</td><td>${h(p.pos)}</td><td>$${p.recommendedBid}</td><td>$${p.competitiveMarketBid}</td><td>$${p.projectedWinningBid}</td><td>$${p.outlierWinningBid}</td><td>$${p.stretchBid}</td><td>${h(p.reasons.join("; "))}</td></tr>`).join("");
   return `<h1>${h(report.leagueName)} — Week ${report.week} FAAB</h1><p>Budget remaining: $${report.remainingBudget}. Calibration: ${h(report.calibrationVersion)}</p><table border="1" cellpadding="6" cellspacing="0"><thead><tr><th>Player</th><th>Pos</th><th>Suggested</th><th>Competitive market</th><th>Projected win</th><th>Outlier winner</th><th>Stretch</th><th>Why</th></tr></thead><tbody>${rows}</tbody></table><p>${h(report.assumptions.join(" "))}</p>`;
 }
@@ -1252,7 +1260,7 @@ async function emailInSeasonReport(env, to, report) {
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: env.FAAB_REPORT_FROM, to: [to], subject: `${report.leagueName} Week ${report.week} FAAB recommendations`, html: reportEmailHtml(report) })
+    body: JSON.stringify({ from: env.FAAB_REPORT_FROM, to: [to], subject: report.planner==='schedule'?`${report.leagueName} ${report.window.start} waiver opportunities`:`${report.leagueName} Week ${report.week} FAAB recommendations`, html: reportEmailHtml(report) })
   });
   if (!r.ok) throw new Error(`Email provider returned ${r.status}: ${(await r.text()).slice(0, 240)}`);
   return { sent: true };
@@ -1344,6 +1352,41 @@ async function runScheduledFaab(env, scheduledDate = /* @__PURE__ */ new Date())
   }
 }
 __name(runScheduledFaab, "runScheduledFaab");
+
+async function runScheduledSportsWaivers(env, date) {
+  if (!env.MOCKS) return;
+  const local = pacificParts(date);
+  if (local.weekday !== 'Sun' || Number(local.hour) !== 9) return;
+  const kv=env.MOCKS, list=await kv.list({prefix:'league:'});
+  for(const key of list.keys){
+    const profile=await kv.get(key.name,{type:'json'});
+    if(!profile||!['nhl','nba'].includes(profile.sport))continue;
+    const state=await kv.get(inSeasonStateKey(profile.id),{type:'json'})||{};
+    // Sunday planning is explicitly enabled per league; never inherit a legacy
+    // Tuesday checkbox as authorization for a different scheduled job.
+    if(!state.sportsScheduleEnabled)continue;
+    const dateKey=localDate(date);
+    if(state.lastSportsScheduledDate===dateKey)continue;
+    let outcome;
+    try{
+      const snapshot=await syncLeagueSnapshot(env,kv,new URL(env.PUBLIC_ORIGIN||'https://aeo-draft-lab.hkeseyan.workers.dev'),profile);
+      if(!snapshot.freshness?.available?.current||!snapshot.freshness?.roster?.current)throw new Error('Fresh roster and available-player pool required for Sunday planning.');
+      const tagged=parseCsvObjects(state.rosterCsv||'');
+      const roster=snapshot.roster.map(p=>{
+        const tag=tagged.find(t=>t.name===p.name&&t.pos===p.pos);
+        return tag?{...p,drop_class:tag.drop_class,drop_notes:tag.drop_notes,lineup_priority:tag.lineup_priority,start_dates:tag.start_dates}:p;
+      });
+      const input={...state,planningMode:'next_week',planStart:'',planEnd:'',gameScheduleCsv:'',rosterCsv:'',availableCsv:'',roster,available:snapshot.available};
+      // Old add limits/effective dates are not reliable next-week state.
+      input.acquisitionsRemaining=null; input.acquisitionsActiveFrom='';
+      const window=planningWindow(input,date);
+      input.gameSchedule=await fetchGameSchedule(kv,profile.sport,window);
+      const report=await saveInSeasonReport(kv,profile.id,analyzeScheduleWaivers(input,profile,parseCsvObjects,date));
+      outcome={status:'created',date:dateKey,reportId:report.id};
+    }catch(e){outcome={status:'failed',date:dateKey,reason:e.message};}
+    await kv.put(inSeasonStateKey(profile.id),JSON.stringify({...state,lastSportsScheduledRun:outcome,...(outcome.status==='created'?{lastSportsScheduledDate:dateKey}:{})}));
+  }
+}
 async function runScheduledLeagueRefresh(env) {
   if (!env.MOCKS) return;
   const kv = env.MOCKS;
@@ -2249,6 +2292,7 @@ var worker_default = {
             return J({ error: "bad json" }, 400);
           }
           const state = {
+            ...await kv.get(key, { type: 'json' }) || {},
             ...b,
             week: Math.max(1, n(b.week, 1)),
             startingBudget: Math.max(1, n(b.startingBudget, 1e3)),
@@ -2301,10 +2345,27 @@ var worker_default = {
             }
           }
           if (!faabAvailableRows(input).length) return J({ error: "No current available-player pool was provided, so no report was stored.", sourceStatus: input.dataSourceStatus || null, fallback: "Refresh Yahoo after the eliminated roster is released, or paste the current available-player CSV and run the pasted pool." }, 422);
-          const report = await saveInSeasonReport(kv, lg, analyzeFaab(input, profile), me);
+          let analysis;
+          try {
+            if (profile.sport === 'nhl' || profile.sport === 'nba') {
+              if (b.syncSources || b.syncYahoo) {
+                const tagged=parseCsvObjects(input.rosterCsv||'');
+                input.roster=(input.roster||[]).map(p=>{
+                  const tag=tagged.find(t=>t.name===p.name&&t.pos===p.pos);
+                  return tag?{...p,drop_class:tag.drop_class,drop_notes:tag.drop_notes,fppg:tag.fppg,lineup_priority:tag.lineup_priority,start_dates:tag.start_dates}:p;
+                });
+                input.rosterCsv='';input.availableCsv='';
+              }
+              const window = planningWindow(input);
+              input.gameSchedule = input.gameScheduleCsv?.trim() ? manualGameSchedule(csvMatrix(input.gameScheduleCsv), window) : await fetchGameSchedule(kv, profile.sport, window);
+            }
+            analysis=analyzeFaab(input,profile);
+          } catch(e) { return J({error:e.message,fallback:'Check planning dates, roster slots and schedule coverage; paste schedule CSV if the live feed is unavailable.'},422); }
+          const report = await saveInSeasonReport(kv, lg, analysis, me);
           const nextState = { ...saved, ...b, remainingBudget: input.remainingBudget, competitorBudgets: input.competitorBudgets || saved.competitorBudgets || [], dataSyncedAt: input.dataSyncedAt || saved.dataSyncedAt, dataCoverage: input.dataCoverage || saved.dataCoverage, dataFreshness: input.dataFreshness || saved.dataFreshness, dataSourceStatus: input.dataSourceStatus || saved.dataSourceStatus, dataSyncError: input.dataSyncError || "", updatedAt: Date.now() };
           delete nextState.syncYahoo;
           delete nextState.syncSources;
+          if ((profile.sport==='nhl'||profile.sport==='nba') && (b.syncSources||b.syncYahoo)) {nextState.rosterCsv='';nextState.availableCsv='';}
           if (input.roster) nextState.roster = input.roster;
           if (input.available) nextState.available = input.available;
           await kv.put(stateKey, JSON.stringify(nextState));
@@ -2496,6 +2557,7 @@ var worker_default = {
       const scheduledDate = new Date(event.scheduledTime || Date.now());
       await runScheduledLeagueRefresh(env);
       await runScheduledFaab(env, scheduledDate);
+      await runScheduledSportsWaivers(env, scheduledDate);
     })());
   }
 };
@@ -2507,3 +2569,4 @@ export {
   worker_default as default
 };
 //# sourceMappingURL=worker.js.map
+

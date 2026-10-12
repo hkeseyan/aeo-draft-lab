@@ -7,7 +7,7 @@ compatibility_date = "2026-10-03"
 # time and an idempotency key, so exactly one FAAB report is produced through
 # both daylight- and standard-time weeks.
 [triggers]
-crons = ["17 */4 * * *", "0 8,9 * * 2"]
+crons = ["17 */4 * * *", "0 8,9 * * 2", "0 16,17 * * 0"]
 
 [assets]
 directory = "./public"
@@ -23,3 +23,4 @@ id = "1d439dfe62f1412da95101491c170cef"
 # Set with `npx wrangler secret put AUTH_TOKEN` (do not put real secrets in this file).
 # [vars]
 # AUTH_TOKEN = ""
+
