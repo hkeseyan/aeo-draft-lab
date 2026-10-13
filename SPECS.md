@@ -150,7 +150,7 @@ such as `Elias Pettersson (C)` from names.
 
 ### Basketball (NBA)
 
-The `nba` sport pack (positions PG/SG/SF/PF/C), a 335-player 2026-27 pool and five
+The `nba` sport pack (positions PG/SG/SF/PF/C), a 547-player 2026-27 pool and five
 league templates are built. Category leagues run on the shared category engine.
 The remaining NBA work is sequenced in `docs/NBA_PLAN.md`.
 
@@ -190,28 +190,38 @@ Proj" in points, "Cat" in categories) **sorts best-first** like ADP, ECR and My.
 **Projections: a raw-stat blend before league scoring.** The user's choice
 (2026-10-01) is Hashtag first plus two reliably available sources, preferring fast
 updates, with Sleeper/ESPN together at most 25%.
-- **Weights:** **Hashtag Basketball 50%, FantasyPros 25%, ESPN 25%**, re-weighted
-  over whichever sources carry a player.
-- **Attempts:** FantasyPros publishes none, so FGM/FGA/FTM/FTA blend Hashtag and
-  ESPN only.
+- **Weights:** **Hashtag Basketball 50%, CBS Sports 25%, ESPN 25%**, re-weighted
+  over whichever sources carry a player. CBS replaced FantasyPros on 2026-10-13
+  ("for now", the user); it is free and publishes attempts.
+- **CBS is rate-only:** it projects near-full seasons (Luka 79 GP), so only its
+  per-game line counts, played over the games Hashtag and ESPN project. Its own
+  games count only for a player neither of them carries.
 - **Double-/triple-doubles:** Sleeper's per-game rates times games.
 - **Fallback:** players none of the three project use Sleeper's per-game
   projection times estimated games.
 - **Embedded snapshot and live refresh:**
-  - The embedded pool is the 2026-10-01 blend.
+  - The embedded pool is the 2026-10-13 blend.
+  - **Hashtag's show-All view became Premium-only in October** (a logged-out
+    visitor gets the top 30). The snapshot therefore uses Hashtag's 2026-10-01
+    show-All lines, with today's free top 30 refreshed over them. Those 30 had
+    barely moved in 12 days (2 small changes).
   - `GET /api/nba/preseason-projections` re-fetches the three sources (six-hour KV
-    cache; a failing source is reported and skipped) and the page re-blends with
-    the same weights.
+    cache; a failing source is reported and skipped, and a gated Hashtag is named
+    as Premium-only).
+  - The page re-blends only when that pull includes a full Hashtag source (150+
+    rows). Without one, a re-blend would silently drop half the weight, so the
+    snapshot, which carries Hashtag, stays in force.
   - The tooltip says whether a line is live or the snapshot.
-- **Joins:** FantasyPros rows join on FantasyPros' player id; the others on name
-  with a team/position check and a short spelling-equivalence list (Alex/Alexandre
-  Sarr, Nic/Nicolas Claxton, Ron/Ronald Holland).
+- **Joins:** the player list is FantasyPros' rankings and ADP pages (542 deep),
+  joined on FantasyPros' player id. Projection sources join on name with a
+  team/position check and a short spelling-equivalence list (Alex/Alexandre Sarr,
+  Nic/Nicolas Claxton, Ron/Ronald Holland).
 - **Sanity filter:** an implausible source line (a 17% FG projection) is dropped.
 
 **Market and eligibility per platform:**
 - **`adp`** is Yahoo ADP from FantasyPros' ADP table. Fantrax leagues draft against
   `fantrax_adp` (Fantrax's public `getAdp`) and Sleeper leagues against
-  `sleeper_adp`, both 2026-10-01 snapshots. Players a platform doesn't rank keep
+  `sleeper_adp`, both 2026-10-13 snapshots. Players a platform doesn't rank keep
   Yahoo ADP.
 - **Positions:** Yahoo from Hashtag's Yahoo position setting, Fantrax from a live
   Fantrax NBA league's `playerInfo`, Sleeper from Sleeper's player dictionary.

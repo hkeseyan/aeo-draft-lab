@@ -146,14 +146,14 @@ The single biggest blocker named there: **`isCategoryLeague()` is hardcoded to
 `leagueType:'bestball'` already exists but behaves as redraft, so Fantrax Best Ball
 needs semantics rather than a new type. **Build step 1 is done (2026-10-01):** the
 `nba` sport pack, composite G/F/Util roster slots (`slotGroups`, shared with
-hockey's Fantrax F), a 335-player 2026-27 pool and the `yahoo-nba-public-points`
+hockey's Fantrax F), a 335-player 2026-27 pool (547 since 2026-10-13) and the `yahoo-nba-public-points`
 reference league with an NBA points My Rank — see `SPECS.md` → "Basketball (NBA)"
 and the status section at the top of `docs/NBA_PLAN.md` for what is next. The user's direction on projection sources (Hashtag over
 FantasyPros; Yahoo/Fantrax as the opponent view), the schedule grid, positions
 (**don't repeat the hockey F/C treatment**) and category valuation is in
 `docs/NBA_PLAN.md` → "User direction (2026-10-01)". Later the same day: basketball My Rank became
 pure value order (no ADP guardrail, no positional bonus), projections became a
-Hashtag 50 / FantasyPros 25 / ESPN 25 raw-stat blend with a live
+Hashtag 50 / FantasyPros 25 / ESPN 25 raw-stat blend (CBS Sports took FantasyPros' 25% on 2026-10-13; Hashtag's show-All is Premium-only since, so its lines are the 2026-10-01 pull) with a live
 `/api/nba/preseason-projections` refresh, each platform got its own eligibility and
 ADP, the category engine was ungated for basketball (volume-weighted FG%/FT%), and
 templates exist for Yahoo H2H Points/Cat/Roto, Fantrax Best Ball and Sleeper
@@ -253,7 +253,7 @@ goalie rates, positional VORP; no ADP caps since 2026-10-02). Tunables live in
 with BLK; NBA should reuse the same shape.
 
 Testing, before any push: `node tests/boot-smoke.mjs` (boots the whole page in
-jsdom, 188 assertions across all three sports; needs `npm install` for jsdom),
+jsdom, 195 assertions across all three sports; needs `npm install` for jsdom),
 `node tests/fantrax-import.test.mjs` (drives the real worker route with stubbed
 Fantrax responses), plus the existing `faab-engine`, `source-sync` and
 `validate-fantastic-data` tests.

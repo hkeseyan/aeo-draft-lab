@@ -1441,12 +1441,20 @@ async function nbaHashtagProjections() {
     const sel = m[2].match(/<option[^>]*selected="selected"[^>]*value="([^"]*)"/) || m[2].match(/<option[^>]*value="([^"]*)"/);
     if (sel) form.set(m[1], sel[1]);
   }
+  for (const m of page.matchAll(/<input[^>]*type="checkbox"[^>]*>/g)) {
+    const name = (m[0].match(/name="([^"]+)"/) || [])[1];
+    if (name && m[0].includes('checked="checked"')) form.set(name, "on");
+  }
   form.set("ctl00$ContentPlaceHolder1$DDSHOW", "900");
   form.set("ctl00$ContentPlaceHolder1$DDPOSFROM", "1");
   form.set("__EVENTTARGET", "ctl00$ContentPlaceHolder1$DDSHOW");
   const r = await fetch(url, { method: "POST", headers: { "User-Agent": NBA_UA, "Content-Type": "application/x-www-form-urlencoded", Referer: url }, body: form.toString() });
   if (!r.ok) throw new Error("Hashtag postback returned " + r.status);
-  return parseNbaHashtag(await r.text());
+  const rows = parseNbaHashtag(await r.text());
+  // Since 2026-10 a logged-out visitor is offered only the top 30; the show-All
+  // postback then fails and only a Premium session would return everyone.
+  if (!rows.length) throw new Error("Hashtag show-All returned no rows (Premium-only view)");
+  return rows;
 }
 __name(nbaHashtagProjections, "nbaHashtagProjections");
 function parseNbaHashtag(html) {
@@ -1472,29 +1480,47 @@ function parseNbaHashtag(html) {
   }).filter((row) => row && row.name && Number.isFinite(row.pts));
 }
 __name(parseNbaHashtag, "parseNbaHashtag");
-// FantasyPros' season projections are totals but carry no attempts (FG%/FT% only).
-async function nbaFantasyProsProjections() {
-  const r = await fetch("https://www.fantasypros.com/nba/projections/overall.php", { headers: { "User-Agent": NBA_UA } });
-  if (!r.ok) throw new Error("FantasyPros returned " + r.status);
-  return parseNbaFantasyPros(await r.text());
+// CBS Sports' 2026-27 projections: one page per position (a multi-eligible player
+// is listed on several), season totals with attempts. CBS projects near-full
+// seasons, so the route flags it rate-only and the browser keeps only its per-game
+// line, scaled to the other sources' games.
+var NBA_CBS_TOTALS = { pts: "pts", reb: "reb", ast: "ast", stl: "stl", blk: "blk", to: "to", "3pm": "tpm", fgm: "fgm", fga: "fga", ftm: "ftm", fta: "fta", min: "min" };
+async function nbaCbsProjections() {
+  const pages = await Promise.all(["PG", "SG", "SF", "PF", "C"].map(async (pos) => {
+    const r = await fetch(`https://www.cbssports.com/fantasy/basketball/stats/${pos}/2027/season/projections/`, { headers: { "User-Agent": NBA_UA } });
+    if (!r.ok) throw new Error(`CBS ${pos} returned ${r.status}`);
+    return parseNbaCbs(await r.text());
+  }));
+  const byId = new Map();
+  pages.flat().forEach((row) => byId.set(row.cbsId, row));
+  return [...byId.values()];
 }
-__name(nbaFantasyProsProjections, "nbaFantasyProsProjections");
-function parseNbaFantasyPros(html) {
-  const table = (String(html).match(/<table[^>]*id="data"[^>]*>([\s\S]*?)<\/table>/) || [])[1] || "";
+__name(nbaCbsProjections, "nbaCbsProjections");
+function parseNbaCbs(html) {
+  const s = String(html || ""), start = s.indexOf("<table");
+  if (start < 0) return [];
+  const table = s.slice(start, s.indexOf("</table>", start));
+  const heads = (table.match(/<th[^>]*>[\s\S]*?<\/th>/g) || []).map((h) => nbaText(h).split(" ")[0].toLowerCase());
+  if (heads[0] !== "player" || !heads.includes("fga")) return [];
   return table.split(/<tr[^>]*>/).slice(1).map((row) => {
     const cells = row.match(/<td[^>]*>[\s\S]*?<\/td>/g) || [];
-    const name = (row.match(/fp-player-name="([^"]+)"/) || [])[1];
-    if (!name || cells.length < 12) return null;
-    const v = cells.slice(1).map((c) => nbaNum(nbaText(c)));
-    const small = (row.match(/<small>\(([^)]*)\)<\/small>/) || [])[1] || "";
-    const [team, pos] = small.split(" - ");
-    return {
-      name: nbaText(name), team: (team || "").trim(), pos: (pos || "").replace(/,/g, "/").trim(),
-      pts: v[0], reb: v[1], ast: v[2], blk: v[3], stl: v[4], tpm: v[7], gp: v[8], min: v[9], to: v[10]
-    };
-  }).filter((row) => row && Number.isFinite(row.pts) && row.gp > 0);
+    if (cells.length !== heads.length) return null;
+    const m = cells[0].match(/CellPlayerName--long[\s\S]*?href="\/nba\/players\/(\d+)\/[^"]*"[^>]*>([^<]+)<\/a>[\s\S]*?CellPlayerName-position">([^<]*)<[\s\S]*?CellPlayerName-team">([^<]*)</);
+    if (!m) return null;
+    const v = {};
+    heads.forEach((h, i) => {
+      if (i) v[h] = nbaNum(nbaText(cells[i]));
+    });
+    if (!(v.gp > 0)) return null;
+    const out = { cbsId: m[1], name: nbaText(m[2]), pos: nbaText(m[3]), team: nbaText(m[4]), gp: v.gp };
+    Object.entries(NBA_CBS_TOTALS).forEach(([col, key]) => {
+      out[key] = Number.isFinite(v[col]) ? v[col] : 0;
+    });
+    if (out.fga > 50 && !(out.fgm / out.fga >= 0.3 && out.fgm / out.fga <= 0.8)) return null;
+    return out;
+  }).filter(Boolean);
 }
-__name(parseNbaFantasyPros, "parseNbaFantasyPros");
+__name(parseNbaCbs, "parseNbaCbs");
 // ESPN's (unofficial) fantasy API: 2026-27 projected season totals, stat source 1.
 var NBA_ESPN_STAT = { pts: "0", blk: "1", stl: "2", ast: "3", reb: "6", to: "11", fgm: "13", fga: "14", ftm: "15", fta: "16", tpm: "17", min: "40", gp: "42" };
 async function nbaEspnProjections(season = 2027) {
@@ -1975,14 +2001,14 @@ var worker_default = {
         // Raw season-total stat lines from each source; the browser applies the
         // user's blend weights and the league's scoring. A failed source is reported
         // and skipped, never allowed to sink the others.
-        const cacheKey = "nba:preseason-projections:v1";
+        const cacheKey = "nba:preseason-projections:v2";
         const cached = await kv.get(cacheKey, { type: "json" });
         if (cached) return J(cached);
-        const results = await Promise.allSettled([nbaHashtagProjections(), nbaFantasyProsProjections(), nbaEspnProjections()]);
-        const ids = ["hashtag", "fp", "espn"];
+        const results = await Promise.allSettled([nbaHashtagProjections(), nbaCbsProjections(), nbaEspnProjections()]);
+        const ids = ["hashtag", "cbs", "espn"];
         const sources = [], errors = {};
         results.forEach((r, i) => {
-          if (r.status === "fulfilled" && r.value.length) sources.push({ id: ids[i], rows: r.value, noAttempts: ids[i] === "fp" });
+          if (r.status === "fulfilled" && r.value.length) sources.push({ id: ids[i], rows: r.value, rateOnly: ids[i] === "cbs" });
           else errors[ids[i]] = r.status === "rejected" ? String(r.reason && r.reason.message || r.reason) : "no rows";
         });
         const out = { generatedAt: new Date().toISOString(), sources, errors };

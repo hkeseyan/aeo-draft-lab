@@ -20,7 +20,8 @@ listed below.
 - **My Rank is pure value order:** no ADP guardrail, no positional premium.
 - **League value column sorts.**
 - **Projection blend** (Hashtag 50 / FantasyPros 25 / ESPN 25, attempts without
-  FantasyPros), with a live `GET /api/nba/preseason-projections` refresh.
+  FantasyPros; CBS replaced FantasyPros on 2026-10-13), with a live
+  `GET /api/nba/preseason-projections` refresh.
 - **Per-platform eligibility and market:** Yahoo, Fantrax and Sleeper positions;
   Fantrax and Sleeper ADP.
 - **Build step 3:** `isCategoryLeague()` is ungated for basketball, with
@@ -190,6 +191,32 @@ overall.php`, `/nba/adp/overall.php`, `/nba/projections/overall.php`) and Sleepe
 `/v1/players/nba`, `/v1/projections/nba/regular/2026` and `/v1/stats/nba/regular/2025`,
 then rebuild the CSV with the same joins (FantasyPros id; Sleeper name + team or
 position; drop same-name FA records with no data) and bump `poolDataRevision`.
+
+**2026-10-13 — CBS replaces FantasyPros; mocks verified on every template.**
+- **Blend:** Hashtag 50 / **CBS Sports 25** / ESPN 25 (the user: "yes, for now").
+  CBS is rate-only: its per-game line plays the games Hashtag and ESPN project.
+  The worker's live route fetches CBS's five position pages in place of
+  FantasyPros (cache key bumped to `v2`).
+- **Hashtag's show-All view is now Premium-only.** A logged-out visitor is offered
+  only the top 30, and the show-All postback returns an error page. The pool keeps
+  Hashtag's 2026-10-01 show-All lines with the free top 30 refreshed; those 30 had
+  barely moved (2 small changes in 12 days). The page re-blends live only when the
+  route returns a full Hashtag pull, so the user's main source is never silently
+  dropped. **To keep Hashtag live:** the worker could send the user's Premium
+  session cookie from a secret. Not built; it needs the user's say-so and a cookie
+  to test with.
+- **Refreshed today:** FantasyPros ECR/Yahoo ADP (the ECR list grew from 311 to
+  542, so the pool is now **547 players**), ESPN, Sleeper, Fantrax ADP and
+  eligibility, and the Best Ball primary-position map (541 of 547 mapped; the six
+  missing are unsigned or retired veterans).
+- **TRAX10's draft has happened** (Oct 3; 240 players rostered). The profile stays
+  as a reference.
+- **Mocks verified end to end** through the real Draft Room buttons on all six NBA
+  templates: sim to my pick, draft from the recommendation card, save, reload.
+  Every team fills its starters, no draft limit is broken and no player is drafted
+  twice.
+- **Builder:** `build_nba_pool.py <data dir>` in the session scratchpad. It parses
+  curl-fetched files only, because the agent proxy 403s python urllib.
 
 ## User direction (2026-10-01) — sources, schedule, positions, categories
 
