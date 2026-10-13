@@ -65,13 +65,16 @@ assert.deepEqual(fantasyProsSnapshot.lineup.starters, ['Josh Allen']);
 const report = analyzeFaab(input, profile);
 const byName = Object.fromEntries(report.recommendations.map((p) => [p.name, p]));
 
-assert.equal(report.calibrationVersion, 'off-with-their-heads-2025-plus-2026-09-16');
+assert.equal(report.calibrationVersion, 'off-with-their-heads-through-2026-09-30-v2');
 assert.equal(byName['Puka Nacua'].tier, 'elite');
 assert.ok(byName['Puka Nacua'].projectedWinningBid >= 300);
 assert.ok(byName['Puka Nacua'].recommendedBid < byName['Puka Nacua'].projectedWinningBid);
 assert.ok(byName['Malik Nabers'].projectedWinningBid >= 150 && byName['Malik Nabers'].projectedWinningBid <= 220);
 assert.ok(byName['Emeka Egbuka'].projectedWinningBid >= 45 && byName['Emeka Egbuka'].projectedWinningBid <= 70);
 assert.ok(byName['Tucker Kraft'].projectedWinningBid >= 15 && byName['Tucker Kraft'].projectedWinningBid <= 30);
+assert.equal(byName['Puka Nacua'].competitiveMarketBid, 350);
+assert.equal(byName['Puka Nacua'].outlierWinningBid, 400);
+assert.ok(byName['Puka Nacua'].historicalMarket.sampleSize >= 1);
 assert.ok(byName['Puka Nacua'].lineupUpgrade > byName['Emeka Egbuka'].lineupUpgrade);
 assert.ok(byName['Tucker Kraft'].lineupUpgrade < byName['Emeka Egbuka'].lineupUpgrade);
 
@@ -99,5 +102,127 @@ assert.deepEqual(report.recommendations.map(p => p.claimOrder), report.recommend
 const twelve = analyzeFaab({ ...input, teamsAlive: 12 }, { ...profile, teams: 12 });
 const twelvePuka = twelve.recommendations.find((p) => p.name === 'Puka Nacua');
 assert.ok(twelvePuka.projectedWinningBid < byName['Puka Nacua'].projectedWinningBid);
+
+const managed = analyzeFaab({
+  ...input,
+  remainingBudget: 699,
+  competitorBudgets: [{ name: 'Me', faabBalance: 699, mine: true }, { name: 'Rival A', faabBalance: 225 }, { name: 'Rival B', faabBalance: 180 }],
+  playerOverridesCsv: `name,suggested_bid,max_bid,drop_first,drop_second,secondary_multiplier,decision,notes
+Puka Nacua,250,266,Tate,Sutton,0.5,,endgame lock without emptying the bank
+Tucker Kraft,0,0,,,,pass,already strong at tight end`
+}, profile);
+const managedByName = Object.fromEntries(managed.recommendations.map((p) => [p.name, p]));
+assert.equal(managedByName['Puka Nacua'].recommendedBid, 250);
+assert.equal(managedByName['Puka Nacua'].stretchBid, 266);
+assert.equal(managedByName['Puka Nacua'].suggestedDrop, 'Tate');
+assert.equal(managedByName['Puka Nacua'].backupDrop, 'Sutton');
+assert.equal(managedByName['Puka Nacua'].backupBid, 125);
+assert.equal(managedByName['Puka Nacua'].projectedWinningBid, 226);
+assert.equal(managedByName['Tucker Kraft'].recommendedBid, 0);
+assert.equal(managedByName['Tucker Kraft'].stretchBid, 0);
+assert.equal(managed.competitorBudgetSummary.max, 225);
+
+// A shrinking 18-team guillotine league must retain its 18-team market
+// calibration. "Teams alive = 12" is season phase, not permission to import
+// the separate 12-team league's RB/WR medians. It should also distinguish an
+// elite RB from replacement-level players and treat next week's bye as a
+// roster-specific discount rather than erasing the broader market.
+const weekFive = analyzeFaab({
+  week: 5,
+  startingBudget: 1000,
+  remainingBudget: 699,
+  teamsAlive: 12,
+  initialTeams: 18,
+  aggression: 0.8,
+  zeroBidAllowed: true,
+  rosterCsv: `name,pos,team,week_proj,ros_rank,status,bye_week,roster_slot,drop_class
+Josh Allen,QB,BUF,22.9,1,,7,QB,protected
+Saquon Barkley,RB,PHI,13.4,16,,10,RB,protected
+Tony Pollard,RB,TEN,8.8,29,,9,RB,replaceable
+Emeka Egbuka,WR,TB,8.5,33,,10,WR,conditional
+Davante Adams,WR,LAR,13,13,,11,WR,protected
+Jameson Williams,WR,DET,9.9,26,,6,FLEX,conditional`,
+  availableCsv: `name,pos,team,week_proj,ros_rank,endgame,role,schedule,injury,bye_week,status
+Jahmyr Gibbs,RB,DET,19.3,1,100,100,3,8,6,W
+Ladd McConkey,WR,LAC,0,28,35,70,3,60,7,W
+J.K. Dobbins,RB,DEN,0,80,10,30,3,100,10,W
+Tyler Allgeier,RB,ARI,4,55,15,45,3,8,14,W
+MarShawn Lloyd,RB,GB,3,65,10,35,3,20,11,W`
+}, profile);
+const weekFiveByName = Object.fromEntries(weekFive.recommendations.map((p) => [p.name, p]));
+assert.ok(weekFiveByName['Jahmyr Gibbs'].competitiveMarketBid >= 280);
+assert.ok(weekFiveByName['Jahmyr Gibbs'].projectedWinningBid >= 300);
+assert.ok(weekFiveByName['Jahmyr Gibbs'].outlierWinningBid >= 375);
+assert.ok(weekFiveByName['Jahmyr Gibbs'].recommendedBid >= 150 && weekFiveByName['Jahmyr Gibbs'].recommendedBid <= 220);
+assert.ok(weekFiveByName['Jahmyr Gibbs'].reasons.some((reason) => reason.includes('guaranteed next-week zero')));
+assert.ok(weekFiveByName['Ladd McConkey'].projectedWinningBid >= 20 && weekFiveByName['Ladd McConkey'].projectedWinningBid <= 80);
+assert.ok(weekFiveByName['Ladd McConkey'].recommendedBid <= 10);
+assert.equal(weekFiveByName['J.K. Dobbins'].recommendedBid, 0);
+assert.ok(weekFiveByName['Tyler Allgeier'].projectedWinningBid < 30);
+assert.ok(weekFiveByName['MarShawn Lloyd'].projectedWinningBid < 30);
+assert.notEqual(weekFiveByName['Jahmyr Gibbs'].competitiveMarketBid, weekFiveByName['Tyler Allgeier'].competitiveMarketBid);
+
+// Yahoo supplies availability and ownership but not weekly projections/ECR for
+// the wire. Missing values must not turn an obviously valuable, highly-owned
+// player into a $0 market asset or a zero-point lineup impact. The explicit
+// current FantasyPros rows below also pin the user's Week 5 calibration.
+const upperStarter = analyzeFaab({
+  week: 5,
+  startingBudget: 1000,
+  remainingBudget: 699,
+  teamsAlive: 12,
+  initialTeams: 18,
+  aggression: 0.8,
+  zeroBidAllowed: true,
+  openRosterSpots: 2,
+  rosterCsv: `name,pos,team,week_proj,ros_rank,drop_class
+Josh Allen,QB,BUF,22.9,1,protected
+Saquon Barkley,RB,PHI,13.4,15,protected
+Aaron Jones Sr.,RB,MIN,10.1,27,protected
+Tony Pollard,RB,TEN,8.9,31,replaceable
+Davante Adams,WR,LAR,13.1,18,protected
+Jameson Williams,WR,DET,10.21,27,conditional
+Emeka Egbuka,WR,TB,8.7,29,conditional
+Tyler Warren,TE,IND,10.4,4,protected
+Tucker Kraft,TE,GB,9.4,8,protected`,
+  availableCsv: `name,pos,team,roster_pct,week_proj,ros_rank,status
+Garrett Wilson,WR,NYJ,99.1,11.65,17,
+Ladd McConkey,WR,LAC,97.0,7.78,30,Q
+Matthew Golden,WR,GB,88.0,10.2,22,
+Jordan Addison,WR,MIN,72.0,8.47,41,
+Braelon Allen,RB,NYJ,45.0,8.15,38,
+KC Concepcion Jr.,WR,CLE,31.0,7.71,40,
+Jonathon Brooks,RB,CAR,22.0,0,61,IR
+Hunter Henry,TE,NE,61.0,5.8,21,`
+}, profile);
+const upperByName = Object.fromEntries(upperStarter.recommendations.map((p) => [p.name, p]));
+assert.ok(upperByName['Garrett Wilson'].lineupUpgrade >= 2.5);
+assert.ok(upperByName['Garrett Wilson'].recommendedBid >= 35 && upperByName['Garrett Wilson'].recommendedBid <= 65);
+assert.ok(upperByName['Garrett Wilson'].competitiveMarketBid >= 80 && upperByName['Garrett Wilson'].competitiveMarketBid <= 135);
+assert.ok(upperByName['Garrett Wilson'].projectedWinningBid >= 100 && upperByName['Garrett Wilson'].projectedWinningBid <= 150);
+assert.ok(upperByName['Garrett Wilson'].outlierWinningBid >= 200);
+assert.ok(upperByName['Garrett Wilson'].stretchBid >= 65 && upperByName['Garrett Wilson'].stretchBid <= 75);
+assert.ok(upperByName['Ladd McConkey'].recommendedBid <= 8);
+assert.ok(upperByName['Matthew Golden'].recommendedBid >= 10 && upperByName['Matthew Golden'].recommendedBid <= 25);
+assert.ok(upperByName['Matthew Golden'].stretchBid >= 40 && upperByName['Matthew Golden'].stretchBid <= 50);
+assert.ok(upperByName['Jordan Addison'].recommendedBid <= 6);
+assert.ok(upperByName['Braelon Allen'].recommendedBid <= 6);
+assert.equal(upperByName['Jonathon Brooks'].claimAction, 'pass');
+assert.equal(upperByName['Hunter Henry'].claimAction, 'pass');
+assert.equal(upperByName['KC Concepcion Jr.'].claimAction, 'zero_claim');
+
+const yahooOnlyGarrett = analyzeFaab({
+  week: 5, startingBudget: 1000, remainingBudget: 699, teamsAlive: 12, initialTeams: 18,
+  rosterCsv: upperStarter.recommendations.length ? `name,pos,week_proj,ros_rank
+Davante Adams,WR,13.1,18
+Jameson Williams,WR,10.21,27
+Emeka Egbuka,WR,8.7,29` : '',
+  availableCsv: `name,pos,team,roster_pct
+Garrett Wilson,WR,NYJ,99.1`
+}, { ...profile, playersCsv: '' }).recommendations[0];
+assert.ok(yahooOnlyGarrett.weekProjection > 10);
+assert.ok(yahooOnlyGarrett.rosRank < 25);
+assert.ok(yahooOnlyGarrett.lineupUpgrade > 0);
+assert.equal(yahooOnlyGarrett.weekProjectionSource, 'ownership proxy');
 
 console.log('FAAB engine tests passed');
