@@ -30,8 +30,9 @@ counterparts, and reference category formats.
 - The raw model rank uses Fantrax scoring and replacement levels for the actual F/D/G
   roster buckets. C/LW/RW remain visible as source eligibility but do not create
   false scarcity or flexibility inside a generic-F league.
-- Displayed My Rank uses the same draft-safety caps against live Fantrax ADP, with
-  the embedded Yahoo ADP only as a clearly labeled fallback.
+- Displayed My Rank is the raw model order (the draft-safety caps were removed on
+  2026-10-02). Live Fantrax ADP still drives mock opponents and timing, with the
+  embedded Yahoo ADP only as a clearly labeled fallback.
 - Mock opponents and draft timing use the public Fantrax NHL ADP feed. If it is
   unavailable, the board says that it has fallen back to the embedded Yahoo ADP.
 - The live shortlist loads a seven-day NHL schedule context. Game count is a
