@@ -246,6 +246,26 @@ updates, with Sleeper/ESPN together at most 25%.
     and here (19th without the floor), Edwards 8 vs 6, Trae 20 vs 19.
   - Rotisserie keeps the full penalty.
   - Minus-1 (dropping each player's worst category) was not adopted for the board.
+- **Roto fills missed games** (the user, 2026-10-17). Each game a player is
+  projected to miss below the games cap is valued as a game of replacement-level
+  play at his position, because the bench covers it. The cap is the league's own,
+  else 82, the schedule.
+  - Replacement line: the per-game line of the six best players outside the
+    draftable pool eligible at that position. A multi-position player gets the mean
+    of his positions' lines.
+  - Valuing runs in two stages. Two passes on raw totals find the pool and
+    replacement level; two more passes value the filled lines. The board's category
+    columns still show the player's own projection.
+  - How much is filled: **daily lineups 100%** (Yahoo roto, 82-game cap). **Weekly
+    lineups 50%** (TRAX50: no cap, the lineup locks for the week): halfway between
+    H2H, which fills nothing, and daily roto (`NBA_ROTO_FILL`).
+  - Players who sit back-to-backs get **nothing filled under weekly lineups**. In
+    a 4- or 5-game week he is a 3-game player in an active slot. The list is the
+    user's: Embiid and LeBron (`NBA_B2B_RESTERS`).
+  - Effect: daily roto lifts Embiid, Kyrie and Kawhi well above their H2H ranks.
+    In TRAX50, Kawhi went 35→22 and Kyrie 80→53, while Embiid fell 101→119 and
+    LeBron 55→76. The same player on fewer games is still worth less.
+  - H2H categories and points leagues are unchanged.
 - **Category value** is the weighted sum of the non-punted (floored) z-scores.
   Position plays no part; category scarcity matters more (the user).
 - **Shared with hockey's engine:**
@@ -299,7 +319,7 @@ split by path rather than one list (the user, 2026-10-02).
 | `yahoo-nba-public-roto`: Yahoo Rotisserie | Same nine; 82 games per position; no playoffs |
 | `fantrax-nba-best-ball`: Fantrax Best Ball | Confirmed 2026-27 rules (TRAX10): 12 teams, 20-round snake, G/F/C with 12/12/5 draft limits, top 4 G + 4 F + 2 C count each Mon–Sun period, **eligible only at a player's initial Fantrax primary position**, no moves; PTS 1 / REB 1.25 / AST 1.5 / STL 2 / BLK 2 / TO −1 |
 | `trax10-best-ball-5`: **TRAX10 Best Ball (5)**, the user's real league | Fantrax ID `2g9d05jbmuaop7st`; real team names in Fantrax's random draft order; slow draft from Sat Oct 3 10:00 AM PDT, 2 h per pick; prizes $100 / $10. Primary G/F/C for 332 pool players comes from the league's own `playerInfo` (`FANTRAX_NBA_BEST_BALL_PRIMARY`) |
-| `trax50-nba-classic-12`: **TRAX50 Classic Draft (12)**, Fantrax weekly roto (added 2026-10-17, not yet joined) | Fantrax ID `igipngyxmuhscxf5`, read from the league's public `getLeagueInfo`: 12 teams, 16-round snake, 45 sec per pick, draft Sat Oct 17 5:00 PM PDT; **8-cat roto with no turnovers** (PTS, REB, AST, ST, BLK, 3PTM, FG%, FT%); no games-played cap; active 4 G / 4 F / 1 C / 1 Flx (our Util), 6 reserves, no IR; 25 weekly Monday periods, each player locking at his first game of the period; no trades; unlimited claims, 2-day rotating-priority waivers, then free agents first come first served; $50 entry, $370 / $120 / $50. Fantrax multi-position eligibility, which equals the pool's `fantrax_pos` collapsed to G/F/C for every pooled player; Fantrax ADP market. Owners are generic because only 10 of 12 teams had joined, so "My slot" sets the seat; `officialDraft` stays off until the user has drafted it |
+| `trax50-nba-classic-12`: **TRAX50 Classic Draft (12)**, Fantrax weekly roto (added 2026-10-17, not yet joined) | Fantrax ID `igipngyxmuhscxf5`, read from the league's public `getLeagueInfo`: 12 teams, 16-round snake, 45 sec per pick, draft Sat Oct 17 5:00 PM PDT; **8-cat roto with no turnovers** (PTS, REB, AST, ST, BLK, 3PTM, FG%, FT%); no games-played cap; active 4 G / 4 F / 1 C / 1 Flx (our Util), 6 reserves, no IR; 25 weekly Monday periods, the whole lineup locking five minutes before the period's first game; no trades; unlimited claims, 2-day rotating-priority waivers, then free agents first come first served; $50 entry, $370 / $120 / $50. Fantrax multi-position eligibility, which equals the pool's `fantrax_pos` collapsed to G/F/C for every pooled player; Fantrax ADP market. Owners are generic because only 10 of 12 teams had joined, so "My slot" sets the seat; `officialDraft` stays off until the user has drafted it |
 | `sleeper-nba-lock-in`: Sleeper Lock-In (working setup) | Sleeper's documented default scoring; Lock-In rules recorded; Sleeper leagues are commissioner-configured, so the user's working roster is used: 9 starters (PG, SG, G, SF, PF, F, C, 2 Util), 6 bench, 1 IR; 12 teams assumed |
 
 Fantrax H2H Points settings could not be found publicly. Any public Fantrax league
@@ -308,6 +328,15 @@ ID would give them through the same API, as TRAX50 Classic's did for Fantrax rot
 **A Util or Flx slot is left off the board's position cell.** Every player can fill
 it, so it says nothing about him: a Fantrax Classic guard shows `G`, not `G/UTIL`.
 Composite slots that only some positions fill (G, F, hockey's Fantrax F) still show.
+
+**TRAX50 lineup and waiver rules (full rules text, 2026-10-17).**
+- **Lineup lock:** the whole lineup locks five minutes before the period's first
+  game. It is not a per-player lock.
+- **Waivers:** claims process at 10:00am ET. A player claimed and dropped within one
+  period goes straight to free agency.
+- **Can't Drop List:** Fantrax keeps one of elite players.
+- **League fill:** only a full league of 12 drafts. The order is set when the 12th
+  team joins; an unfilled league is dissolved and refunded.
 
 **Category value names turnovers only where they count.** A league without TO
 (TRAX50's 8-cat roto) has no turnover term and its My Rank note doesn't mention one.

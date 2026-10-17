@@ -661,6 +661,22 @@ ok &= check('team table pools FG%/FT% and offers nine punt boxes', () =>
 ev('switchLeague("yahoo-nba-public-roto")');
 await new Promise(r => setTimeout(r, 300));
 ok &= check('NBA Rotisserie template: roto scoring with the 82-game position cap', 'LEAGUE.scoringMode+":"+LEAGUE.maxGamesPlayed+":"+isCategoryLeague()', 'roto:82:true');
+ok &= check('daily roto fills missed games with replacement play, lifting Embiid, Kyrie and Kawhi', () => ev(`(function(){
+  const names=['Joel Embiid','Kyrie Irving','Kawhi Leonard'], ranks=()=>names.map(n=>findPlayer(n).myRank);
+  const withFill=ranks(), why=findPlayer('Joel Embiid').myRankWhy;
+  NBA_ROTO_FILL.daily=0; computeMyRanks(); const raw=ranks();
+  NBA_ROTO_FILL.daily=1; computeMyRanks();
+  return withFill.every((r,i)=>r<raw[i]) && /filled with replacement-level play/.test(why) || withFill.join(',')+' vs '+raw.join(',');
+})()`), true);
+ok &= check('with the fill, the same player on fewer games is still worth less', () => ev(`(function(){
+  const p=findPlayer('Tyrese Maxey'), games=nbaGames(p), k=(games-15)/games, st={};
+  Object.keys(p.st).forEach(key=>st[key]=key==='gp'?games-15:(+p.st[key]||0)*k);
+  const q=Object.assign({},p,{id:'clone-fewer-games',name:'Clone Fewer Games',st,gp:games-15});
+  PLAYERS.push(q); computeMyRanks();
+  const out=q.categoryValue<p.categoryValue && q.categoryValue>-99;
+  PLAYERS.pop(); computeMyRanks();
+  return out;
+})()`), true);
 ev('switchLeague("fantrax-nba-best-ball")');
 await new Promise(r => setTimeout(r, 300));
 ok &= check('Fantrax Best Ball template rosters generic G/F/C and counts 4/4/2', slots, 'G,G,G,G,F,F,F,F,C,C');
@@ -762,6 +778,10 @@ ok &= check('TRAX50 NBA Classic keeps Fantrax multi-position eligibility and lea
   ['Luka Doncic','Jalen Williams','Karl-Anthony Towns','Nikola Jokic'].map(n => ev(`posCell(findPlayer(${JSON.stringify(n)}))`).replace(/<[^>]+>/g,'')).join(','), 'G,G/F,F/C,C');
 ok &= check('TRAX50 NBA Classic drafts against Fantrax ADP and its value has no turnover term', () =>
   ev('MARKET_ADP_STATUS+":"+/TO at/.test(findPlayer("Trae Young").myRankWhy)+":"+("TO" in findPlayer("Trae Young").categoryZ)'), 'fantrax:false:false');
+ok &= check('weekly roto fills half the missed games, and none for a back-to-back rester', () => ev(`(function(){
+  const k=findPlayer('Kyrie Irving').myRankWhy, e=findPlayer('Joel Embiid').myRankWhy;
+  return /filled with replacement-level play \\(50% under weekly lineups\\)/.test(k) && /sits back-to-backs/.test(e) && !/filled with/.test(e) || k+' || '+e;
+})()`), true);
 ok &= check('a full 192-pick TRAX50 NBA mock fills every team\'s ten active slots', () => ev(`(function(){
   resetDraft();
   for(let ov=1;ov<=totalPicks;ov++)rivalPick(ov,0.5);

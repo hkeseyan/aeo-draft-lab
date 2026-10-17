@@ -230,9 +230,19 @@ position; drop same-name FA records with no data) and bump `poolDataRevision`.
   Holland), and those two match too.
 - **Fantrax ADP** was re-pulled on draft day. It had barely moved since 2026-10-13
   (a handful of changes of 8+ picks, all past pick 140), so the embed stands.
-- **Weekly roto is not modelled beyond season totals.** Not yet modelled: weekly
-  game counts in lineup choice, and the cost of a mid-week injury (a dead slot
-  until Monday). The board's `UTIL` is Fantrax's Flx.
+- **Roto fills missed games** with replacement-level play (the user, same day):
+  - daily lineups 100%;
+  - weekly lineups 50%, halfway between H2H and daily roto;
+  - back-to-back resters (Embiid, LeBron) get nothing filled under weekly lineups.
+
+  See `SPECS.md` → category value.
+- **The full rules text corrected one thing:** the whole lineup locks at the
+  period's first game, not per player.
+- **Still not modelled:** weekly game counts in lineup choice. Durability is
+  modelled only through the fill rate. The board's `UTIL` is Fantrax's Flx.
+- **Candidate back-to-back resters for the user to confirm:** Kawhi Leonard and
+  Jimmy Butler. Only Embiid and LeBron are listed, on the user's word. A
+  data-driven list would come from last season's back-to-back game logs.
 
 ## User direction (2026-10-01) — sources, schedule, positions, categories
 
