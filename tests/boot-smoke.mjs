@@ -661,6 +661,22 @@ ok &= check('team table pools FG%/FT% and offers nine punt boxes', () =>
 ev('switchLeague("yahoo-nba-public-roto")');
 await new Promise(r => setTimeout(r, 300));
 ok &= check('NBA Rotisserie template: roto scoring with the 82-game position cap', 'LEAGUE.scoringMode+":"+LEAGUE.maxGamesPlayed+":"+isCategoryLeague()', 'roto:82:true');
+ok &= check('daily roto fills missed games with replacement play, lifting Embiid, Kyrie and Kawhi', () => ev(`(function(){
+  const names=['Joel Embiid','Kyrie Irving','Kawhi Leonard'], ranks=()=>names.map(n=>findPlayer(n).myRank);
+  const withFill=ranks(), why=findPlayer('Joel Embiid').myRankWhy;
+  NBA_ROTO_FILL.daily=0; computeMyRanks(); const raw=ranks();
+  NBA_ROTO_FILL.daily=1; computeMyRanks();
+  return withFill.every((r,i)=>r<raw[i]) && /filled with replacement-level play/.test(why) || withFill.join(',')+' vs '+raw.join(',');
+})()`), true);
+ok &= check('with the fill, the same player on fewer games is still worth less', () => ev(`(function(){
+  const p=findPlayer('Tyrese Maxey'), games=nbaGames(p), k=(games-15)/games, st={};
+  Object.keys(p.st).forEach(key=>st[key]=key==='gp'?games-15:(+p.st[key]||0)*k);
+  const q=Object.assign({},p,{id:'clone-fewer-games',name:'Clone Fewer Games',st,gp:games-15});
+  PLAYERS.push(q); computeMyRanks();
+  const out=q.categoryValue<p.categoryValue && q.categoryValue>-99;
+  PLAYERS.pop(); computeMyRanks();
+  return out;
+})()`), true);
 ev('switchLeague("fantrax-nba-best-ball")');
 await new Promise(r => setTimeout(r, 300));
 ok &= check('Fantrax Best Ball template rosters generic G/F/C and counts 4/4/2', slots, 'G,G,G,G,F,F,F,F,C,C');
@@ -750,6 +766,33 @@ await ev('setNhlDraftSlot()');
 ok &= check('choosing a slot on a real board names my team without reordering the draft', () => ev(`(function(){
   const order=JSON.stringify(LEAGUES[CURRENT_LEAGUE_ID].ownerSlot);
   return mySlot===7 && ME_OWNER===SLOT_OWNER[7] && ME_OWNER==='Dave10' && order===JSON.stringify(OWNER_SLOT) && !('Me' in OWNER_SLOT);
+})()`), true);
+ev('switchLeague("trax50-nba-classic-12")');
+await new Promise(r => setTimeout(r, 300));
+ok &= check('TRAX50 NBA Classic: Fantrax ID, 8-cat roto without turnovers, weekly lineups, no games cap', () =>
+  ev('LEAGUES[CURRENT_LEAGUE_ID].fantraxLeagueId+":"+LEAGUE.scoringMode+":"+nhlCategoryConfig().skater.join(",")+":"+LEAGUE.lineupPeriod+":"+(LEAGUE.maxGamesPlayed||0)'),
+  'igipngyxmuhscxf5:roto:FG%,FT%,3PM,PTS,REB,AST,STL,BLK:weekly:0');
+ok &= check('TRAX50 NBA Classic lineup is 4 G / 4 F / 1 C / 1 Flx over 16 rounds with no IR', () =>
+  slots() + ':' + ev('LEAGUE.rounds+"/"+LEAGUE.irSlots'), 'G,G,G,G,F,F,F,F,C,UTIL:16/0');
+ok &= check('TRAX50 NBA Classic keeps Fantrax multi-position eligibility and leaves Flx off the board', () =>
+  ['Luka Doncic','Jalen Williams','Karl-Anthony Towns','Nikola Jokic'].map(n => ev(`posCell(findPlayer(${JSON.stringify(n)}))`).replace(/<[^>]+>/g,'')).join(','), 'G,G/F,F/C,C');
+ok &= check('TRAX50 NBA Classic drafts against Fantrax ADP and its value has no turnover term', () =>
+  ev('MARKET_ADP_STATUS+":"+/TO at/.test(findPlayer("Trae Young").myRankWhy)+":"+("TO" in findPlayer("Trae Young").categoryZ)'), 'fantrax:false:false');
+ok &= check('weekly roto fills half the missed games, and none for a back-to-back rester', () => ev(`(function(){
+  const k=findPlayer('Kyrie Irving').myRankWhy, e=findPlayer('Joel Embiid').myRankWhy;
+  return /filled with replacement-level play \\(50% under weekly lineups\\)/.test(k) && /sits back-to-backs/.test(e) && !/filled with/.test(e) || k+' || '+e;
+})()`), true);
+ok &= check('a full 192-pick TRAX50 NBA mock fills every team\'s ten active slots', () => ev(`(function(){
+  resetDraft();
+  for(let ov=1;ov<=totalPicks;ov++)rivalPick(ov,0.5);
+  if(picks.length!==192) return 'picks '+picks.length;
+  const short=[];
+  for(let slot=1;slot<=LEAGUE.teams;slot++){
+    const fit=slotRosterPlayers(rosterOf(slot),LEAGUE.starters);
+    if(fit.starterSlots.some(s=>!s.player)) short.push(slot);
+  }
+  resetDraft();
+  return short.length?'short: '+short.join(','):true;
 })()`), true);
 ev('switchLeague("sleeper-nba-lock-in")');
 await new Promise(r => setTimeout(r, 300));

@@ -3210,6 +3210,36 @@ const LEAGUES_DEFAULT = {
     rostersRaw:'', playersCsv:PLAYERS_CSV_NBA,
     poolDataRevision:'nba-2026-10-13-cbs-blend',
   },
+  // Fantrax TRAX50 Classic NBA (2026-10-17), read from the league's public
+  // getLeagueInfo: 8-cat roto (no turnovers), weekly lineups, 4 G / 4 F / 1 C /
+  // 1 Flx active of 16. Fantrax's Flx is our Util. Classic leagues use full
+  // multi-position eligibility, which matches the pool's fantrax_pos collapsed to
+  // G/F/C for every pooled player, so no eligibility map is needed. Ten of twelve
+  // teams had joined, so the board stays generic and "My slot" picks the seat.
+  'trax50-nba-classic-12': {
+    id:'trax50-nba-classic-12', name:'TRAX50 Classic Draft (12) — NBA Roto', sport:'nba', platform:'fantrax',
+    fantraxLeagueId:'igipngyxmuhscxf5', leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,
+    referenceDataRevision:'trax50-nba-classic-12-2026-10-17-v2',
+    teams:12, rounds:16, rosterSize:16, irSlots:0, mySlot:1,
+    scoringLabel:'Rotisserie (8-cat, no TO) · Fantrax TRAX50 Classic', draftDateLabel:'Sat Oct 17, 5:00 PM PDT · 45 sec/pick', keeperDeadlineLabel:'—',
+    rosterPositions:['G','F','C','UTIL'], starters:{G:4,F:4,C:1,UTIL:1}, flexEligible:[],
+    scoringMode:'roto', lineupPeriod:'weekly', marketAdpSource:'fantrax',
+    categoryStats:{player:['FG%','FT%','3PM','PTS','REB','AST','STL','BLK']},
+    waiverRules:{claims:'unlimited',priority:'rotating',waiverDays:2,freeAgents:'FCFS',trades:false},
+    lineupLock:'Weekly Monday periods; the whole lineup locks five minutes before the first NBA game of the period.',
+    assumptions:[
+      'Official Fantrax ID igipngyxmuhscxf5, $50 entry; $370 / $120 / $50 to the top three season roto totals. Live standard snake draft: 16 rounds, 45 seconds per pick; absent managers are auto-picked immediately from their queue, then pre-ranks, then Fantrax rankings. Only a full league of 12 drafts: the random order is set when the 12th team joins, and an unfilled league is dissolved and refunded.',
+      'Rotisserie on eight categories: PTS, REB, AST, ST, BLK, 3PTM, FG%, FT%. No turnovers. Stats count Oct 20 2026 to Apr 11 2027; no playoffs and no games-played cap.',
+      'Active lineup 4 G, 4 F, 1 C and 1 Flx (shown here as Util), plus 6 reserves; 16 players in all; no IR. Fantrax multi-position eligibility (G, F, C).',
+      'Weekly lineups: 25 Monday-to-Monday periods. The whole lineup locks five minutes before the first game of the period, and later changes apply from the next period, so a mid-week injury leaves a dead active slot until then.',
+      'No trades. Unlimited free claims; two-day waivers processed daily at 10:00am ET with rotating priority (first in reverse round-1 order), then free agents first come first served. A player claimed and dropped within one period goes straight to free agency. Elite players on Fantrax\'s Can\'t Drop List cannot be dropped.',
+      'Fantrax ADP is the market signal: it is how Fantrax drafters actually pick, and absent managers are auto-picked from Fantrax\'s own rankings. My Rank is roto category value, with half of the games missed below 82 filled by replacement-level play (weekly lineups, no cap: between H2H and daily roto); players who sit back-to-backs get none filled.'
+    ],
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
+    meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
+    rostersRaw:'', playersCsv:PLAYERS_CSV_NBA,
+    poolDataRevision:'nba-2026-10-13-cbs-blend',
+  },
   'sleeper-nba-lock-in': {
     id:'sleeper-nba-lock-in', name:'Sleeper NBA — Lock-In Points (12-team, provisional)', sport:'nba', platform:'sleeper',
     leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,
@@ -4316,6 +4346,49 @@ const NBA_CAT_WEIGHTS={TO:0.25};
 // Rotisserie keeps the full penalty: a season-long hole is real there.
 const NBA_H2H_Z_FLOOR=-2;
 function nbaValueZ(z){return LEAGUE.scoringMode==='categories'?Math.max(NBA_H2H_Z_FLOOR,z):z;}
+// Rotisserie fills missed games (the user, 2026-10-17). A roto slot holds one
+// player's games up to the games cap (82, the schedule, where a league states
+// none), and the bench covers a missed game with a replacement-level one. So each
+// game a player is projected to miss below the cap is valued as a game of
+// replacement play at his position. A player who misses games is then worth more
+// than his raw totals say, and still less than the same player healthy. Daily
+// lineups with a games cap recover every missed game. Weekly lineups lock for the
+// week and have no cap, so durability sits between H2H (nothing filled) and daily
+// roto: half is filled. H2H keeps raw totals.
+const NBA_ROTO_FILL={daily:1,weekly:0.5,cap:82,replacementPlayers:6};
+// Players who sit back-to-backs (the user's list, 2026-10-17). Under weekly
+// lineups those games can't be covered: in a 4- or 5-game week he is a 3-game
+// player in an active slot. So none of his missed games are filled there.
+const NBA_B2B_RESTERS=['Joel Embiid','LeBron James'];
+function nbaRotoFill(){
+  if(LEAGUE.scoringMode!=='roto')return null;
+  const weekly=LEAGUE.lineupPeriod==='weekly', rate=weekly?NBA_ROTO_FILL.weekly:NBA_ROTO_FILL.daily;
+  return rate>0?{rate,weekly,cap:+LEAGUE.maxGamesPlayed||NBA_ROTO_FILL.cap}:null;
+}
+function nbaRestsBackToBacks(p,fill){return !!(fill&&fill.weekly&&NBA_B2B_RESTERS.includes(p.name));}
+function nbaGames(p){return +(p.st&&p.st.gp)||+p.gp||0;}
+// Season line with the missed games filled. The replacement line for a position is
+// the per-game line of the best few players outside the draftable pool who are
+// eligible there; a multi-position player gets the mean of his positions' lines.
+function nbaRotoFilledLines(pop,fill){
+  const inPop=new Set(pop), keys=SPORTS.nba.statKeys, lines={};
+  [...new Set(PLAYERS.flatMap(p=>eligiblePositions(p)))].forEach(pos=>{
+    const reps=PLAYERS.filter(p=>!inPop.has(p)&&nbaGames(p)>0&&eligiblePositions(p).includes(pos))
+      .sort((a,b)=>b._catAll-a._catAll).slice(0,NBA_ROTO_FILL.replacementPlayers);
+    const games=reps.reduce((a,p)=>a+nbaGames(p),0);
+    if(games>0)lines[pos]=Object.fromEntries(keys.map(k=>[k,reps.reduce((a,p)=>a+(+(p.st||{})[k]||0),0)/games]));
+  });
+  const out=new Map();
+  PLAYERS.forEach(p=>{
+    const gp=nbaGames(p), missed=gp>0&&!nbaRestsBackToBacks(p,fill)?Math.max(0,fill.cap-gp)*fill.rate:0;
+    const own=eligiblePositions(p).map(x=>lines[x]).filter(Boolean);
+    if(!missed||!own.length)return;
+    const line={...(p.st||{})};
+    keys.forEach(k=>{line[k]=(+line[k]||0)+missed*own.reduce((a,l)=>a+l[k],0)/own.length;});
+    out.set(p,{line,missed});
+  });
+  return out;
+}
 function nbaCatWeight(cat){
   if(PUNT_CATS.has(cat))return 0;
   const custom=LEAGUE.categoryWeights?LEAGUE.categoryWeights[cat]:null;
@@ -4339,10 +4412,16 @@ function nbaRateImpactOrRaw(p,cat){
 function nbaCategoryValue(){
   const cats=nhlCategoryConfig().skater, teams=LEAGUE.teams||12;
   const n=Math.max(teams,teams*(LEAGUE.rosterSize||LEAGUE.rounds||13));
-  const st=p=>p.st||{};
-  const contrib=(p,cat)=>NBA_CAT_DEFS[cat].rate?nbaRateImpact(p,cat):(+st(p)[NBA_CAT_DEFS[cat].key]||0);
+  // Roto values the filled line: two passes on raw totals find the draftable pool
+  // (and so replacement level), two more value the filled lines.
+  const fill=nbaRotoFill();
+  let filled=null;
+  const st=p=>(filled&&filled.has(p))?filled.get(p).line:(p.st||{});
+  const contrib=(p,cat)=>{const d=NBA_CAT_DEFS[cat],s=st(p);
+    return d.rate?(+s[d.makes]||0)-(NBA_CAT_BASE[cat]||0)*(+s[d.attempts]||0):(+s[d.key]||0);};
   let pop=PLAYERS.slice().sort((a,b)=>marketAdp(a)-marketAdp(b)).slice(0,n);
-  for(let pass=0;pass<2;pass++){
+  for(let pass=0;pass<(fill?4:2);pass++){
+    if(fill&&pass===2)filled=nbaRotoFilledLines(pop,fill);
     NBA_CAT_BASE={};
     cats.forEach(cat=>{const d=NBA_CAT_DEFS[cat];if(!d.rate)return;
       const m=pop.reduce((x,p)=>x+(+st(p)[d.makes]||0),0),a=pop.reduce((x,p)=>x+(+st(p)[d.attempts]||0),0);
@@ -4364,9 +4443,11 @@ function nbaCategoryValue(){
     p.categoryValue=active.reduce((a,k)=>a+nbaValueZ(p.categoryZ[k])*nbaCatWeight(k),0);
     const ranked=active.map(k=>[k,p.categoryZ[k]]).sort((a,b)=>b[1]-a[1]);
     const fmt=([k,z])=>k+' '+(z>=0?'+':'')+z.toFixed(1);
-    p.categoryWhy=[(LEAGUE.scoringMode==='roto'?'roto':'H2H cat')+' value '+p.categoryValue.toFixed(2)+' (weighted sum of category z-scores vs the draftable pool; TO at '+Math.round(nbaCatWeight('TO')*100)+'%'+(LEAGUE.scoringMode==='categories'?'; each category floored at '+NBA_H2H_Z_FLOOR:'')+')'];
+    p.categoryWhy=[(LEAGUE.scoringMode==='roto'?'roto':'H2H cat')+' value '+p.categoryValue.toFixed(2)+' (weighted sum of category z-scores vs the draftable pool'+(cats.includes('TO')?'; TO at '+Math.round(nbaCatWeight('TO')*100)+'%':'')+(LEAGUE.scoringMode==='categories'?'; each category floored at '+NBA_H2H_Z_FLOOR:'')+')'];
     if(ranked.length)p.categoryWhy.push('best '+ranked.slice(0,3).map(fmt).join(', '),'weakest '+ranked.slice(-2).map(fmt).join(', '));
     p.categoryWhy.push(Math.round(p.categoryBalance*100)+'% of counted categories at/above the pool mean','FG%/FT% weighted by attempts');
+    if(filled&&filled.has(p))p.categoryWhy.push(Math.round(fill.cap-nbaGames(p))+' games short of '+fill.cap+': '+Math.round(filled.get(p).missed)+' filled with replacement-level play'+(fill.rate<1?' ('+Math.round(fill.rate*100)+'% under weekly lineups)':''));
+    else if(nbaRestsBackToBacks(p,fill))p.categoryWhy.push('sits back-to-backs: weekly lineups can\'t cover those games, so none of his missed games are filled');
     if(PUNT_CATS.size)p.categoryWhy.push('punting '+[...PUNT_CATS].join('/'));
     delete p._catAll;
   });
@@ -6529,7 +6610,9 @@ function posCell(p){
   // he is, so they show only when the league rosters none of his own positions
   // (Fantrax hockey's F, which replaces C/LW/RW).
   const slots=rosterEligiblePositions(p), rostered=new Set(rosterPositionOrder()), display=eligiblePositions(p);
-  const shown=slots.filter(x=>{const g=slotGroup(x);return !g||display.some(q=>g.includes(q)&&!rostered.has(q));});
+  // A slot every position can fill (Util, Fantrax's Flx) says nothing about him.
+  const universal=g=>SPORT.positions.every(q=>g.includes(q));
+  const shown=slots.filter(x=>{const g=slotGroup(x);return !g||(!universal(g)&&display.some(q=>g.includes(q)&&!rostered.has(q)));});
   const elig=shown.length?shown:slots;
   const primary=elig.includes(p.pos)?p.pos:(elig[0]||p.pos);
   return '<span class="pos '+primary+'">'+elig.join('/')+'</span>';
