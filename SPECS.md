@@ -299,10 +299,18 @@ split by path rather than one list (the user, 2026-10-02).
 | `yahoo-nba-public-roto`: Yahoo Rotisserie | Same nine; 82 games per position; no playoffs |
 | `fantrax-nba-best-ball`: Fantrax Best Ball | Confirmed 2026-27 rules (TRAX10): 12 teams, 20-round snake, G/F/C with 12/12/5 draft limits, top 4 G + 4 F + 2 C count each Mon–Sun period, **eligible only at a player's initial Fantrax primary position**, no moves; PTS 1 / REB 1.25 / AST 1.5 / STL 2 / BLK 2 / TO −1 |
 | `trax10-best-ball-5`: **TRAX10 Best Ball (5)**, the user's real league | Fantrax ID `2g9d05jbmuaop7st`; real team names in Fantrax's random draft order; slow draft from Sat Oct 3 10:00 AM PDT, 2 h per pick; prizes $100 / $10. Primary G/F/C for 332 pool players comes from the league's own `playerInfo` (`FANTRAX_NBA_BEST_BALL_PRIMARY`) |
+| `trax50-nba-classic-12`: **TRAX50 Classic Draft (12)**, Fantrax weekly roto (added 2026-10-17, not yet joined) | Fantrax ID `igipngyxmuhscxf5`, read from the league's public `getLeagueInfo`: 12 teams, 16-round snake, 45 sec per pick, draft Sat Oct 17 5:00 PM PDT; **8-cat roto with no turnovers** (PTS, REB, AST, ST, BLK, 3PTM, FG%, FT%); no games-played cap; active 4 G / 4 F / 1 C / 1 Flx (our Util), 6 reserves, no IR; 25 weekly Monday periods, each player locking at his first game of the period; no trades; unlimited claims, 2-day rotating-priority waivers, then free agents first come first served; $50 entry, $370 / $120 / $50. Fantrax multi-position eligibility, which equals the pool's `fantrax_pos` collapsed to G/F/C for every pooled player; Fantrax ADP market. Owners are generic because only 10 of 12 teams had joined, so "My slot" sets the seat; `officialDraft` stays off until the user has drafted it |
 | `sleeper-nba-lock-in`: Sleeper Lock-In (working setup) | Sleeper's documented default scoring; Lock-In rules recorded; Sleeper leagues are commissioner-configured, so the user's working roster is used: 9 starters (PG, SG, G, SF, PF, F, C, 2 Util), 6 bench, 1 IR; 12 teams assumed |
 
-Fantrax H2H Points and Fantrax Roto public settings could not be found publicly.
-Any public Fantrax league ID would give them through the same API.
+Fantrax H2H Points settings could not be found publicly. Any public Fantrax league
+ID would give them through the same API, as TRAX50 Classic's did for Fantrax roto.
+
+**A Util or Flx slot is left off the board's position cell.** Every player can fill
+it, so it says nothing about him: a Fantrax Classic guard shows `G`, not `G/UTIL`.
+Composite slots that only some positions fill (G, F, hockey's Fantrax F) still show.
+
+**Category value names turnovers only where they count.** A league without TO
+(TRAX50's 8-cat roto) has no turnover term and its My Rank note doesn't mention one.
 
 Best Ball and Lock-In are always points formats. Their draft semantics (weekly
 ceiling and depth; single-game ceiling) are not modelled yet, so those templates rank

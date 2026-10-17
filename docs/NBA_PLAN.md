@@ -218,6 +218,22 @@ position; drop same-name FA records with no data) and bump `poolDataRevision`.
 - **Builder:** `build_nba_pool.py <data dir>` in the session scratchpad. It parses
   curl-fetched files only, because the agent proxy 403s python urllib.
 
+**2026-10-17 — Fantrax weekly roto: TRAX50 Classic Draft (12).**
+- **Profile** `trax50-nba-classic-12` (Fantrax ID `igipngyxmuhscxf5`), with every
+  setting read from the league's public `getLeagueInfo`, which matched the rules the
+  user pasted. It has three things no other template has: 8 categories with no TO,
+  no games-played cap, and a 4 G / 4 F / 1 C / 1 Flx active lineup with no IR.
+- **Eligibility:** Fantrax Classic is full multi-position (G,F and C,F players
+  exist), unlike Best Ball's primary-only. For all 539 pool players found in the
+  league, it equals `fantrax_pos` collapsed to G/F/C, so no map was added. The eight
+  not found are unsigned veterans, plus two name spellings (Nicolas Claxton, Ron
+  Holland), and those two match too.
+- **Fantrax ADP** was re-pulled on draft day. It had barely moved since 2026-10-13
+  (a handful of changes of 8+ picks, all past pick 140), so the embed stands.
+- **Weekly roto is not modelled beyond season totals.** Not yet modelled: weekly
+  game counts in lineup choice, and the cost of a mid-week injury (a dead slot
+  until Monday). The board's `UTIL` is Fantrax's Flx.
+
 ## User direction (2026-10-01) — sources, schedule, positions, categories
 
 Captured from the user's second message of the NBA session; they are still reading
