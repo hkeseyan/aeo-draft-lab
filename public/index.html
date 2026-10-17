@@ -3240,6 +3240,35 @@ const LEAGUES_DEFAULT = {
     rostersRaw:'', playersCsv:PLAYERS_CSV_NBA,
     poolDataRevision:'nba-2026-10-13-cbs-blend',
   },
+  // Generic Fantrax TRAX50 Classic H2H Points (2026-10-17): the public $50 format the
+  // user means to join, read from one such league's getLeagueInfo
+  // (ffvbb7mbmuhrtn7v). Same 16-man G/F/C/Flx roster as the roto league, with
+  // Fantrax's points scoring (the Best Ball values) and a playoff.
+  'fantrax-nba-classic-h2h-points': {
+    id:'fantrax-nba-classic-h2h-points', name:'Fantrax TRAX50 Classic NBA — H2H Points (12-team)', sport:'nba', platform:'fantrax',
+    leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,
+    referenceDataRevision:'fantrax-nba-classic-h2h-points-2026-10-17-v1',
+    teams:12, rounds:16, rosterSize:16, irSlots:0, mySlot:1,
+    scoringLabel:'H2H Points · Fantrax TRAX50 Classic', draftDateLabel:'Public leagues · 45 sec/pick', keeperDeadlineLabel:'—',
+    rosterPositions:['G','F','C','UTIL'], starters:{G:4,F:4,C:1,UTIL:1}, flexEligible:[],
+    scoringMode:'points', lineupPeriod:'weekly', marketAdpSource:'fantrax',
+    scoring:{pts:1,reb:1.25,ast:1.5,stl:2,blk:2,to:-1},
+    waiverRules:{claims:'unlimited',priority:'rotating',waiverDays:2,freeAgents:'FCFS',trades:false},
+    lineupLock:'Weekly Monday periods; each player locks five minutes before his team\'s first game of the period.',
+    assumptions:[
+      'Fantrax public TRAX50 Classic H2H Points, $50 entry, read from league ffvbb7mbmuhrtn7v on 2026-10-17. 12 teams; 16-round snake, 45 seconds per pick; absent managers auto-picked from queue, pre-ranks, then Fantrax rankings. Only a full league of 12 drafts; the order is set when the 12th team joins.',
+      'Scoring: PTS 1, REB 1.25, AST 1.5, ST 2, BLK 2, TO -1. Stats count Oct 20 2026 to Apr 4 2027, a week before the NBA season ends.',
+      'Active lineup 4 G, 4 F, 1 C and 1 Flx (shown here as Util), plus 6 reserves; 16 players in all; no IR. Fantrax multi-position eligibility (G, F, C).',
+      'Weekly lineups: each player locks five minutes before his team\'s first game of the period. Matchups 7 (Nov 30-Dec 13, Cup knockouts) and 17 (Feb 15-28, All-Star) are two weeks, with a lineup change allowed at the start of the second week.',
+      'Regular season is periods 1-18. Playoffs: top 6 by win %, reseeded each round, seeds 1-2 get a bye. Round 1 is Mar 8-14, round 2 Mar 15-21, and the two-week Championship Mar 22-Apr 4. Points-for is the standings tiebreak; the higher seed wins a tied playoff matchup.',
+      'Prizes $370 / $120 / $50: champion, runner-up, and the semi-final loser who scored more. No trades. Unlimited free claims; two-day waivers at 10:00am ET with rotating priority, then free agents first come first served; only playoff teams still alive can claim during the playoffs.',
+      'My Rank is season league points; the playoff-weeks schedule is not weighted yet. Fantrax ADP is the market signal.'
+    ],
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
+    meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
+    rostersRaw:'', playersCsv:PLAYERS_CSV_NBA,
+    poolDataRevision:'nba-2026-10-13-cbs-blend',
+  },
   'sleeper-nba-lock-in': {
     id:'sleeper-nba-lock-in', name:'Sleeper NBA — Lock-In Points (12-team, provisional)', sport:'nba', platform:'sleeper',
     leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,

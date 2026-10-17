@@ -244,6 +244,21 @@ position; drop same-name FA records with no data) and bump `poolDataRevision`.
   Jimmy Butler. Only Embiid and LeBron are listed, on the user's word. A
   data-driven list would come from last season's back-to-back game logs.
 
+**2026-10-17, later — generic Fantrax TRAX50 Classic H2H Points.** Built as
+`fantrax-nba-classic-h2h-points` from public league `ffvbb7mbmuhrtn7v`.
+- **Same as TRAX50 roto:** roster, draft, waivers and eligibility (identical
+  `playerInfo`).
+- **Scoring:** Fantrax's Best Ball points values.
+- **Lineup lock:** per player at his team's first game of the week. The roto
+  league locks the whole lineup.
+- **Matchups:** two weeks long for the Cup knockouts, the All-Star break and the
+  final.
+- **Playoff weeks are known and confirmed for this format:** Mar 8-14, Mar 15-21,
+  and Mar 22-Apr 4.
+- **Open item:** this is the first league where the "playoff-schedule tiebreak"
+  above has confirmed weeks. It still needs a solid NBA schedule integration and
+  the user's go-ahead.
+
 ## User direction (2026-10-01) — sources, schedule, positions, categories
 
 Captured from the user's second message of the NBA session; they are still reading
