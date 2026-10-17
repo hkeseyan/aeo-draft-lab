@@ -817,6 +817,32 @@ ok &= check('a full 192-pick Fantrax Classic H2H Points mock fills every team\'s
   resetDraft();
   return short.length?'short: '+short.join(','):true;
 })()`), true);
+{
+  // A Yahoo NBA league is built from its own settings, not matched to a reference.
+  const roster = ['PG','SG','G','SF','PF','F','C','C','Util','Util','BN','BN','BN','IL','IL','IL+'].reduce((a, p) => {
+    const hit = a.find(x => x.roster_position.position === p); if (hit) hit.roster_position.count++; else a.push({ roster_position: { position: p, count: 1 } }); return a; }, []);
+  const stat = (id, abbr, extra) => ({ stat: { stat_id: id, display_name: abbr, enabled: '1', ...extra } });
+  const catLeague = { key: '466.l.1111', name: 'Showtime Test', teams: 12, scoringType: 'head', rosterPositions: roster,
+    settings: { scoring_type: 'head', draft_time: '1792364400', draft_pick_time: '60', max_weekly_adds: '4', uses_playoff: '1', playoff_start_week: '20', num_playoff_teams: '6' },
+    statCategories: { stats: [stat(9004003, 'FGM/A', { is_only_display_stat: '1' }), stat(5, 'FG%'), stat(8, 'FT%'), stat(10, '3PTM'), stat(12, 'PTS'), stat(15, 'REB'), stat(16, 'AST'), stat(17, 'ST'), stat(18, 'BLK'), stat(19, 'TO')] },
+    meta: { game_code: 'nba', season: '2026' }, platformEligibility: { 'tyrese maxey': 'PG/SG' } };
+  const built = JSON.parse(ev(`JSON.stringify(yahooNbaProfileFromSettings(${JSON.stringify(catLeague)}))`));
+  ok &= check('Yahoo NBA import reads a categories league from its own settings', () =>
+    [built.profile.sport, built.profile.scoringMode, built.profile.categoryStats.player.join(','), JSON.stringify(built.profile.starters), built.profile.rounds, built.profile.irSlots, built.profile.maxAcquisitionsPerWeek, built.warnings.length].join('|'),
+    'nba|categories|FG%,FT%,3PM,PTS,REB,AST,STL,BLK,TO|{"PG":1,"SG":1,"G":1,"SF":1,"PF":1,"F":1,"C":2,"UTIL":2}|13|3|4|0');
+  ok &= check('Yahoo NBA import labels the draft time in Pacific', () => built.profile.draftDateLabel, v => /PT · 60 sec\/pick$/.test(v));
+  const ptsLeague = { ...catLeague, key: '466.l.2222', scoringType: 'headpoint', settings: { scoring_type: 'headpoint' },
+    statModifiers: { stats: [{ stat: { stat_id: 12, value: '1' } }, { stat: { stat_id: 15, value: '1.2' } }, { stat: { stat_id: 16, value: '1.5' } }, { stat: { stat_id: 17, value: '3' } }, { stat: { stat_id: 18, value: '3' } }, { stat: { stat_id: 19, value: '-1' } }] } };
+  ok &= check('Yahoo NBA import reads a points league\'s modifiers', () =>
+    ev(`(function(){const b=yahooNbaProfileFromSettings(${JSON.stringify(ptsLeague)});return b.profile.scoringMode+'|'+JSON.stringify(b.profile.scoring)+'|'+b.profile.scoringLabel;})()`),
+    'points|{"pts":1,"reb":1.2,"ast":1.5,"stl":3,"blk":3,"to":-1}|H2H Points');
+  ok &= check('Yahoo import uses real team names once Yahoo sets the draft order', () => ev(`(function(){
+    const teams=[1,2,3].map(i=>({key:'t'+i,name:'Team '+String.fromCharCode(64+i),draftPosition:4-i,mine:i===2}));
+    const o=yahooImportOwners(teams,3,1), fallback=yahooImportOwners([],3,2);
+    return o.owners.join(',')+'|'+o.meOwner+'|'+o.mySlot+'|'+fallback.owners.join(',');
+  })()`), 'Team C,Team B,Team A|Team B|2|Team 1,Me,Team 3');
+  ok &= check('Yahoo listing offers NBA', () => [...w.document.getElementById('yahooGameSelect').options].map(o => o.value).join(','), 'nba,nhl,nfl');
+}
 ev('switchLeague("sleeper-nba-lock-in")');
 await new Promise(r => setTimeout(r, 300));
 ok &= check('Sleeper Lock-In working roster: 9 starters', slots, 'PG,SG,G,SF,PF,F,C,UTIL,UTIL');
