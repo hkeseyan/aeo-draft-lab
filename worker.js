@@ -2633,7 +2633,8 @@ var worker_default = {
         try {
           const token = await getYahooAccessToken(env, kv, url);
           if (!token) return J({ error: "Yahoo account not connected. Visit /auth/yahoo/start first." }, 401);
-          const game = url.searchParams.get("game") === "nhl" ? "nhl" : "nfl";
+          const requested = url.searchParams.get("game");
+          const game = ["nhl", "nba"].includes(requested) ? requested : "nfl";
           const r = await fetch(
             `https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_keys=${game}/leagues?format=json`,
             { headers: { Authorization: `Bearer ${token}` } }
@@ -2698,7 +2699,16 @@ var worker_default = {
             // sweep is temporarily unavailable. The reference eligibility remains
             // the explicit fallback until a later refresh succeeds.
           }
-          return J({ key, name: meta.name || "", teams: Number(meta.num_teams)||null,
+          // Team names, draft positions once Yahoo sets them, and which team is the
+          // connected user's. Optional, like the eligibility sweep.
+          let teams = [];
+          try {
+            teams = collectYahooEntities(await yahooJson(token, `league/${key}/teams`), "team")
+              .filter((t) => t && t.team_key)
+              .map((t) => ({ key: t.team_key, name: t.name || "", draftPosition: Number(t.draft_position) || null, mine: String(t.is_owned_by_current_login || "") === "1" }));
+          } catch (teamErr) {}
+          return J({ key, name: meta.name || "", teams: Number(meta.num_teams)||null, teamList: teams,
+            meta: { game_code: meta.game_code || "", season: meta.season || "", url: meta.url || "", draft_status: meta.draft_status || "", start_date: meta.start_date || "", end_date: meta.end_date || "", start_week: meta.start_week || "", end_week: meta.end_week || "" },
             draftType: settings.draft_type || null, scoringType: settings.scoring_type || null,
             rosterPositions: settings.roster_positions || null,
             statCategories: settings.stat_categories || null,

@@ -16,6 +16,11 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- 🔧 2026-10-17 — **Yahoo NBA: no NBA option to connect a league; pull in Showtime and Exhibit 10.** User has a Yahoo NBA league **Showtime** drafting Sun Oct 18 at 4:00 PM PDT, and **Exhibit 10**, still filling, to import as a 12-team league with all its settings. **Game of Zones** is not needed yet (may not draft).
+  - The Leagues tab's Yahoo card only listed NHL/NFL, and its compare/create flow only matched the NHL reference.
+  - *Built:* NBA listing, and an NBA profile built from the league's own Yahoo settings (see `SPECS.md` → Yahoo NBA import).
+  - *Pending:* pulling both leagues. The stored Yahoo grant had expired, and only the worker can refresh it: the 4-hourly cron, or any Yahoo button in the app.
+
 - ✅ 2026-10-17 — **Generic Fantrax TRAX50 Classic NBA H2H Points league type.** User will join one of Fantrax's public $50 TRAX50 Classic H2H Points leagues on Sunday or Monday, not necessarily the one pasted (`ffvbb7mbmuhrtn7v`, "TRAX50 Classic Draft (39)", draft Sun Oct 18 11:00 AM PDT). Wants a generic league type to mock with. The rules match the roto league's roster setup (4 G / 4 F / 1 C / 1 Flx, 6 reserves, no IR, 16-round snake, no trades, the same waivers). The differences:
   - **Scoring:** PTS 1, REB 1.25, AST 1.5, ST 2, BLK 2, TO -1.
   - **Lineup lock:** each player locks at his own team's first game of the week.

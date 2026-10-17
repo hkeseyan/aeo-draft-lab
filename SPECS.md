@@ -141,7 +141,26 @@ reports those settings instead of forcing one size. `public-points-league-2` /
 **Yahoo Prize H2H-Pts 141304** is the second official points league, inherits the
 same tested reference settings, places the user in slot 4, and starts with a blank
 192-pick board plus placeholder opponents until live team names/results arrive.
-Custom/bangers formats are imported rather than guessed. **TRAX50 Classic Draft (76)** is an official
+Custom/bangers formats are imported rather than guessed.
+
+**Yahoo NBA import (2026-10-17).** The Leagues tab's Yahoo card lists **NBA**
+leagues too; its sport dropdown starts on the active sport. An NBA league is
+built from its own Yahoo settings, not checked against a reference profile,
+because Yahoo NBA leagues vary.
+- **From the settings:** roster slots (BN → bench rounds, IL/IL+ → IR slots).
+  Scoring type: head → H2H categories, headpoint/point → points, roto → roto.
+- **Scoring:** categories from enabled, non-display-only stats; points values from
+  the stat modifiers.
+- **Draft:** time in Pacific and seconds per pick. Also read: weekly adds, playoff
+  start, and the league's own Yahoo eligibility sweep.
+- **Owners:** real team names in Yahoo's draft order, with the user's team
+  marked, once Yahoo has set the order. Until then, "Me" goes in the chosen slot.
+- **Warnings:** anything unmodelled (an auction draft, an unprojected stat or
+  category) is listed in the compare status.
+- **Worker:** `/api/yahoo/leagues?game=nba` lists NBA leagues, and
+  `/api/yahoo/league-settings` now also returns `teamList` and league `meta`.
+
+**TRAX50 Classic Draft (76)** is an official
 completed Fantrax board as well: 192 picks from the Fantrax results CSV, the user
 as Tkachuk Norris in slot 8. When a league carries a complete official board and
 its saved setup never seeded it (for example, mock picks saved earlier), the board

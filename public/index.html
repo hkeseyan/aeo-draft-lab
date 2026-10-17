@@ -669,12 +669,12 @@
       <p class="small muted">If listing fails with <code>additional_authorization_required</code>, Yahoo is saying the <i>grant this token was issued under</i> has no fantasy access. A refresh token can never gain a permission it wasn't granted, so refreshing or reconnecting on top of the old grant won't help — and Yahoo skips the consent screen for an app you've already approved, quietly reissuing on the same grant. Two things to check, in order: (1) <b>Check status</b> below shows which client id this Worker actually holds — confirm it matches the app you edited in the Yahoo Developer console; (2) if it matches, revoke the app at <a href="https://login.yahoo.com/account/security" target="_blank" rel="noopener">Yahoo account security → apps</a>, click <b>Disconnect</b> here, then Connect again so Yahoo has to ask you fresh.</p>
       <div class="row">
         <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account</button>
-        <label class="small">List sport <select id="yahooGameSelect"><option value="nhl">NHL</option><option value="nfl">NFL</option></select></label>
+        <label class="small">List sport <select id="yahooGameSelect"><option value="nba">NBA</option><option value="nhl">NHL</option><option value="nfl">NFL</option></select></label>
         <button class="btn ghost" id="yahooListBtn">List my leagues</button>
         <select id="yahooLeagueSelect" aria-label="Yahoo league to inspect" style="min-width:170px"><option value="">List leagues first</option></select>
         <button class="btn ghost" id="yahooSettingsBtn">Compare settings</button>
         <label class="small">My draft slot <input type="number" id="yahooImportSlot" min="1" max="20" value="4" style="width:58px"></label>
-        <button class="btn ghost" id="yahooImportBtn" disabled>Create matched NHL profile</button>
+        <button class="btn ghost" id="yahooImportBtn" disabled>Create profile</button>
         <button class="btn ghost" id="yahooStatusBtn">Check status</button>
         <button class="btn ghost" id="yahooDisconnectBtn">Disconnect</button>
       </div>
@@ -7098,15 +7098,91 @@ async function listYahooLeagues(){
   }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
 }
 let yahooCompared=null;
+// A Yahoo league's flattened stat rows (stat_categories / stat_modifiers).
+function yahooStatRows(node){
+  if(!node||typeof node!=='object')return [];
+  if(node.stat&&typeof node.stat==='object')return [node.stat];
+  return Object.values(node).flatMap(yahooStatRows);
+}
+// Builds an NBA profile from a Yahoo league's own settings (the
+// /api/yahoo/league-settings response) rather than checking it against a
+// reference, because Yahoo NBA leagues vary: points, H2H categories or roto, any
+// roster. Returns {profile, summary, warnings}; the caller sets slot and owners.
+const YAHOO_NBA_CATS={'FG%':'FG%','FT%':'FT%','3PTM':'3PM','PTS':'PTS','REB':'REB','AST':'AST','ST':'STL','BLK':'BLK','TO':'TO'};
+const YAHOO_NBA_POINTS={PTS:'pts',REB:'reb',AST:'ast',ST:'stl',BLK:'blk',TO:'to','3PTM':'tpm',FGM:'fgm',FGA:'fga',FTM:'ftm',FTA:'fta',DD:'dd',TD:'td'};
+function yahooNbaProfileFromSettings(data){
+  const s=data.settings||{}, meta=data.meta||{}, warnings=[];
+  const rosterRows=(Array.isArray(data.rosterPositions)?data.rosterPositions:Object.values(data.rosterPositions||{}))
+    .map(x=>x&&x.roster_position||x).filter(x=>x&&x.position);
+  const starters={};let bench=0,ir=0;
+  rosterRows.forEach(x=>{
+    const pos=String(x.position).toUpperCase(), n=Number(x.count)||0;
+    if(pos==='BN')bench+=n;
+    else if(/^IL|^IR/.test(pos))ir+=n;
+    else if(pos==='NA'){}
+    else{const key=pos==='UTIL'?'UTIL':pos;if(SPORTS.nba.slotOrder.includes(key))starters[key]=(starters[key]||0)+n;else warnings.push('roster slot '+x.position+' is not modelled');}
+  });
+  const starterCount=Object.values(starters).reduce((a,b)=>a+b,0);
+  if(!starterCount)warnings.push('Yahoo roster positions could not be read');
+  const type=String(s.scoring_type||data.scoringType||'').toLowerCase();
+  const scoringMode=type==='roto'?'roto':/point/.test(type)?'points':'categories';
+  const cats=yahooStatRows(data.statCategories);
+  const label=st=>String(st.display_name||st.abbr||st.name||'').toUpperCase();
+  const byId=new Map(cats.map(st=>[String(st.stat_id),label(st)]));
+  const profile={sport:'nba',platform:'yahoo',leagueType:'redraft',superflex:false,officialDraft:false,
+    name:data.name||'Yahoo NBA league',yahooLeagueKey:data.key,yahooLeagueId:String(data.key||'').split('.l.')[1]||'',yahooLeagueUrl:meta.url||'',
+    draftType:String(s.is_auction_draft)==='1'?'auction':'snake',teams:Number(data.teams)||12,
+    rounds:starterCount+bench,rosterSize:starterCount+bench,irSlots:ir,keeperDeadlineLabel:'—',
+    starters,flexEligible:[],scoringMode,lineupPeriod:'daily',marketAdpSource:'yahoo',
+    rostersRaw:'',playersCsv:PLAYERS_CSV_NBA,poolDataRevision:LEAGUES_DEFAULT['yahoo-nba-public-points'].poolDataRevision};
+  if(profile.draftType==='auction')warnings.push('auction draft: the NBA Draft Room runs snake mocks only');
+  if(scoringMode==='points'){
+    const scoring={};
+    yahooStatRows(data.statModifiers).forEach(st=>{
+      const name=byId.get(String(st.stat_id)), keyName=YAHOO_NBA_POINTS[name];
+      if(keyName)scoring[keyName]=Number(st.value);else warnings.push('points stat '+(name||st.stat_id)+' is not projected');
+    });
+    profile.scoring=scoring;
+    profile.scoringLabel=(type==='headpoint'?'H2H Points':'Season Points');
+  }else{
+    const list=[];
+    cats.filter(st=>String(st.enabled??'1')==='1'&&String(st.is_only_display_stat||'0')!=='1').forEach(st=>{
+      const cat=YAHOO_NBA_CATS[label(st)];if(cat)list.push(cat);else warnings.push('category '+label(st)+' is not modelled');
+    });
+    profile.categoryStats={player:list};
+    profile.scoringLabel=(scoringMode==='roto'?'Rotisserie':'H2H Categories')+' ('+list.length+'-cat)';
+    if(scoringMode==='roto'&&Number(s.max_games_played)>0)profile.maxGamesPlayed=Number(s.max_games_played);
+  }
+  if(Number(s.max_weekly_adds)>0)profile.maxAcquisitionsPerWeek=Number(s.max_weekly_adds);
+  const draftAt=Number(s.draft_time)>0?new Date(Number(s.draft_time)*1000):null;
+  profile.draftDateLabel=draftAt?draftAt.toLocaleString('en-US',{timeZone:'America/Los_Angeles',weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+' PT'+(Number(s.draft_pick_time)>0?' · '+s.draft_pick_time+' sec/pick':''):'Check Yahoo draft room';
+  const rosterText=Object.entries(starters).map(([k,v])=>v>1?v+' '+(k==='UTIL'?'Util':k):(k==='UTIL'?'Util':k)).join(', ');
+  const scoringText=scoringMode==='points'?Object.entries(profile.scoring).map(([k,v])=>k.toUpperCase()+' '+v).join(' / '):profile.categoryStats.player.join(', ');
+  profile.assumptions=[
+    'Imported from Yahoo league '+data.key+(meta.season?' ('+meta.season+')':'')+' on '+new Date().toISOString().slice(0,10)+'. '+profile.teams+' teams; '+profile.draftType+' draft'+(draftAt?' '+profile.draftDateLabel:'')+'.',
+    'Roster: '+rosterText+'; '+bench+' bench; '+ir+' IL. '+profile.scoringLabel+': '+scoringText+'.',
+    'Lineups assumed daily (Yahoo NBA default).'+(profile.maxAcquisitionsPerWeek?' '+profile.maxAcquisitionsPerWeek+' adds per week.':'')+(String(s.uses_playoff)==='1'&&s.playoff_start_week?' Playoffs from week '+s.playoff_start_week+(s.num_playoff_teams?', '+s.num_playoff_teams+' teams':'')+'.':'')
+  ];
+  if(Object.keys(data.platformEligibility||{}).length)profile.platformEligibility={yahoo:{...data.platformEligibility}};
+  return {profile,summary:profile.name+' · '+profile.teams+' teams · '+profile.scoringLabel+' · '+rosterText+' + '+bench+' BN + '+ir+' IL · '+profile.draftType+' · '+profile.draftDateLabel,warnings};
+}
 async function compareYahooSettings(){
   const key=el('yahooLeagueSelect').value;
-  if(!key){el('yahooStatus').textContent='List NHL leagues, then select one.';return;}
+  if(!key){el('yahooStatus').textContent='List your leagues, then select one.';return;}
   el('yahooImportBtn').disabled=true; yahooCompared=null;
   el('yahooStatus').textContent='Reading league settings…';
   try{
     const r=await fetch('/api/yahoo/league-settings?key='+encodeURIComponent(key));
     const data=await r.json();
     if(!r.ok)throw new Error(data.error||('HTTP '+r.status));
+    if(((data.meta&&data.meta.game_code)||el('yahooGameSelect').value)==='nba'){
+      const built=yahooNbaProfileFromSettings(data);
+      yahooCompared={key,name:built.profile.name,teams:built.profile.teams,profile:built.profile,teamList:data.teamList||[]};
+      el('yahooStatus').textContent=built.summary+(built.warnings.length?' · ⚠ '+built.warnings.join('; '):'')+'. Enter your draft slot and create the profile.';
+      el('yahooImportBtn').disabled=false;
+      el('yahooRaw').textContent=JSON.stringify({teamList:data.teamList,settings:data.settings},null,2);
+      return;
+    }
     const baseline=LEAGUES_DEFAULT['yahoo-nhl-public'];
     const arr=Array.isArray(data.rosterPositions)?data.rosterPositions:Object.values(data.rosterPositions||{});
     const positions={};arr.forEach(x=>{const v=x&&x.roster_position||x;if(v&&v.position)positions[v.position]=Number(v.count)||0;});
@@ -7116,12 +7192,7 @@ async function compareYahooSettings(){
     const positionStatus=Object.keys(positions).length
       ? `${positionMatch?'✓':'⚠'} roster ${JSON.stringify(positions)} vs reference ${JSON.stringify(expected)}`
       : '⚠ Yahoo roster positions could not be parsed; inspect raw settings below';
-    const statRows=(node)=>{
-      if(!node||typeof node!=='object')return [];
-      if(node.stat&&typeof node.stat==='object')return [node.stat];
-      return Object.values(node).flatMap(statRows);
-    };
-    const categories=statRows(data.statCategories), modifiers=statRows(data.statModifiers);
+    const categories=yahooStatRows(data.statCategories), modifiers=yahooStatRows(data.statModifiers);
     const normalizeStat=s=>String(s||'').toLowerCase().replace(/[^a-z]/g,'');
     const names=new Map(categories.map(s=>[String(s.stat_id),normalizeStat(s.name||s.display_name)]));
     const aliases={g:['goals'],a:['assists'],pm:['plusminus'],ppp:['powerplaypoints'],
@@ -7145,8 +7216,21 @@ async function compareYahooSettings(){
     el('yahooRaw').textContent=JSON.stringify({statCategories:data.statCategories,statModifiers:data.statModifiers,settings:data.settings},null,2);
   }catch(e){el('yahooStatus').textContent='⚠ '+e.message;}
 }
+// Owners for an imported Yahoo board: real team names in draft order once Yahoo
+// has set it, the connected user's team marked; otherwise Me in the chosen slot.
+function yahooImportOwners(teamList,teamCount,slot){
+  const ordered=(teamList||[]).filter(t=>t.draftPosition>=1&&t.draftPosition<=teamCount);
+  if(ordered.length===teamCount&&new Set(ordered.map(t=>t.draftPosition)).size===teamCount&&ordered.some(t=>t.mine)){
+    const owners=ordered.slice().sort((a,b)=>a.draftPosition-b.draftPosition).map(t=>t.name);
+    const mine=ordered.find(t=>t.mine);
+    return {owners,ownerSlot:Object.fromEntries(ordered.map(t=>[t.name,t.draftPosition])),meOwner:mine.name,mySlot:mine.draftPosition};
+  }
+  const owners=Array.from({length:teamCount},(_,i)=>i+1===slot?'Me':`Team ${i+1}`);
+  return {owners,ownerSlot:Object.fromEntries(owners.map((owner,i)=>[owner,i+1])),meOwner:'Me',mySlot:slot};
+}
 async function importMatchedYahooNhl(){
   if(!yahooCompared)return;
+  if(yahooCompared.profile)return importYahooProfile();
   const slot=Number(el('yahooImportSlot').value), teamCount=Number(yahooCompared.teams)||LEAGUES_DEFAULT['yahoo-nhl-public'].teams;
   if(!Number.isInteger(slot)||slot<1||slot>teamCount){el('yahooStatus').textContent='Enter your draft slot from 1 to '+teamCount+'.';return;}
   const existing=Object.values(LEAGUES).find(p=>p.yahooLeagueKey===yahooCompared.key);
@@ -7164,6 +7248,21 @@ async function importMatchedYahooNhl(){
     const profile=await r.json();if(!r.ok)throw new Error(profile.error||('HTTP '+r.status));
     LEAGUES[profile.id]=profile;fillLeagueSelect();switchLeague(profile.id);
     el('yahooStatus').textContent=`✓ Created ${profile.name} with your slot ${slot}. Record the Yahoo board as the draft runs; live pick sync is not yet implemented.`;
+    el('yahooImportBtn').disabled=true;
+  }catch(e){el('yahooStatus').textContent='⚠ '+e.message;}
+}
+async function importYahooProfile(){
+  const built=yahooCompared.profile, teamCount=Number(built.teams)||12, slot=Number(el('yahooImportSlot').value);
+  if(!Number.isInteger(slot)||slot<1||slot>teamCount){el('yahooStatus').textContent='Enter your draft slot from 1 to '+teamCount+'.';return;}
+  const existing=Object.values(LEAGUES).find(p=>p.yahooLeagueKey===yahooCompared.key);
+  if(existing){switchLeague(existing.id);el('yahooStatus').textContent='This Yahoo league is already in Draft Lab; switched to it.';return;}
+  const body={...built,...yahooImportOwners(yahooCompared.teamList,teamCount,slot)};
+  try{
+    el('yahooStatus').textContent='Creating profile…';
+    const r=await fetch('/api/leagues',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const profile=await r.json();if(!r.ok)throw new Error(profile.error||('HTTP '+r.status));
+    LEAGUES[profile.id]=profile;fillLeagueSelect();switchLeague(profile.id);
+    el('yahooStatus').textContent=`✓ Created ${profile.name} (slot ${profile.mySlot}). Live pick sync is not yet implemented; record the Yahoo board as the draft runs.`;
     el('yahooImportBtn').disabled=true;
   }catch(e){el('yahooStatus').textContent='⚠ '+e.message;}
 }
@@ -8107,6 +8206,7 @@ function applyLeagueProfile(id){
   const profile=LEAGUES[id]||LEAGUES['aeo-keepers'];
   CURRENT_LEAGUE_ID=profile.id;
   SPORT=sportOf(profile); ACTIVE_SPORT=SPORT.id;
+  {const ys=el('yahooGameSelect');if(ys&&[...ys.options].some(o=>o.value===SPORT.id))ys.value=SPORT.id;}
   document.body.dataset.sport=SPORT.id;
   LEAGUE={
     name:profile.name, teams:profile.teams||12, rounds:profile.rounds||16, mySlot:profile.mySlot,
