@@ -842,7 +842,55 @@ ok &= check('a full 192-pick Fantrax Classic H2H Points mock fills every team\'s
     return o.owners.join(',')+'|'+o.meOwner+'|'+o.mySlot+'|'+fallback.owners.join(',');
   })()`), 'Team C,Team B,Team A|Team B|2|Team 1,Me,Team 3');
   ok &= check('Yahoo listing offers NBA', () => [...w.document.getElementById('yahooGameSelect').options].map(o => o.value).join(','), 'nba,nhl,nfl');
+  // One click per league: List my leagues, then Add to Draft Lab.
+  const prevFetch = w.fetch, before = ev('CURRENT_LEAGUE_ID');
+  const oneClick = { ...catLeague, key: '466.l.3333', name: 'One Click', teamList: [] };
+  w.fetch = async (url, opts) => {
+    const u = String(url);
+    if (u.startsWith('/api/yahoo/leagues')) return { ok: true, json: async () => ({ leagues: [{ key: '466.l.3333', name: 'One Click', season: '2026' }], raw: {} }) };
+    if (u.startsWith('/api/yahoo/league-settings')) return { ok: true, json: async () => oneClick };
+    if (u === '/api/leagues' && opts && opts.method === 'POST') { const b = JSON.parse(opts.body); return { ok: true, json: async () => ({ ...b, id: 'one-click' }) }; }
+    return prevFetch(url, opts);
+  };
+  w.document.getElementById('yahooGameSelect').value = 'nba';
+  await ev('listYahooLeagues()');
+  const addBtn = () => [...w.document.querySelectorAll('#yahooLeagueList button')];
+  ok &= check('listed Yahoo leagues each get an Add to Draft Lab button', () => addBtn().map(b => b.textContent).join(','), 'Add to Draft Lab');
+  addBtn()[0].click();
+  await new Promise(r => setTimeout(r, 400));
+  ok &= check('Add to Draft Lab creates the NBA profile from Yahoo settings and opens it', () =>
+    ev('CURRENT_LEAGUE_ID+":"+SPORT.id+":"+LEAGUE.scoringMode+":"+mySlot') + ':' + addBtn().map(b => b.textContent).join(','), 'one-click:nba:categories:1:Open');
+  w.fetch = prevFetch;
+  ev(`delete LEAGUES['one-click'];switchLeague(${JSON.stringify(before)})`);
+  await new Promise(r => setTimeout(r, 300));
 }
+// ---- the user's Yahoo NBA leagues, read from Yahoo on 2026-10-17 ----
+ev('switchLeague("yahoo-showtime-league")');
+await new Promise(r => setTimeout(r, 300));
+ok &= check('Showtime: 9-cat H2H, no C slot (4 Util), 13 rounds, 2 IL, Yahoo key', () =>
+  slots() + ':' + ev('LEAGUE.scoringMode+":"+LEAGUE.rounds+"/"+LEAGUE.irSlots+":"+LEAGUES[CURRENT_LEAGUE_ID].yahooLeagueKey'),
+  'PG,SG,G,SF,PF,F,UTIL,UTIL,UTIL,UTIL:categories:13/2:478.l.42091');
+ok &= check('Showtime: real teams in Yahoo\'s draft order, the user picking 4th', () =>
+  ev('OWNERS.length+":"+mySlot+":"+ME_OWNER+":"+SLOT_OWNER[1]'), '12:4:Stone Cold Reaves Austin 🍻:SHEED');
+ok &= check('Showtime: a pure centre still starts, at Util', () =>
+  ev('rosterEligiblePositions(findPlayer("Rudy Gobert")).join("/")+":"+posCell(findPlayer("Rudy Gobert")).replace(/<[^>]+>/g,"")'), 'UTIL:UTIL');
+ok &= check('a full 156-pick Showtime mock fills every team\'s ten starting slots', () => ev(`(function(){
+  resetDraft();
+  for(let ov=1;ov<=totalPicks;ov++)rivalPick(ov,0.5);
+  if(picks.length!==156) return 'picks '+picks.length;
+  const short=[];
+  for(let slot=1;slot<=LEAGUE.teams;slot++){
+    const fit=slotRosterPlayers(rosterOf(slot),LEAGUE.starters);
+    if(fit.starterSlots.some(s=>!s.player)) short.push(slot);
+  }
+  resetDraft();
+  return short.length?'short: '+short.join(','):true;
+})()`), true);
+ev('switchLeague("yahoo-exhibit-10")');
+await new Promise(r => setTimeout(r, 300));
+ok &= check('Exhibit 10: 12 teams, 9-cat H2H, one C and 3 Util, generic board until Yahoo sets the order', () =>
+  slots() + ':' + ev('LEAGUE.teams+":"+LEAGUE.scoringMode+":"+mySlot+":"+ME_OWNER'), 'PG,SG,G,SF,PF,F,C,UTIL,UTIL,UTIL:12:categories:1:Me');
+ok &= check('Exhibit 10: Yahoo fills positions the pool lacks', () => ev('eligiblePositions(findPlayer("Mason Plumlee")).join("/")'), 'C');
 ev('switchLeague("sleeper-nba-lock-in")');
 await new Promise(r => setTimeout(r, 300));
 ok &= check('Sleeper Lock-In working roster: 9 starters', slots, 'PG,SG,G,SF,PF,F,C,UTIL,UTIL');
