@@ -159,6 +159,17 @@ because Yahoo NBA leagues vary.
   category) is listed in the compare status.
 - **Worker:** `/api/yahoo/leagues?game=nba` lists NBA leagues, and
   `/api/yahoo/league-settings` now also returns `teamList` and league `meta`.
+- **One click per league:** after **List my leagues**, each league has **Add to
+  Draft Lab** (or **Open** once it is in). Compare-first and troubleshooting sit
+  under an "Advanced" fold.
+- **Eligibility:** Yahoo's per-league positions name only that league's slots.
+  With no C slot, a centre reads "Util". The importer keeps base positions only,
+  and matches names without accents.
+- **Imported as built-ins (2026-10-17):**
+  - `yahoo-showtime-league`: Showtime League, no C slot, 4 Util, real draft order.
+  - `yahoo-exhibit-10`: Exhibit 10, 12 teams, no draft order yet.
+  
+  Both keep only the Yahoo positions the pool lacks.
 
 **TRAX50 Classic Draft (76)** is an official
 completed Fantrax board as well: 192 picks from the Fantrax results CSV, the user

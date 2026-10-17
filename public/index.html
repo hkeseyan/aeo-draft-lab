@@ -664,22 +664,27 @@
       <div class="small muted" id="fantraxImportStatus" style="margin-top:6px"></div>
     </div>
     <div class="card">
-      <h2>Connect Yahoo (in progress)</h2>
-      <p class="small muted">This is where Yahoo gets connected — admin only, one grant covers every Yahoo league. Click <b>Connect Yahoo account</b>, approve in the tab that opens, then come back and click <b>List my leagues</b>. The FAAB Lab uses this connection for its best-effort Tuesday roster and waiver-pool sync; full league-profile import is still separate work.</p>
-      <p class="small muted">If listing fails with <code>additional_authorization_required</code>, Yahoo is saying the <i>grant this token was issued under</i> has no fantasy access. A refresh token can never gain a permission it wasn't granted, so refreshing or reconnecting on top of the old grant won't help — and Yahoo skips the consent screen for an app you've already approved, quietly reissuing on the same grant. Two things to check, in order: (1) <b>Check status</b> below shows which client id this Worker actually holds — confirm it matches the app you edited in the Yahoo Developer console; (2) if it matches, revoke the app at <a href="https://login.yahoo.com/account/security" target="_blank" rel="noopener">Yahoo account security → apps</a>, click <b>Disconnect</b> here, then Connect again so Yahoo has to ask you fresh.</p>
+      <h2>Yahoo leagues</h2>
+      <p class="small muted">Add a Yahoo league in three steps. <b>1.</b> <b>Connect Yahoo account</b> (once; approve in the tab that opens). <b>2.</b> Pick the sport and click <b>List my leagues</b>. <b>3.</b> Click <b>Add to Draft Lab</b> next to the league. Draft Lab reads its roster, scoring and draft time from Yahoo and opens it. If Yahoo hasn't set the draft order yet, set your seat with <b>My slot</b> in the Draft Room.</p>
       <div class="row">
         <button class="btn ghost" id="yahooConnectBtn">Connect Yahoo account</button>
-        <label class="small">List sport <select id="yahooGameSelect"><option value="nba">NBA</option><option value="nhl">NHL</option><option value="nfl">NFL</option></select></label>
-        <button class="btn ghost" id="yahooListBtn">List my leagues</button>
-        <select id="yahooLeagueSelect" aria-label="Yahoo league to inspect" style="min-width:170px"><option value="">List leagues first</option></select>
-        <button class="btn ghost" id="yahooSettingsBtn">Compare settings</button>
-        <label class="small">My draft slot <input type="number" id="yahooImportSlot" min="1" max="20" value="4" style="width:58px"></label>
-        <button class="btn ghost" id="yahooImportBtn" disabled>Create profile</button>
+        <label class="small">Sport <select id="yahooGameSelect"><option value="nba">NBA</option><option value="nhl">NHL</option><option value="nfl">NFL</option></select></label>
+        <button class="btn" id="yahooListBtn">List my leagues</button>
         <button class="btn ghost" id="yahooStatusBtn">Check status</button>
         <button class="btn ghost" id="yahooDisconnectBtn">Disconnect</button>
       </div>
+      <div id="yahooLeagueList" class="small" style="margin-top:8px"></div>
       <div class="small muted" id="yahooStatus" style="margin-top:6px"></div>
-      <pre id="yahooRaw" class="small muted" style="margin-top:6px;white-space:pre-wrap;max-height:240px;overflow:auto"></pre>
+      <details style="margin-top:8px"><summary class="small muted">Advanced: compare a league's settings before adding it, and troubleshooting</summary>
+        <div class="row" style="margin-top:6px">
+          <select id="yahooLeagueSelect" aria-label="Yahoo league to inspect" style="min-width:170px"><option value="">List leagues first</option></select>
+          <button class="btn ghost" id="yahooSettingsBtn">Compare settings</button>
+          <label class="small">My draft slot <input type="number" id="yahooImportSlot" min="1" max="20" value="1" style="width:58px"></label>
+          <button class="btn ghost" id="yahooImportBtn" disabled>Create profile</button>
+        </div>
+        <p class="small muted">If listing fails with <code>additional_authorization_required</code>, Yahoo is saying the <i>grant this token was issued under</i> has no fantasy access. A refresh token can never gain a permission it wasn't granted, so refreshing or reconnecting on top of the old grant won't help — and Yahoo skips the consent screen for an app you've already approved, quietly reissuing on the same grant. Two things to check, in order: (1) <b>Check status</b> shows which client id this Worker actually holds — confirm it matches the app you edited in the Yahoo Developer console; (2) if it matches, revoke the app at <a href="https://login.yahoo.com/account/security" target="_blank" rel="noopener">Yahoo account security → apps</a>, click <b>Disconnect</b> here, then Connect again so Yahoo has to ask you fresh.</p>
+        <pre id="yahooRaw" class="small muted" style="margin-top:6px;white-space:pre-wrap;max-height:240px;overflow:auto"></pre>
+      </details>
     </div>
     <div class="card">
       <h2>Profile</h2>
@@ -3268,6 +3273,87 @@ const LEAGUES_DEFAULT = {
     meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
     rostersRaw:'', playersCsv:PLAYERS_CSV_NBA,
     poolDataRevision:'nba-2026-10-13-cbs-blend',
+  },
+  // The user's Yahoo league Showtime (2026-10-17), read from Yahoo's league
+  // settings. It rosters no C slot: centres start at Util. Yahoo had set the draft
+  // order, so owners are the real teams with the user's marked. Eligibility keeps
+  // only Yahoo positions the pool lacks (Yahoo drops C in a league without one).
+  "yahoo-showtime-league": {
+    id:"yahoo-showtime-league",
+    name:"Showtime League",
+    sport:"nba",
+    platform:"yahoo",
+    yahooLeagueKey:"478.l.42091",
+    yahooLeagueId:"42091",
+    yahooLeagueUrl:"https://basketball.fantasysports.yahoo.com/nba/42091",
+    leagueType:"redraft",
+    draftType:"snake",
+    superflex:false,
+    officialDraft:false,
+    referenceDataRevision:"yahoo-showtime-league-2026-10-17-v1",
+    teams:12,
+    rounds:13,
+    rosterSize:13,
+    irSlots:2,
+    mySlot:4,
+    scoringLabel:"H2H Categories (9-cat)",
+    draftDateLabel:"Sun, Oct 18, 4:00 PM PT · 90 sec/pick",
+    keeperDeadlineLabel:"—",
+    starters:{"PG": 1, "SG": 1, "G": 1, "SF": 1, "PF": 1, "F": 1, "UTIL": 4},
+    flexEligible:[],
+    scoringMode:"categories",
+    lineupPeriod:"daily",
+    marketAdpSource:"yahoo",
+    categoryStats:{"player": ["FG%", "FT%", "3PM", "PTS", "REB", "AST", "STL", "BLK", "TO"]},
+    maxAcquisitionsPerWeek:4,
+    assumptions:["Imported from Yahoo league 478.l.42091 (2026) on 2026-10-17. 12 teams; snake draft Sun, Oct 18, 4:00 PM PT · 90 sec/pick.", "Roster: PG, SG, G, SF, PF, F, 4 Util; 3 bench; 2 IL. H2H Categories (9-cat): FG%, FT%, 3PM, PTS, REB, AST, STL, BLK, TO.", "Lineups assumed daily (Yahoo NBA default). 4 adds per week. Playoffs from week 18, 6 teams."],
+    owners:["SHEED", "Two Techs", "Ctrl+Alt+Elite", "Stone Cold Reaves Austin 🍻", "Biscuits and Gravy", "Redemption Squad", "G.O.A.T.S", "He Got Game", "Vino", "Tune Squad", "Autodraft Kings", "Team INJ"],
+    meOwner:"Stone Cold Reaves Austin 🍻",
+    ownerSlot:{"Biscuits and Gravy": 5, "Redemption Squad": 6, "Ctrl+Alt+Elite": 3, "Tune Squad": 10, "He Got Game": 8, "G.O.A.T.S": 7, "Autodraft Kings": 11, "SHEED": 1, "Vino": 9, "Team INJ": 12, "Two Techs": 2, "Stone Cold Reaves Austin 🍻": 4},
+    platformEligibility:{"yahoo": {"Jeff Green": "PF", "Kevin Love": "PF", "Eric Gordon": "SG/SF", "Nicolas Batum": "SF/PF", "Kelly Olynyk": "PF", "Seth Curry": "PG/SG", "Doug McDermott": "SF/PF", "Gary Harris": "SG/SF", "Thanasis Antetokounmpo": "PF", "Joe Ingles": "SF/PF", "D'Angelo Russell": "PG/SG", "Cameron Payne": "PG/SG", "Pat Connaughton": "SG/SF", "Ben Simmons": "PG", "Guerschon Yabusele": "PF", "Georges Niang": "PF", "Lonzo Ball": "PG/SG", "Jonathan Isaac": "PF", "Maxi Kleber": "PF", "Chris Boucher": "PF", "Donte DiVincenzo": "SG/SF", "Aaron Holiday": "PG", "Haywood Highsmith": "SF/PF", "Cody Martin": "SG/SF", "Garrison Mathews": "SG/SF", "DaQuan Jeffries": "SG/SF", "Amir Coffey": "SG/SF", "Gabe Vincent": "PG/SG", "Killian Hayes": "PG/SG", "Cole Anthony": "PG", "Anthony Gill": "PF", "Cam Thomas": "PG/SG", "Jeremiah Robinson-Earl": "PF", "Dalano Banton": "PG/SG", "Sharife Cooper": "PG", "A.J. Lawson": "SG/SF", "Trendon Watford": "PF", "Ethan Thompson": "PG/SG", "Brandon Williams": "PG", "Lindy Waters III": "SG/SF", "Ochai Agbaji": "SG/SF", "Dalen Terry": "SG/SF", "Malaki Branham": "SG/SF", "David Roddy": "SF/PF", "Blake Wesley": "PG/SG", "Kennedy Chandler": "PG", "E.J. Liddell": "PF", "Vince Williams Jr.": "PG/SG", "Tyrese Martin": "SG/SF", "Johnny Juzang": "SG/SF", "Tyson Etienne": "PG", "Lucas Williamson": "SG", "Nate Williams": "SF", "Keaton Wallace": "PG", "Jalen Pickett": "PG/SG", "Jalen Wilson": "SF/PF", "Julian Phillips": "SF/PF", "Jalen Slawson": "SF/PF", "Jett Howard": "SG/SF", "Dariq Whitehead": "PF", "Kobe Brown": "SF/PF", "Kris Murray": "SG/SF", "Nick Smith Jr.": "PG/SG", "Drew Timme": "PF", "Leaky Black": "SF/PF", "Alex Antetokounmpo": "SF/PF", "Duop Reath": "PF", "Pete Nance": "SF/PF", "Malachi Smith": "SG", "AJ Johnson": "PG/SG", "Blake Hinson": "PF", "Keshad Johnson": "SF/PF", "Enrique Freeman": "PF", "Jonathan Mogbo": "PF", "Antonio Reeves": "SG/SF", "Isaac Jones": "PF"}},
+    rostersRaw:"",
+    playersCsv:PLAYERS_CSV_NBA,
+    poolDataRevision:"nba-2026-10-13-cbs-blend",
+  },
+  // The user's Yahoo league Exhibit 10 (2026-10-17), read from Yahoo's league
+  // settings; 12 teams. No draft time or order yet (Yahoo lists an offline draft),
+  // so the board is generic and "My slot" sets the seat.
+  "yahoo-exhibit-10": {
+    id:"yahoo-exhibit-10",
+    name:"Exhibit 10",
+    sport:"nba",
+    platform:"yahoo",
+    yahooLeagueKey:"478.l.69840",
+    yahooLeagueId:"69840",
+    yahooLeagueUrl:"https://basketball.fantasysports.yahoo.com/nba/69840",
+    leagueType:"redraft",
+    draftType:"snake",
+    superflex:false,
+    officialDraft:false,
+    referenceDataRevision:"yahoo-exhibit-10-2026-10-17-v1",
+    teams:12,
+    rounds:13,
+    rosterSize:13,
+    irSlots:2,
+    mySlot:1,
+    scoringLabel:"H2H Categories (9-cat)",
+    draftDateLabel:"Check Yahoo draft room",
+    keeperDeadlineLabel:"—",
+    starters:{"PG": 1, "SG": 1, "G": 1, "SF": 1, "PF": 1, "F": 1, "C": 1, "UTIL": 3},
+    flexEligible:[],
+    scoringMode:"categories",
+    lineupPeriod:"daily",
+    marketAdpSource:"yahoo",
+    categoryStats:{"player": ["FG%", "FT%", "3PM", "PTS", "REB", "AST", "STL", "BLK", "TO"]},
+    maxAcquisitionsPerWeek:4,
+    assumptions:["Imported from Yahoo league 478.l.69840 (2026) on 2026-10-17. 12 teams; snake draft.", "Roster: PG, SG, G, SF, PF, F, C, 3 Util; 3 bench; 2 IL. H2H Categories (9-cat): FG%, FT%, 3PM, PTS, REB, AST, STL, BLK, TO.", "Lineups assumed daily (Yahoo NBA default). 4 adds per week. Playoffs from week 19, 6 teams."],
+    owners:["Me", "Team 2", "Team 3", "Team 4", "Team 5", "Team 6", "Team 7", "Team 8", "Team 9", "Team 10", "Team 11", "Team 12"],
+    meOwner:"Me",
+    ownerSlot:{"Me": 1, "Team 2": 2, "Team 3": 3, "Team 4": 4, "Team 5": 5, "Team 6": 6, "Team 7": 7, "Team 8": 8, "Team 9": 9, "Team 10": 10, "Team 11": 11, "Team 12": 12},
+    platformEligibility:{"yahoo": {"Jeff Green": "PF/C", "Kevin Love": "PF/C", "Eric Gordon": "SG/SF", "Nicolas Batum": "SF/PF", "Jonas Valanciunas": "C", "Kelly Olynyk": "PF/C", "Mason Plumlee": "C", "Seth Curry": "PG/SG", "Doug McDermott": "SF/PF", "Gary Harris": "SG/SF", "Dwight Powell": "C", "Thanasis Antetokounmpo": "PF", "Joe Ingles": "SF/PF", "D'Angelo Russell": "PG/SG", "Cameron Payne": "PG/SG", "Pat Connaughton": "SG/SF", "Ben Simmons": "PG", "Guerschon Yabusele": "PF/C", "Georges Niang": "PF", "Lonzo Ball": "PG/SG", "Jonathan Isaac": "PF/C", "Maxi Kleber": "PF/C", "Chris Boucher": "PF/C", "Mo Bamba": "C", "Donte DiVincenzo": "SG/SF", "Aaron Holiday": "PG", "Drew Eubanks": "C", "Haywood Highsmith": "SF/PF", "Cody Martin": "SG/SF", "Garrison Mathews": "SG/SF", "DaQuan Jeffries": "SG/SF", "Amir Coffey": "SG/SF", "Gabe Vincent": "PG/SG", "Killian Hayes": "PG/SG", "Cole Anthony": "PG", "Nick Richards": "C", "Anthony Gill": "PF/C", "Cam Thomas": "PG/SG", "Jeremiah Robinson-Earl": "PF", "Dalano Banton": "PG/SG", "Sharife Cooper": "PG", "A.J. Lawson": "SG/SF", "Trendon Watford": "PF", "Ethan Thompson": "PG/SG", "Brandon Williams": "PG", "Lindy Waters III": "SG/SF", "Ochai Agbaji": "SG/SF", "Dalen Terry": "SG/SF", "Malaki Branham": "SG/SF", "David Roddy": "SF/PF", "Blake Wesley": "PG/SG", "Christian Koloko": "C", "Kennedy Chandler": "PG", "E.J. Liddell": "PF/C", "Vince Williams Jr.": "PG/SG", "Tyrese Martin": "SG/SF", "Johnny Juzang": "SG/SF", "Tyson Etienne": "PG", "Lucas Williamson": "SG", "Nate Williams": "SF", "Keaton Wallace": "PG", "Jalen Pickett": "PG/SG", "Jalen Wilson": "SF/PF", "Julian Phillips": "SF/PF", "Jalen Slawson": "SF/PF", "Jett Howard": "SG/SF", "Dariq Whitehead": "PF", "Kobe Brown": "SF/PF", "Kris Murray": "SG/SF", "Nick Smith Jr.": "PG/SG", "Drew Timme": "PF/C", "Leaky Black": "SF/PF", "Alex Antetokounmpo": "SF/PF", "Duop Reath": "PF/C", "Pete Nance": "SF/PF", "Malachi Smith": "SG", "AJ Johnson": "PG/SG", "Blake Hinson": "PF/C", "Keshad Johnson": "SF/PF", "Enrique Freeman": "PF", "Jonathan Mogbo": "PF/C", "Antonio Reeves": "SG/SF", "Isaac Jones": "PF/C"}},
+    rostersRaw:"",
+    playersCsv:PLAYERS_CSV_NBA,
+    poolDataRevision:"nba-2026-10-13-cbs-blend",
   },
   'sleeper-nba-lock-in': {
     id:'sleeper-nba-lock-in', name:'Sleeper NBA — Lock-In Points (12-team, provisional)', sport:'nba', platform:'sleeper',
@@ -7087,17 +7173,45 @@ async function listYahooLeagues(){
       return;
     }
     if(Array.isArray(data.leagues)){
-      el('yahooStatus').textContent='✓ '+data.leagues.length+' '+game.toUpperCase()+' league(s): '+data.leagues.map(l=>l.name+' ('+l.key+')').join(', ');
+      el('yahooStatus').textContent='✓ '+data.leagues.length+' '+game.toUpperCase()+' league(s). Click Add to Draft Lab next to one.';
       const sel=el('yahooLeagueSelect');
       sel.innerHTML='';
       data.leagues.forEach(l=>{const o=document.createElement('option');o.value=l.key;o.textContent=l.name+' ('+l.key+')';sel.appendChild(o);});
+      yahooListed=data.leagues;renderYahooLeagueList();
     } else {
       el('yahooStatus').textContent='Connected, but the response shape didn\'t match what we expected — raw JSON below for review.';
     }
     el('yahooRaw').textContent=JSON.stringify(data.raw,null,1);
   }catch(e){ el('yahooStatus').textContent='⚠ '+e.message; }
 }
-let yahooCompared=null;
+let yahooCompared=null, yahooListed=[];
+// One row per listed Yahoo league: Add to Draft Lab, or Open once it is in.
+function renderYahooLeagueList(){
+  const box=el('yahooLeagueList');if(!box)return;
+  box.innerHTML='';
+  yahooListed.forEach(l=>{
+    const row=document.createElement('div');row.className='row';row.style.cssText='gap:8px;align-items:center;margin:4px 0';
+    const label=document.createElement('span');label.textContent=l.name+(l.season?' · '+l.season:'');
+    const have=Object.values(LEAGUES).find(p=>p.yahooLeagueKey===l.key);
+    const btn=document.createElement('button');btn.className=have?'btn ghost':'btn';
+    btn.textContent=have?'Open':'Add to Draft Lab';
+    btn.onclick=()=>have?switchLeague(have.id):addYahooLeague(l.key);
+    row.append(label,btn);
+    if(have){const note=document.createElement('span');note.className='muted';note.textContent='in Draft Lab as '+have.name;row.appendChild(note);}
+    box.appendChild(row);
+  });
+  if(!yahooListed.length)box.textContent='No leagues found for this sport.';
+}
+// The one-click path: read the league's settings, then create its profile. NHL
+// still has to match the Public Prize reference before it can be created.
+async function addYahooLeague(key){
+  el('yahooLeagueSelect').value=key;
+  await compareYahooSettings();
+  if(!yahooCompared){return;}
+  if(yahooCompared.profile)await importYahooProfile(1);
+  else await importMatchedYahooNhl();
+  renderYahooLeagueList();
+}
 // A Yahoo league's flattened stat rows (stat_categories / stat_modifiers).
 function yahooStatRows(node){
   if(!node||typeof node!=='object')return [];
@@ -7163,7 +7277,16 @@ function yahooNbaProfileFromSettings(data){
     'Roster: '+rosterText+'; '+bench+' bench; '+ir+' IL. '+profile.scoringLabel+': '+scoringText+'.',
     'Lineups assumed daily (Yahoo NBA default).'+(profile.maxAcquisitionsPerWeek?' '+profile.maxAcquisitionsPerWeek+' adds per week.':'')+(String(s.uses_playoff)==='1'&&s.playoff_start_week?' Playoffs from week '+s.playoff_start_week+(s.num_playoff_teams?', '+s.num_playoff_teams+' teams':'')+'.':'')
   ];
-  if(Object.keys(data.platformEligibility||{}).length)profile.platformEligibility={yahoo:{...data.platformEligibility}};
+  if(String(s.draft_type)==='self')warnings.push('Yahoo lists an offline (self) draft'+(draftAt?'':' with no draft time yet'));
+  // Yahoo's per-league positions name only the league's own slots: with no C slot
+  // a centre reads "Util". Keep base positions only, so the pool's own eligibility
+  // stands where Yahoo's is reduced, and match names without accents.
+  const elig={};
+  Object.entries(data.platformEligibility||{}).forEach(([name,raw])=>{
+    const base=String(raw).split(/[\/,]/).map(x=>x.trim().toUpperCase()).filter(x=>SPORTS.nba.positions.includes(x));
+    if(base.length)elig[name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()]=base.join('/');
+  });
+  if(Object.keys(elig).length)profile.platformEligibility={yahoo:elig};
   return {profile,summary:profile.name+' · '+profile.teams+' teams · '+profile.scoringLabel+' · '+rosterText+' + '+bench+' BN + '+ir+' IL · '+profile.draftType+' · '+profile.draftDateLabel,warnings};
 }
 async function compareYahooSettings(){
@@ -7251,8 +7374,8 @@ async function importMatchedYahooNhl(){
     el('yahooImportBtn').disabled=true;
   }catch(e){el('yahooStatus').textContent='⚠ '+e.message;}
 }
-async function importYahooProfile(){
-  const built=yahooCompared.profile, teamCount=Number(built.teams)||12, slot=Number(el('yahooImportSlot').value);
+async function importYahooProfile(slotOverride){
+  const built=yahooCompared.profile, teamCount=Number(built.teams)||12, slot=Number(slotOverride||el('yahooImportSlot').value);
   if(!Number.isInteger(slot)||slot<1||slot>teamCount){el('yahooStatus').textContent='Enter your draft slot from 1 to '+teamCount+'.';return;}
   const existing=Object.values(LEAGUES).find(p=>p.yahooLeagueKey===yahooCompared.key);
   if(existing){switchLeague(existing.id);el('yahooStatus').textContent='This Yahoo league is already in Draft Lab; switched to it.';return;}
@@ -7262,7 +7385,8 @@ async function importYahooProfile(){
     const r=await fetch('/api/leagues',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const profile=await r.json();if(!r.ok)throw new Error(profile.error||('HTTP '+r.status));
     LEAGUES[profile.id]=profile;fillLeagueSelect();switchLeague(profile.id);
-    el('yahooStatus').textContent=`✓ Created ${profile.name} (slot ${profile.mySlot}). Live pick sync is not yet implemented; record the Yahoo board as the draft runs.`;
+    const ordered=profile.meOwner&&profile.meOwner!=='Me';
+    el('yahooStatus').textContent=`✓ Added ${profile.name} and opened it. `+(ordered?`Yahoo's draft order is set: you are ${profile.meOwner}, pick ${profile.mySlot}.`:'Yahoo has not set the draft order yet: set your seat with My slot in the Draft Room.')+' Live pick sync is not yet implemented.';
     el('yahooImportBtn').disabled=true;
   }catch(e){el('yahooStatus').textContent='⚠ '+e.message;}
 }
