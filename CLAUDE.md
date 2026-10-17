@@ -45,7 +45,9 @@ in-app (see "Multi-league support" below) — no code change needed to add a lea
   running `wrangler deploy` locally (see the Cloudflare dashboard for that project's
   build status). Ship changes via a PR against `main`, not a force-push — this repo
   uses PRs (see closed PR history) and other sessions/devices may be working from
-  the same `main`.
+  the same `main`. **Merge your own PR as soon as its CI is green; don't ask the
+  user to say "merge it"** (the user, 2026-10-17). Merging deploys, so CI and the
+  local tests still have to pass first.
 - `functions/` is a leftover Cloudflare Pages Functions implementation, superseded
   by `worker.js`. Left in place for reference only; unused by the current deploy.
   Don't touch it.

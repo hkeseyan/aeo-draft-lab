@@ -16,6 +16,8 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- ✅ 2026-10-17 — **"Don't ask me to merge it every time."** The user doesn't want to send another message just to merge a PR. *Done:* Claude merges its own PRs once CI is green, without asking, since merging deploys. Recorded in `CLAUDE.md` → Tech stack & deploy.
+
 - ✅ 2026-10-17 — **"I clicked List my leagues. I don't know how to add a league after that."** The user wants the Yahoo import process changed. Adding a league took a hidden sequence: pick from a dropdown, then Compare settings, enter a slot, and Create profile. *Done:* each listed league now gets its own **Add to Draft Lab** button, or **Open** once it is in. One click reads the league's settings, creates the profile and opens it. The card spells out the three steps. Compare-first and the troubleshooting notes moved under an "Advanced" fold.
 
 - ✅ 2026-10-17 — **Yahoo NBA: no NBA option to connect a league; pull in Showtime and Exhibit 10.** User has a Yahoo NBA league **Showtime** drafting Sun Oct 18 at 4:00 PM PDT, and **Exhibit 10**, still filling, to import as a 12-team league with all its settings. **Game of Zones** is not needed yet (may not draft).
