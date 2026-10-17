@@ -890,6 +890,13 @@ ev('switchLeague("yahoo-exhibit-10")');
 await new Promise(r => setTimeout(r, 300));
 ok &= check('Exhibit 10: 12 teams, 9-cat H2H, one C and 3 Util, generic board until Yahoo sets the order', () =>
   slots() + ':' + ev('LEAGUE.teams+":"+LEAGUE.scoringMode+":"+mySlot+":"+ME_OWNER'), 'PG,SG,G,SF,PF,F,C,UTIL,UTIL,UTIL:12:categories:1:Me');
+ev('switchLeague("yahoo-prize-roto-252068")');
+await new Promise(r => setTimeout(r, 300));
+ok &= check('Yahoo Prize Roto 252068: 9-cat roto, 82-game cap, Yahoo default roster, generic board', () =>
+  slots() + ':' + ev('LEAGUE.scoringMode+":"+LEAGUE.maxGamesPlayed+":"+LEAGUE.rounds+"/"+LEAGUE.irSlots+":"+mySlot+":"+LEAGUES[CURRENT_LEAGUE_ID].yahooLeagueKey'),
+  'PG,SG,G,SF,PF,F,C,C,UTIL,UTIL:roto:82:13/3:1:478.l.252068');
+ev('switchLeague("yahoo-exhibit-10")');
+await new Promise(r => setTimeout(r, 300));
 ok &= check('Exhibit 10: Yahoo fills positions the pool lacks', () => ev('eligiblePositions(findPlayer("Mason Plumlee")).join("/")'), 'C');
 ev('switchLeague("sleeper-nba-lock-in")');
 await new Promise(r => setTimeout(r, 300));
