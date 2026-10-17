@@ -16,6 +16,17 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- ✅ 2026-10-17 — **Generic Fantrax TRAX50 Classic NBA H2H Points league type.** User will join one of Fantrax's public $50 TRAX50 Classic H2H Points leagues on Sunday or Monday, not necessarily the one pasted (`ffvbb7mbmuhrtn7v`, "TRAX50 Classic Draft (39)", draft Sun Oct 18 11:00 AM PDT). Wants a generic league type to mock with. The rules match the roto league's roster setup (4 G / 4 F / 1 C / 1 Flx, 6 reserves, no IR, 16-round snake, no trades, the same waivers). The differences:
+  - **Scoring:** PTS 1, REB 1.25, AST 1.5, ST 2, BLK 2, TO -1.
+  - **Lineup lock:** each player locks at his own team's first game of the week.
+  - **2-week matchups:** Cup knockout week plus the next, the two All-Star weeks, and the Championship.
+  - **Season:** stats end Apr 4, a week before the NBA season.
+  - **Playoffs:** periods 19-21, top 6 of 12, seeds 1-2 get a bye, reseeded each round.
+  - **Prizes:** $370 / $120 / $50. 3rd goes to the semi-final loser with more points.
+  - **Standings tiebreak:** points for.
+
+  *Done:* added as `fantrax-nba-classic-h2h-points`. The rules match the league's `getLeagueInfo`, and its eligibility is identical to the roto league's. A full 192-pick mock fills every lineup. See `SPECS.md` → Basketball templates.
+
 - ✅ 2026-10-17 — **Roto: penalize missed games less, by filling them with replacement-level games.** User: in roto drafts, take each player's projected games played, and fill every game below the games cap with that many games of a replacement player at his position. So Kyrie, Embiid and Kawhi should be worth more in roto than in H2H, while more games still wins when all else is equal. Same message: the full TRAX50 Classic rules text (whole lineup locks five minutes before the first game of each weekly period, not per player; WW claims process at 10:00am ET; "churning" means a player claimed and dropped within one lineup period becomes a free agent instead of going to waivers; a Can't Drop List of elite players; only full 12-team leagues draft, and an unfilled league is dissolved and refunded; the draft order is set when the 12th team joins; no quitting within 12 hours of the draft). Follow-up, same session: with no games cap in TRAX50, durability should sit **between H2H and daily roto**, and players who sit back-to-backs (Embiid, maybe LeBron) take a big hit, because in a 4- or 5-game week you have to treat them as 3-game players. *Done:*
   - Roto fills missed games below the cap (82 where none is stated) with the replacement line at the player's position: 100% under daily lineups, 50% under weekly lineups.
   - Embiid and LeBron (`NBA_B2B_RESTERS`) get nothing filled under weekly lineups.

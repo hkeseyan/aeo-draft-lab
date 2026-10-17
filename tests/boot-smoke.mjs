@@ -794,6 +794,29 @@ ok &= check('a full 192-pick TRAX50 NBA mock fills every team\'s ten active slot
   resetDraft();
   return short.length?'short: '+short.join(','):true;
 })()`), true);
+ev('switchLeague("fantrax-nba-classic-h2h-points")');
+await new Promise(r => setTimeout(r, 300));
+ok &= check('Fantrax Classic H2H Points: Fantrax points scoring, weekly lineups, Fantrax ADP, 16 rounds with no IR', () =>
+  ev('LEAGUE.scoringMode+":"+[LEAGUE.scoring.pts,LEAGUE.scoring.reb,LEAGUE.scoring.ast,LEAGUE.scoring.stl,LEAGUE.scoring.blk,LEAGUE.scoring.to].join("/")+":"+LEAGUE.lineupPeriod+":"+MARKET_ADP_STATUS+":"+LEAGUE.rounds+"/"+LEAGUE.irSlots+":"+isCategoryLeague()'),
+  'points:1/1.25/1.5/2/2/-1:weekly:fantrax:16/0:false');
+ok &= check('Fantrax Classic H2H Points lineup is 4 G / 4 F / 1 C / 1 Flx with multi-position cells', () =>
+  slots() + ':' + ['Jalen Williams','Karl-Anthony Towns'].map(n => ev(`posCell(findPlayer(${JSON.stringify(n)}))`).replace(/<[^>]+>/g,'')).join(','), 'G,G,G,G,F,F,F,F,C,UTIL:G/F,F/C');
+ok &= check('Fantrax Classic H2H Points My Rank is season league points under its own scoring', () => ev(`(function(){
+  const p=findPlayer('Nikola Jokic'), s=p.st, want=s.pts+1.25*s.reb+1.5*s.ast+2*s.stl+2*s.blk-s.to;
+  return Math.abs(p.leagueProj-want)<1e-6 && PLAYERS.every(x=>Math.abs(x.myValue-x.leagueProj)<1e-9);
+})()`), true);
+ok &= check('a full 192-pick Fantrax Classic H2H Points mock fills every team\'s ten active slots', () => ev(`(function(){
+  resetDraft();
+  for(let ov=1;ov<=totalPicks;ov++)rivalPick(ov,0.5);
+  if(picks.length!==192) return 'picks '+picks.length;
+  const short=[];
+  for(let slot=1;slot<=LEAGUE.teams;slot++){
+    const fit=slotRosterPlayers(rosterOf(slot),LEAGUE.starters);
+    if(fit.starterSlots.some(s=>!s.player)) short.push(slot);
+  }
+  resetDraft();
+  return short.length?'short: '+short.join(','):true;
+})()`), true);
 ev('switchLeague("sleeper-nba-lock-in")');
 await new Promise(r => setTimeout(r, 300));
 ok &= check('Sleeper Lock-In working roster: 9 starters', slots, 'PG,SG,G,SF,PF,F,C,UTIL,UTIL');
