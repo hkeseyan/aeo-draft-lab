@@ -168,6 +168,8 @@ because Yahoo NBA leagues vary.
 - **Imported as built-ins (2026-10-17):**
   - `yahoo-showtime-league`: Showtime League, no C slot, 4 Util, real draft order.
   - `yahoo-exhibit-10`: Exhibit 10, 12 teams, no draft order yet.
+  - `yahoo-prize-roto-252068`: Yahoo Prize Roto 252068, Yahoo's default 9-cat roto
+    with the 82-game cap, no draft order yet.
   
   Both keep only the Yahoo positions the pool lacks.
 
