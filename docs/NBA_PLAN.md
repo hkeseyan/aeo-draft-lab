@@ -1,3 +1,46 @@
+## Sleeper Lock-In league review (2026-10-18)
+
+KYOS joined Sleeper **Fantasy Basketball League** (league ID
+`1417317310334578688`; 2026 season, redraft). Sleeper's help documents Lock-In
+as the default game mode for new NBA leagues: one game per player per week is
+selected after it is played, before the next game starts; once locked, the choice
+cannot be changed. This league uses that mode. Its scoring settings are customized
+relative to Sleeper's commonly shown points scoring example:
+
+| Setting | League value | Practical effect |
+|---|---:|---|
+| Points | 0.5 | Pure scoring volume is dampened |
+| Rebounds / assists | 1 / 1 | Useful, but no extra premium |
+| Steals / blocks | 2 / 2 | Stocks create strong single-game swings |
+| Turnovers | -1 | High-usage mistakes cost points |
+| 3-pointers made | 0.5 | Low bonus for three-point volume |
+| Double / triple-double | +1 / +2 | Small reward for all-around lines |
+| 40+ / 50+ point bonuses | +2 / +2 | Adds upside for huge scoring games |
+| Technical / flagrant fouls | -2 / -2 | Small downside on rare events |
+| Missed shots / FG% / FT% | not scored | Efficiency has no direct penalty or reward |
+
+Roster: 12 teams, 9 starters (PG, SG, G, SF, PF, F, C, 2 Util), 5 bench, 1 IR.
+The league endpoint's `draft_rounds:3` conflicts with the linked draft endpoint's
+14 rounds; the draft endpoint and observed roster are used. Draft order is still
+unassigned. Sleeper currently has 9 of 12 teams filled.
+
+AO Draft Lab now has a league-specific profile and a general Lock-In ceiling ranking
+mode. It rescales the current Hashtag 50% / CBS 25% / ESPN 25% raw-stat blend to a
+projected per-game mean and applies a variance-weighted upside premium plus an
+estimated bonus for 40+/50+ scoring games. This is a heuristic proxy, not an
+empirical per-player percentile: current projections do not include game-log
+variance distributions. It favors players who can post standout single games, with
+stocks, rebounds, assists, and multi-stat lines contributing alongside points.
+Scoring efficiency is not a ranking input because the league does not score it.
+Future Sleeper Lock-In leagues inherit this ranking objective but load each
+league's own scoring and lineup settings.
+
+Sleeper's help confirms the Lock-In format is the default for new NBA leagues, and
+its documented available stats include the categories used here. The exact weights
+above are read from this league's API settings. The league's point values differ
+from the common Sleeper example (1 PTS / 1.2 REB / 1.5 AST / 3 STL / 3 BLK / -1 TO),
+so this is not a default scoring setup.
+
 # NBA plan — requirements and the handoff brief
 
 Captured 2026-10-01, at the end of the NHL build. The next session starts here.
