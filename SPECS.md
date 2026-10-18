@@ -386,9 +386,25 @@ Composite slots that only some positions fill (G, F, hockey's Fantrax F) still s
 **Category value names turnovers only where they count.** A league without TO
 (TRAX50's 8-cat roto) has no turnover term and its My Rank note doesn't mention one.
 
-Best Ball and Lock-In are always points formats. Their draft semantics (weekly
-ceiling and depth; single-game ceiling) are not modelled yet, so those templates rank
-on season league points. Best Ball strategy is next after the generic draft strategy.
+Best Ball and Lock-In are points formats with distinct ranking objectives. Best Ball
+leans toward weekly ceiling and depth. Sleeper Lock-In ranks by a single-game ceiling
+proxy from the existing NBA raw-stat projection blend: projected per-game mean plus
+a variance-weighted upside premium and estimated 40+/50+ bonus value. This is an
+explicit heuristic until game-log distributions are integrated; it is used only when
+the active points league has `lineupMode:'lockin'`. Future Sleeper Lock-In profiles
+use this objective while retaining their own scoring and roster settings.
+
+The joined Sleeper **Fantasy Basketball League** (`sleeper-nba-1417317310334578688`)
+uses 12 teams, 9 starters (PG, SG, G, SF, PF, F, C, 2 Util), 5 bench, and 1 IR.
+Its Lock-In mode is Sleeper's default for new NBA leagues, while its scoring is
+custom relative to Sleeper's commonly shown points example: PTS 0.5, REB 1, AST 1,
+STL/BLK 2, TO -1, 3PM 0.5, DD +1, TD +2, 40+/50+ +2 each, technical/flagrant -2.
+Missed shots and shooting percentages are not scored. The API league metadata says
+3 draft rounds, but the linked draft endpoint reports 14; the draft endpoint is
+used. Draft order is not assigned yet. Strategy therefore favors players with
+high single-game upside across scoring, rebounds, assists and stocks; pure scorers
+and three-point volume lose relative value, and scoring efficiency carries no direct
+penalty.
 
 **"My slot" on a real board.** When a profile's owners are real team names in a
 fixed (Fantrax-random) order and none of them is marked as the user, choosing a slot

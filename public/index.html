@@ -3399,20 +3399,43 @@ const LEAGUES_DEFAULT = {
   'sleeper-nba-lock-in': {
     id:'sleeper-nba-lock-in', name:'Sleeper NBA — Lock-In Points (12-team, provisional)', sport:'nba', platform:'sleeper',
     leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,
-    referenceDataRevision:'sleeper-nba-lockin-2026-10-02-v2',
+    referenceDataRevision:'sleeper-nba-lockin-2026-10-18-v3',
     teams:12, rounds:15, rosterSize:15, irSlots:1, mySlot:1,
     scoringLabel:'H2H Points · Lock-In', draftDateLabel:'TBD', keeperDeadlineLabel:'—',
     starters:{PG:1,SG:1,G:1,SF:1,PF:1,F:1,C:1,UTIL:2}, flexEligible:[],
-    scoringMode:'points', lineupPeriod:'weekly', lineupMode:'lockin', marketAdpSource:'sleeper',
+    scoringMode:'points', lineupPeriod:'weekly', lineupMode:'lockin', lockinCeilingWeight:1, marketAdpSource:'sleeper',
     scoring:{pts:1,reb:1.2,ast:1.5,stl:3,blk:3,to:-1},
     assumptions:[
       'Scoring is Sleeper\'s documented default: PTS 1, REB 1.2, AST 1.5, STL 3, BLK 3, TO -1.',
       'Lock-In: one game per player per week counts, locked after it is played and before his next game, starters only; an unlocked player scores his final game of the week.',
       'Sleeper leagues are commissioner-configured, so there is no public default. Working setup per the user (2026-10-02): 9 starters (PG, SG, G, SF, PF, F, C, Util, Util), 6 bench, 1 IR; 12 teams assumed. Replace with each joined league\'s settings.',
-      'Lock-In values single-game ceiling over games played; that is not modelled yet (build step 5). My Rank is season league points for now.'
+      'Lock-In My Rank uses a ceiling-first single-game proxy from the same projected stat line: projected mean + a variance premium + expected 40+/50+ bonus value. Game-level distributions are not supplied by the projection blend, so treat this as an upside proxy rather than a precise percentile.'
     ],
     owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
     meOwner:'Me', ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
+    rostersRaw:'', playersCsv:PLAYERS_CSV_NBA,
+    poolDataRevision:'nba-2026-10-13-cbs-blend',
+  },
+  'sleeper-nba-1417317310334578688': {
+    id:'sleeper-nba-1417317310334578688', name:'Fantasy Basketball League', sport:'nba', platform:'sleeper',
+    sleeperLeagueId:'1417317310334578688', leagueType:'redraft', draftType:'snake', superflex:false, officialDraft:false,
+    referenceDataRevision:'sleeper-nba-1417317310334578688-2026-10-18-v1',
+    teams:12, rounds:14, rosterSize:14, irSlots:1, mySlot:null,
+    scoringLabel:'Custom H2H Points · Lock-In', draftDateLabel:'TBD', keeperDeadlineLabel:'—',
+    starters:{PG:1,SG:1,G:1,SF:1,PF:1,F:1,C:1,UTIL:2}, flexEligible:[],
+    scoringMode:'points', lineupPeriod:'weekly', lineupMode:'lockin', lockinCeilingWeight:1, marketAdpSource:'sleeper',
+    scoring:{pts:0.5,reb:1,ast:1,stl:2,blk:2,to:-1,tpm:0.5,dd:1,td:2,bonus_pt_40p:2,bonus_pt_50p:2,tf:-2,ff:-2},
+    assumptions:[
+      'Sleeper league 1417317310334578688 (KYOS): Lock-In, 12 teams, 9 starters (PG, SG, G, SF, PF, F, C, 2 Util), 5 bench, and 1 reserve/IR slot.',
+      'Draft endpoint confirms 14 rounds; the league endpoint draft_rounds field disagrees and reports 3.',
+      'Draft order is not set yet; My Slot remains unset until Sleeper publishes it.',
+      'Custom scoring from Sleeper: PTS 0.5, REB 1, AST 1, STL 2, BLK 2, TO -1, 3PM 0.5, DD 1, TD 2, 40+ PTS +2, 50+ PTS +2, technical foul -2, flagrant foul -2.',
+      'Lock-In My Rank uses a projected single-game ceiling proxy rather than season totals, with a variance premium and expected 40+/50+ bonus value; projection-source data lacks game-level outcomes.',
+      'Projections use the shared Hashtag Basketball 50% / CBS Sports 25% / ESPN 25% raw-stat blend, then apply this league\'s scoring.'
+    ],
+    owners:['Me','Team 2','Team 3','Team 4','Team 5','Team 6','Team 7','Team 8','Team 9','Team 10','Team 11','Team 12'],
+    meOwner:'Me',
+    ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
     rostersRaw:'', playersCsv:PLAYERS_CSV_NBA,
     poolDataRevision:'nba-2026-10-13-cbs-blend',
   },
@@ -4490,16 +4513,52 @@ function nbaProjectionNote(p){
   if(!ids.length)return 'no projection — market rank only';
   return 'projection blend: '+ids.map(id=>{const src=NBA_PROJECTION_SOURCES.find(x=>x.id===id);return src?src.label:id;}).join(' + ')+(p.projectionLive?' (live)':' (2026-10-13 snapshot)');
 }
+// Estimate Lock-In upside from the existing projection blend. Projections provide
+// season means, not game-level distributions, so this is a transparent ceiling proxy,
+// not a claimed P90 forecast. It ranks a typical player's single-game score plus an
+// estimated variance premium and the expected value of 40+/50+ scoring bonuses.
+function nbaLockInCeilingProjection(p){
+  const gp=nbaGames(p), sc=LEAGUE.scoring||NBA_DEFAULT_POINTS, st=p&&p.st||{};
+  if(!(gp>0))return {mean:+p.leagueProj||0,volatility:0,bonus:0,value:+p.leagueProj||-99};
+  const rate=k=>Math.max(0,(+st[k]||0)/gp);
+  const mean=(+p.leagueProj||0)/gp;
+  // Approximate per-game spread of the scoring components. Points are more
+  // overdispersed than a Poisson count; stocks and threes also create useful
+  // single-game swings in this scoring system.
+  const varianceFactors={pts:2.4,reb:1.1,ast:1.2,stl:1.5,blk:1.5,to:1.2,tpm:1.8};
+  let variance=Object.entries(varianceFactors).reduce((sum,[k,f])=>{
+    const w=Number(sc[k])||0;
+    return sum+rate(k)*f*w*w;
+  },0);
+  ['dd','td'].forEach(k=>{
+    const probability=Math.min(1,rate(k)),w=Number(sc[k])||0;
+    variance+=probability*(1-probability)*w*w;
+  });
+  const volatility=Math.sqrt(Math.max(0,variance));
+  const pts=rate('pts'),ptsSd=Math.sqrt(Math.max(1,2.4*pts));
+  const tail=threshold=>1/(1+Math.exp(1.702*((threshold-0.5-pts)/ptsSd)));
+  const bonus=(Number(sc.bonus_pt_40p)||0)*tail(40)+(Number(sc.bonus_pt_50p)||0)*tail(50);
+  const value=mean+bonus+(Number(LEAGUE.lockinCeilingWeight)||1)*volatility;
+  return {mean,volatility,bonus,value};
+}
 function computeMyRanksNba(){
   const isPoints=LEAGUE.scoringMode==='points';
-  PLAYERS.forEach(p=>{p.leagueProj=nbaProjectedPoints(p);p.categoryZ=null;p.categoryValue=null;});
+  const useLockIn=isPoints&&LEAGUE.lineupMode==='lockin';
+  PLAYERS.forEach(p=>{
+    p.leagueProj=nbaProjectedPoints(p);p.categoryZ=null;p.categoryValue=null;
+    p.lockInCeilingDetails=useLockIn?nbaLockInCeilingProjection(p):null;
+    p.lockInCeilingValue=useLockIn?p.lockInCeilingDetails.value:null;
+  });
   if(!isPoints&&typeof nbaCategoryValue==='function')nbaCategoryValue();
   const useCats=!isPoints&&PLAYERS.some(p=>Number.isFinite(p.categoryValue));
   PLAYERS.forEach(p=>{
-    p.myValue=useCats?(Number.isFinite(p.categoryValue)?p.categoryValue:-99):p.leagueProj;
+    p.myValue=useCats?(Number.isFinite(p.categoryValue)?p.categoryValue:-99)
+      :(useLockIn?p.lockInCeilingValue:p.leagueProj);
     const gp=+(p.st&&p.st.gp)||+p.gp||0;
     const why=useCats?(p.categoryWhy||['category value '+Number(p.myValue).toFixed(2)])
-      :['league value '+p.leagueProj.toFixed(1)+(gp?' ('+(p.leagueProj/gp).toFixed(1)+' per game over '+Math.round(gp)+' games)':'')];
+      :useLockIn
+        ?['Lock-In ceiling proxy '+p.myValue.toFixed(1)+' ('+p.lockInCeilingDetails.mean.toFixed(1)+' projected mean + '+(p.lockInCeilingDetails.volatility*(Number(LEAGUE.lockinCeilingWeight)||1)).toFixed(1)+' upside premium + '+p.lockInCeilingDetails.bonus.toFixed(1)+' expected 40+/50+ bonus)']
+        :['league value '+p.leagueProj.toFixed(1)+(gp?' ('+(p.leagueProj/gp).toFixed(1)+' per game over '+Math.round(gp)+' games)':'')];
     why.push(nbaProjectionNote(p));
     if(!isPoints&&!useCats)why.push('category scoring unavailable — ranked on league points');
     p.myRankWhy=why.join('; ');
@@ -4637,8 +4696,8 @@ function nbaCategoryValue(){
   });
 }
 // Points leagues: the per-game view shows league points per game.
-function projectionPoints(p){const v=+p.leagueProj;return statPerGame()?perGameOf(p,v):v;}
-function projectionLabel(){return LEAGUE.scoringMode==='points'?(statPerGame()?'Proj / G':'Preseason Proj'):'Cat';}
+function projectionPoints(p){if(LEAGUE.lineupMode==='lockin'&&Number.isFinite(+p.lockInCeilingValue))return +p.lockInCeilingValue;const v=+p.leagueProj;return statPerGame()?perGameOf(p,v):v;}
+function projectionLabel(){return LEAGUE.lineupMode==='lockin'?'Lock-In Ceiling':(LEAGUE.scoringMode==='points'?(statPerGame()?'Proj / G':'Preseason Proj'):'Cat');}
 function projectionSortValue(p){const v=LEAGUE.scoringMode==='points'?projectionPoints(p):p.categoryValue;return Number.isFinite(+v)&&v!=null?+v:null;}
 function projectionDisplay(p){
   if(LEAGUE.scoringMode==='points'){const v=projectionPoints(p);return Number.isFinite(v)?v.toFixed(1):'';}
@@ -8436,7 +8495,7 @@ function applyLeagueProfile(id){
     availabilityDiscounts:profile.availabilityDiscounts||{}, assumptions:profile.assumptions||[],
     categoryStats:profile.categoryStats||null, maxGamesPlayed:profile.maxGamesPlayed||null,
     maxAcquisitionsPerWeek:profile.maxAcquisitionsPerWeek||null, minGoalieGamesPerWeek:profile.minGoalieGamesPerWeek||null,
-    positionLimits:profile.positionLimits||null, lineupMode:profile.lineupMode||null, categoryWeights:profile.categoryWeights||null,
+    positionLimits:profile.positionLimits||null, lineupMode:profile.lineupMode||null, lockinCeilingWeight:(profile.lockinCeilingWeight!=null?profile.lockinCeilingWeight:1), categoryWeights:profile.categoryWeights||null,
   };
   mySlot=LEAGUE.mySlot;
   totalPicks=LEAGUE.teams*LEAGUE.rounds;
@@ -8537,7 +8596,7 @@ async function fetchCloudLeagues(){
       // already in KV, so production kept running the generic defaults and priced
       // a backup quarterback at $9. Backfill each such field independently, and
       // only where the cloud copy has no value at all.
-      const BACKFILL=['waiverRules','leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','platform','platformEligibility','scoring','scoringMode','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek','rosterPositions','lineupPeriod','marketAdpSource','defaultStreamConfidence','projectionSources','availabilityDiscounts','assumptions'];
+      const BACKFILL=['waiverRules','leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','platform','platformEligibility','scoring','scoringMode','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek','rosterPositions','lineupPeriod','marketAdpSource','defaultStreamConfidence','projectionSources','availabilityDiscounts','assumptions','lockinCeilingWeight'];
       const isEmpty=v=>v==null||v===''||(Array.isArray(v)&&!v.length)||(typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length);
       const toPatch=[];
       Object.values(LEAGUES_DEFAULT).forEach(def=>{
@@ -8556,7 +8615,7 @@ async function fetchCloudLeagues(){
           ['poolDataRevision','playersCsv'].forEach(f=>{ if(def[f]!==undefined)add[f]=def[f]; });
         }
         if(def.referenceDataRevision && cur.referenceDataRevision!==def.referenceDataRevision){
-          ['referenceDataRevision','name','teams','rounds','rosterSize','irSlots','owners','meOwner','ownerSlot','officialDraft','platformEligibility','scoringLabel','scoringMode','scoring','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek','rosterPositions','lineupPeriod','marketAdpSource','defaultStreamConfidence','projectionSources','availabilityDiscounts','assumptions']
+          ['referenceDataRevision','name','teams','rounds','rosterSize','irSlots','owners','meOwner','ownerSlot','officialDraft','platformEligibility','scoringLabel','scoringMode','scoring','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek','rosterPositions','lineupPeriod','lineupMode','lockinCeilingWeight','marketAdpSource','defaultStreamConfidence','projectionSources','availabilityDiscounts','assumptions']
             .forEach(f=>{if(def[f]!==undefined)add[f]=def[f];});
         }
         if(def.liveDraftRevision && cur.liveDraftRevision!==def.liveDraftRevision){
