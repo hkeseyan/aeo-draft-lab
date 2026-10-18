@@ -236,7 +236,8 @@
             <span class="legend muted">
               <span><b class="val-good">green</b>=value vs ECR</span>
             </span>
-            <label class="small muted" style="margin-left:auto"><input type="checkbox" id="toggleDelta" checked> show Δ</label>
+            <label class="small muted" id="statViewWrap" style="margin-left:auto" title="Show the stat columns (and points per game) as season totals or per game. Display and sorting only: My Rank stays on season value.">Stats <select id="statView"><option value="totals">Season totals</option><option value="pergame">Per game</option></select></label>
+            <label class="small muted"><input type="checkbox" id="toggleDelta" checked> show Δ</label>
           </div>
           <div class="scroll">
             <table id="poolTable">
@@ -4219,6 +4220,31 @@ function nhlCatRaw(p,cat){
   if(cat==='SV%'){const sv=+st.sv||0,ga=+st.ga||0;return sv+ga>0?sv/(sv+ga):NaN;}
   const v=+st[d.key];return Number.isFinite(v)?v:0;
 }
+// Best Available can show stats as season totals or per game (the user,
+// 2026-10-17). Display and sorting only: values and My Rank stay season-based.
+// Percentages and goalie rates read the same either way.
+let STAT_VIEW=(()=>{try{return localStorage.getItem('statView')==='pergame'?'pergame':'totals';}catch(e){return 'totals';}})();
+function statPerGame(){return STAT_VIEW==='pergame'&&(SPORT.id==='nba'||SPORT.id==='nhl');}
+function statGames(p){return +(p&&p.st&&p.st.gp)||+(p&&p.gp)||0;}
+function perGameOf(p,v){const g=statGames(p);return Number.isFinite(v)&&g>0?v/g:NaN;}
+// The value a category column shows: per game for counting stats when that view
+// is on; a bare percentage or goalie rate never scales.
+function catShownValue(p,cat){
+  const v=nhlCatRaw(p,cat);
+  return statPerGame()&&!catDef(cat).rate?perGameOf(p,v):v;
+}
+function catShownFormat(cat,v){
+  if(!statPerGame()||catDef(cat).rate||!Number.isFinite(v))return nhlCatFormat(cat,v);
+  const d=catDef(cat),out=v.toFixed(SPORT.id==='nhl'?2:1);
+  return d.signed&&v>0?'+'+out:out;
+}
+// Colour basis: the season value (FG%/FT% by volume impact), divided by games in
+// the per-game view, ranked against the matching reference population.
+function catColorBasis(p,cat,perGame){
+  const v=nbaRateImpactOrRaw(p,cat);
+  if(!perGame||(SPORT.id==='nhl'&&catDef(cat).rate))return v;
+  return perGameOf(p,v);
+}
 function nhlCatFormat(cat,v){
   const d=catDef(cat);if(!d||!Number.isFinite(v))return '';
   if(cat==='SV%'||d.pct)return v.toFixed(3).replace(/^0/,'');
@@ -4241,7 +4267,8 @@ function nhlCatColor(t){
 // rounds 7-12 a mix, and late picks keep only their specialist greens.
 const NHL_CAT_BUCKETS=[[0.8,1],[0.55,0.5],[0.2,0],[0.08,-0.5],[-1,-1]];
 function nhlCatCellStyle(p,cat){
-  const ref=NHL_CAT_REF&&NHL_CAT_REF[cat];const v=nbaRateImpactOrRaw(p,cat);
+  const pg=statPerGame(), refs=pg?NHL_CAT_REF_PG:NHL_CAT_REF;
+  const ref=refs&&refs[cat];const v=catColorBasis(p,cat,pg);
   if(!ref||!Number.isFinite(v)||PUNT_CATS.has(cat))return '';
   // Percentile rank within the reference population (ties at the midpoint).
   let lo=0,hi=ref.length;while(lo<hi){const m=(lo+hi)>>1;if(ref[m]<v)lo=m+1;else hi=m;}
@@ -4251,12 +4278,12 @@ function nhlCatCellStyle(p,cat){
   const bucket=NHL_CAT_BUCKETS.find(b=>pct>=b[0]);
   return nhlCatColor(bucket?bucket[1]:-1);
 }
-let NHL_CAT_REF=null;
+let NHL_CAT_REF=null, NHL_CAT_REF_PG=null;
 function nhlCategoryValue(){
   const cfg=nhlCategoryConfig();
   const teams=LEAGUE.teams||12, picks=teams*(LEAGUE.rounds||16);
   const goalieN=Math.round(teams*NHL_CAT_MODEL.goaliesPerTeam), skaterN=Math.max(teams,picks-goalieN);
-  NHL_CAT_REF={};
+  NHL_CAT_REF={};NHL_CAT_REF_PG={};
   [
     {group:'skater',players:PLAYERS.filter(p=>p.pos!=='G'),stats:cfg.skater,n:skaterN,scale:1},
     {group:'goalie',players:PLAYERS.filter(p=>p.pos==='G'),stats:cfg.goalie,n:goalieN,scale:NHL_CAT_MODEL.goalieScale}
@@ -4291,7 +4318,8 @@ function nhlCategoryValue(){
       pop=group.players.slice().sort((a,b)=>b._catAll-a._catAll).slice(0,group.n);
     }
     // Colour references: raw displayed values across the draftable population.
-    group.stats.forEach(cat=>{NHL_CAT_REF[cat]=pop.map(p=>nhlCatRaw(p,cat)).filter(Number.isFinite).sort((a,b)=>a-b);});
+    group.stats.forEach(cat=>{NHL_CAT_REF[cat]=pop.map(p=>nhlCatRaw(p,cat)).filter(Number.isFinite).sort((a,b)=>a-b);
+      NHL_CAT_REF_PG[cat]=pop.map(p=>catColorBasis(p,cat,true)).filter(Number.isFinite).sort((a,b)=>a-b);});
     const active=group.stats.filter(k=>!PUNT_CATS.has(k));
     group.players.forEach(p=>{
       const zs=active.map(k=>p.categoryZ[k]);
@@ -4589,8 +4617,9 @@ function nbaCategoryValue(){
     });
     pop=PLAYERS.slice().sort((a,b)=>b._catAll-a._catAll).slice(0,n);
   }
-  NHL_CAT_REF={};
-  cats.forEach(cat=>{NHL_CAT_REF[cat]=pop.map(p=>nbaRateImpactOrRaw(p,cat)).filter(Number.isFinite).sort((a,b)=>a-b);});
+  NHL_CAT_REF={};NHL_CAT_REF_PG={};
+  cats.forEach(cat=>{NHL_CAT_REF[cat]=pop.map(p=>nbaRateImpactOrRaw(p,cat)).filter(Number.isFinite).sort((a,b)=>a-b);
+    NHL_CAT_REF_PG[cat]=pop.map(p=>catColorBasis(p,cat,true)).filter(Number.isFinite).sort((a,b)=>a-b);});
   const active=cats.filter(c=>!PUNT_CATS.has(c));
   PLAYERS.forEach(p=>{
     const zs=active.map(k=>p.categoryZ[k]);
@@ -4607,10 +4636,12 @@ function nbaCategoryValue(){
     delete p._catAll;
   });
 }
-function projectionLabel(){return LEAGUE.scoringMode==='points'?'Preseason Proj':'Cat';}
-function projectionSortValue(p){const v=LEAGUE.scoringMode==='points'?p.leagueProj:p.categoryValue;return Number.isFinite(+v)&&v!=null?+v:null;}
+// Points leagues: the per-game view shows league points per game.
+function projectionPoints(p){const v=+p.leagueProj;return statPerGame()?perGameOf(p,v):v;}
+function projectionLabel(){return LEAGUE.scoringMode==='points'?(statPerGame()?'Proj / G':'Preseason Proj'):'Cat';}
+function projectionSortValue(p){const v=LEAGUE.scoringMode==='points'?projectionPoints(p):p.categoryValue;return Number.isFinite(+v)&&v!=null?+v:null;}
 function projectionDisplay(p){
-  if(LEAGUE.scoringMode==='points')return Number.isFinite(+p.leagueProj)?Number(p.leagueProj).toFixed(1):'';
+  if(LEAGUE.scoringMode==='points'){const v=projectionPoints(p);return Number.isFinite(v)?v.toFixed(1):'';}
   return Number.isFinite(+p.categoryValue)?Number(p.categoryValue).toFixed(2):'';
 }
 function marketAdp(p){return Number.isFinite(+p.marketAdp)&&+p.marketAdp>0?+p.marketAdp:(+p.adp||999);}
@@ -5986,6 +6017,8 @@ function renderNhlLivePicks(drawControls=true){
   card.style.display=(SPORT.id==='nhl'||SPORT.id==='nba')&&LEAGUE.draftType!=='auction'?'':'none';
   el('snakeDraftGrid').classList.toggle('nhl-layout',card.style.display!=='none');
   el('draftSlotControl').style.display=SPORT.id!=='nfl'&&LEAGUE.draftType!=='auction'?'':'none';
+  el('statViewWrap').style.display=SPORT.id==='nba'||SPORT.id==='nhl'?'':'none';
+  el('statView').value=STAT_VIEW;
   el('draftSlotInput').max=LEAGUE.teams;
   if(document.activeElement!==el('draftSlotInput'))el('draftSlotInput').value=mySlot||'';
   if(card.style.display==='none')return;
@@ -6061,7 +6094,7 @@ function renderPool(){
     // Category columns sort best-first; the other group (goalies under a skater
     // category, and vice versa) sorts last.
     const cat=poolSort.slice(4),dir=catDef(cat)&&catDef(cat).lowerBetter?1:-1;
-    const val=p=>{const g=nhlCategoryConfig().goalie.includes(cat)?'goalie':'skater';const v=nhlCatGroup(p)===g?nhlCatRaw(p,cat):NaN;return Number.isFinite(v)?v:null;};
+    const val=p=>{const g=nhlCategoryConfig().goalie.includes(cat)?'goalie':'skater';const v=nhlCatGroup(p)===g?catShownValue(p,cat):NaN;return Number.isFinite(v)?v:null;};
     rows=rows.slice().sort((a,b)=>{const av=val(a),bv=val(b);if(av==null&&bv==null)return marketAdp(a)-marketAdp(b);if(av==null)return 1;if(bv==null)return -1;return (av-bv)*dir;});
   } else if(poolSort==='proj'){
     // League value sorts best-first; players with no value sort last.
@@ -6183,7 +6216,7 @@ function renderPoolCategoryHead(){
     const th=document.createElement('th');
     th.className='sortcol catcol'+(poolSort==='cat:'+cat?' active':'')+(i===cfg.skater.length?' catsplit':'')+(PUNT_CATS.has(cat)?' punted':'');
     th.dataset.sort='cat:'+cat;
-    th.title=`${catDef(cat).label} — projected full season${PUNT_CATS.has(cat)?' (punted)':''}. Click to sort best first.`;
+    th.title=`${catDef(cat).label} — projected ${statPerGame()&&!catDef(cat).rate?'per game':'full season'}${PUNT_CATS.has(cat)?' (punted)':''}. Click to sort best first.`;
     th.textContent=cat;
     th.onclick=()=>{poolSort=th.dataset.sort;document.querySelectorAll('#poolTable th.sortcol').forEach(h=>h.classList.toggle('active',h===th));renderPool();};
     after.after(th);after=th;
@@ -6194,8 +6227,8 @@ function nhlPoolCatCell(p,cat){
   const goalieCat=nhlCategoryConfig().goalie.includes(cat), mine=goalieCat===(nhlCatGroup(p)==='goalie');
   const split=cat===nhlCategoryConfig().goalie[0]?' catsplit':'';
   if(!mine)return `<td class="catcell${split}"></td>`;
-  const v=nhlCatRaw(p,cat);
-  return `<td class="catcell${split}${PUNT_CATS.has(cat)?' punted':''}" style="${nhlCatCellStyle(p,cat)}">${nhlCatFormat(cat,v)}</td>`;
+  const v=catShownValue(p,cat);
+  return `<td class="catcell${split}${PUNT_CATS.has(cat)?' punted':''}" style="${nhlCatCellStyle(p,cat)}">${catShownFormat(cat,v)}</td>`;
 }
 function renderQueue(){
   const box=el('myQueue'); if(!box)return;
@@ -7931,6 +7964,12 @@ el('advance1').onclick=advanceOne;
 el('undo').onclick=undo;
 el('resetDraft').onclick=()=>{resetDraft();saveSetup();};
 el('posFilter').onchange=renderPool; el('search').oninput=renderPool;
+el('statView').onchange=e=>{
+  STAT_VIEW=e.target.value==='pergame'?'pergame':'totals';
+  try{localStorage.setItem('statView',STAT_VIEW);}catch(err){}
+  const projHead=el('projHeader');if(projHead)projHead.textContent=projectionLabel();
+  renderPool();renderNhlLivePicks();
+};
 document.querySelectorAll('#poolTable th.sortcol').forEach(th=>th.onclick=()=>{
   poolSort=th.dataset.sort;
   document.querySelectorAll('#poolTable th.sortcol').forEach(h=>h.classList.toggle('active',h===th));

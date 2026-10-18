@@ -778,6 +778,21 @@ ok &= check('TRAX50 NBA Classic keeps Fantrax multi-position eligibility and lea
   ['Luka Doncic','Jalen Williams','Karl-Anthony Towns','Nikola Jokic'].map(n => ev(`posCell(findPlayer(${JSON.stringify(n)}))`).replace(/<[^>]+>/g,'')).join(','), 'G,G/F,F/C,C');
 ok &= check('TRAX50 NBA Classic drafts against Fantrax ADP and its value has no turnover term', () =>
   ev('MARKET_ADP_STATUS+":"+/TO at/.test(findPlayer("Trae Young").myRankWhy)+":"+("TO" in findPlayer("Trae Young").categoryZ)'), 'fantrax:false:false');
+ok &= check('Best Available stat view switches between season totals and per game', () => {
+  const sel = w.document.getElementById('statView');
+  const cell = (label, name) => {
+    const ths = [...w.document.querySelectorAll('#poolTable thead th')], i = ths.findIndex(t => t.textContent === label);
+    const row = [...w.document.querySelectorAll('#poolTable tbody tr')].find(r => r.textContent.includes(name));
+    return row && i >= 0 ? row.children[i].textContent : null;
+  };
+  ev('resetDraft();render()');
+  const totals = cell('PTS', 'Nikola Jokic'), fgTotals = cell('FG%', 'Nikola Jokic');
+  sel.value = 'pergame'; sel.onchange({ target: sel });
+  const pg = cell('PTS', 'Nikola Jokic'), fgPg = cell('FG%', 'Nikola Jokic');
+  const want = ev('(findPlayer("Nikola Jokic").st.pts/nbaGames(findPlayer("Nikola Jokic"))).toFixed(1)');
+  sel.value = 'totals'; sel.onchange({ target: sel });
+  return [/^\d{4}$/.test(totals), pg === want, fgPg === fgTotals, w.document.getElementById('statViewWrap').style.display, cell('PTS', 'Nikola Jokic') === totals].join('|');
+}, 'true|true|true||true');
 ok &= check('weekly roto fills half the missed games, and none for a back-to-back rester', () => ev(`(function(){
   const k=findPlayer('Kyrie Irving').myRankWhy, e=findPlayer('Joel Embiid').myRankWhy;
   return /filled with replacement-level play \\(50% under weekly lineups\\)/.test(k) && /sits back-to-backs/.test(e) && !/filled with/.test(e) || k+' || '+e;
@@ -805,6 +820,14 @@ ok &= check('Fantrax Classic H2H Points My Rank is season league points under it
   const p=findPlayer('Nikola Jokic'), s=p.st, want=s.pts+1.25*s.reb+1.5*s.ast+2*s.stl+2*s.blk-s.to;
   return Math.abs(p.leagueProj-want)<1e-6 && PLAYERS.every(x=>Math.abs(x.myValue-x.leagueProj)<1e-9);
 })()`), true);
+ok &= check('per-game view shows league points per game in a points league', () => {
+  const sel = w.document.getElementById('statView');
+  sel.value = 'pergame'; sel.onchange({ target: sel });
+  const head = w.document.getElementById('projHeader').textContent;
+  const out = ev('projectionDisplay(findPlayer("Nikola Jokic"))===(findPlayer("Nikola Jokic").leagueProj/nbaGames(findPlayer("Nikola Jokic"))).toFixed(1)');
+  sel.value = 'totals'; sel.onchange({ target: sel });
+  return head + '|' + out + '|' + w.document.getElementById('projHeader').textContent;
+}, 'Proj / G|true|Preseason Proj');
 ok &= check('a full 192-pick Fantrax Classic H2H Points mock fills every team\'s ten active slots', () => ev(`(function(){
   resetDraft();
   for(let ov=1;ov<=totalPicks;ov++)rivalPick(ov,0.5);
