@@ -16,6 +16,8 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- ✅ 2026-10-17 — **Per-game / totals toggle on Best Available.** The user wants to switch the draft list's stat columns between per-game and season totals. *Done:* a **Stats: Season totals / Per game** selector on Best Available, shown for NBA and NHL and remembered per browser. Per game divides counting-stat columns by projected games, and colours and sorting follow. Percentages and goalie rates read the same either way. In points leagues the Proj column becomes league points per game ("Proj / G"). Display and sorting only: My Rank stays season-based.
+
 - ✅ 2026-10-17 — **Add Yahoo Prize Roto 252068 too.** One of the user's Yahoo NBA leagues listed alongside Showtime and Exhibit 10 (478.l.252068); import it the same way. *Done:* added as `yahoo-prize-roto-252068` once the Yahoo grant renewed. It is Yahoo's default 9-cat roto with an 82-game cap: PG/SG/G/SF/PF/F, 2 C, 2 Util, 3 BN, 3 IL, so 13 rounds. FAAB with continuous waivers. Draft **Sat Oct 17 6:00 PM PT**, 60 sec per pick. No draft order yet, so the board is generic and "My slot" sets the seat.
 
 - ✅ 2026-10-17 — **"Don't ask me to merge it every time."** The user doesn't want to send another message just to merge a PR. *Done:* Claude merges its own PRs once CI is green, without asking, since merging deploys. Recorded in `CLAUDE.md` → Tech stack & deploy.

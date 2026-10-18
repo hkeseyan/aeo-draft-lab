@@ -358,6 +358,18 @@ split by path rather than one list (the user, 2026-10-02).
 Fantrax public settings come from any public league ID through the same API, as
 the two TRAX50 Classic templates did for roto and H2H Points.
 
+**Season totals or per game on Best Available (2026-10-17).** A "Stats" selector
+in the Best Available row, shown for NBA and NHL and remembered per browser,
+switches the list between season totals and per game.
+- Counting-stat columns divide by projected games. FG%/FT% and goalie GAA/SV% read
+  the same either way.
+- Colours rank against the per-game draftable population. FG%/FT% colour by volume
+  impact per game.
+- Column sorts follow the view.
+- In points leagues the Proj column becomes league points per game ("Proj / G").
+- It changes display and sorting only: category value and My Rank stay
+  season-based.
+
 **A Util or Flx slot is left off the board's position cell.** Every player can fill
 it, so it says nothing about him: a Fantrax Classic guard shows `G`, not `G/UTIL`.
 Composite slots that only some positions fill (G, F, hockey's Fantrax F) still show.
