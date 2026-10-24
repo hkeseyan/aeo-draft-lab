@@ -18,6 +18,30 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- 🆕 2026-10-24 — **Game of Zones keeper data provided.** The user pasted every team's 2025-26 finishing roster with Yahoo's "Cost / Drafted Value". Rules:
+  - The **2025 draft value** is the basis.
+  - **Undrafted players count as $1.**
+  - **Keeper price = 2025 value + $1.**
+  - **Aych Gang and Detroit SZN are leaving**; their players return to the pool.
+  - The user is **Ball Don't Lie**.
+  - Settings now leaning: $200 budget, 12 starters (4G/4F/2C/2U) + 8 bench, 2 IL that don't count at the draft.
+  - Asked for the user's worth-keeping and borderline players, given the players thrown back into the pool.
+  - Rosters preserved in `docs/game-of-zones-2025-rosters.tsv`.
+
+  *Analysis 2026-10-24 (the user decides).* Method:
+  - Roto values for 6 teams, 4G/4F/2C/2U, 20 spots.
+  - Market prices on a top-heavy curve fitted to last year's $59-64 stars (#1 ≈ $58).
+  - Every remaining team's keepers simulated rationally, then auction inflation solved from the money and value left. It comes out at **×1.37**, or ×1.26 if each team also keeps its two biggest stars.
+
+  Recommendation for the user:
+  - **Keep (8, $105, leaving $95 for 12 spots):** Jokic $65, Haliburton $4, Trey Murphy $15, Jalen Williams $10, Dejounte Murray $5, McDaniels $2, Knueppel $2, Rollins $2.
+  - **Borderline:**
+    - Barnes $33: about $4-6 above his auction price, but Yahoo C-eligible. Keeping him leaves $62 for 11 spots, so no room for a star.
+    - Quickley $10: ~$1 over. Clingan $6: ~$1 over; C, age 22. Buzelis $11: ~$3-4 over; age 22.
+  - **Release:** Sheppard, Nembhard, Gillespie, Tre Jones, Coulibaly, da Silva, Achiuwa, O'Neale.
+  - **Pool is star-rich if their teams release them:** Luka ($62 keeper), Edwards ($38), Cade (Detroit leaving), Durant and Mobley (Aych leaving), Kawhi, Flagg ($43), Curry, Giannis.
+  - **Biggest rival bargains:** SGA $21, Sengun $5, Amen Thompson $4, Brunson $6, Jalen Johnson $5.
+
 - 🆕 2026-10-24 — **Game of Zones: user now leaning toward a $200 budget and 12 starters + 8 bench, and is keeping Jokic.** Asked for the user's players worth keeping and the borderline decisions, given the value of the players thrown back into the pool (the departing teams' players plus everything not kept).
   *2026-10-24:* the Yahoo import carries settings but **no rosters or keeper salaries**, so the user's own keepers can't be judged yet. Asked the user to paste his roster with salaries and the escalation rule. Meanwhile computed linear auction $ for these settings (6 × $200 = $1,200; 120 roster spots; $1 minimums; value above the #121 player, roto category value):
   - Top of the board: Jokic $44, SGA $38, Wembanyama $35, Luka $31, Maxey $24.
