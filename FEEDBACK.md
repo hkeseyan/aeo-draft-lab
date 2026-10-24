@@ -18,6 +18,21 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- 🆕 2026-10-24 — **Game of Zones balance goal: an elite keeper list and elite streaming should be worth about the same.** Three archetypes should all be able to compete for the title:
+  - (a) the best keeper roster, adding a player every 2-3 weeks;
+  - (b) a competitive but not unbelievable keeper list, catching a strong trending player about once a week;
+  - (c) only a couple of star keepers, catching strong streamers several times a week.
+
+  *Analysis 2026-10-24.* Roto value units are season category value from Draft Lab's model for 6 teams with 4G/4F/2C/2U:
+  - **Keeper edge** over a #75-level player: a top-12 keeper ≈ 6.7, a #13-25 keeper ≈ 3.4.
+  - **One good pickup** (wire level to #75 level, held half a season) ≈ 0.9-1.0, about 27% of a #13-25 keeper's edge.
+  - **(b), assumed ~4 lasting hits a season:** ≈ one #13-25 keeper.
+  - **(c), assumed ~8 hits:** ≈ one top-12 keeper, or two #13-25 keepers.
+  - **Volume streaming** is ~3-6 games a season under the 82 cap whether bench is 8 or 9.
+  - **Conclusion:** roster settings barely move this balance. The keeper rules do. To make (a), (b) and (c) contenders:
+    - the best keeper list should sit about one #13-25 keeper above a competitive one, and about one top-12 keeper above a couple-of-stars one, after salaries;
+    - test bargain-keeper limits, an elite floor or escalation, a max keeper count, and a budget near last year's ~$11 per rostered player ($220 for 20-man, $233 for 21-man) against the real keeper list once it's provided.
+
 - 🆕 2026-10-24 — **Game of Zones decisions: keep the 82-game cap; lineup leaning 4 G / 4 F / 2 C / 2 Util.**
   - **Cap:** keep 82 games per slot.
   - **Games:** assume players can play at most 78, averaging 68-70 (sitting back-to-backs, small injuries, shutdowns).
