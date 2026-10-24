@@ -244,6 +244,13 @@ updates, with Sleeper/ESPN together at most 25%.
     rows). Without one, a re-blend would silently drop half the weight, so the
     snapshot, which carries Hashtag, stays in force.
   - The tooltip says whether a line is live or the snapshot.
+  - **2026-10-24 early-season pass:**
+    - Injury news cuts projected games.
+    - Half of Sleeper's projected-minutes moves are adopted.
+    - Unsigned free agents keep 30% of their games, and retired players go to 0.
+    - Early box scores change nothing: per-minute rates stay put.
+    - Rows keep their order across refreshes, so saved picks keep their players.
+    - A league added in the Leagues tab with an unedited copy of the built-in NBA pool refreshes along with the built-in profiles.
 - **Joins:** the player list is FantasyPros' rankings and ADP pages (542 deep),
   joined on FantasyPros' player id. Projection sources join on name with a
   team/position check and a short spelling-equivalence list (Alex/Alexandre Sarr,

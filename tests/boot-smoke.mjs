@@ -591,6 +591,26 @@ ok &= check('live projection blend weights Hashtag 50 / CBS 25 / ESPN 25, CBS as
   ok &= check('live NBA re-blend is skipped without a full Hashtag pull', () => ev('findPlayer("Nikola Jokic").st.pts') === before && !ev('findPlayer("Nikola Jokic").projectionLive'), true);
   ok &= check('the board names the 2026-10-13 snapshot and CBS', 'nbaProjectionNote(findPlayer("Nikola Jokic"))', v => /CBS Sports/.test(v) && /2026-10-13 snapshot/.test(v));
 }
+{
+  // A league added in the Leagues tab carries a copy of the built-in NBA pool; an
+  // unedited copy is refreshed like the built-in profiles, an edited one is left alone.
+  const oldCopy = ev('PLAYERS_CSV_NBA').replace(/^(\s*name,[^\n]*\n[^,\n]*,[^,\n]*,[^,\n]*,)[^,\n]*/, '$1999.0');
+  const custom = { id: 'sixty-fantasy-basketball', name: '$60 Fantasy Basketball', sport: 'nba', playersCsv: oldCopy };
+  const edited = { id: 'my-own-csv', name: 'Own CSV', sport: 'nba', playersCsv: 'name,pos,team\nA,PG,LAL' };
+  const puts = [];
+  const prevFetch = w.fetch;
+  w.fetch = async (url, opts) => {
+    const u = String(url);
+    if (u === '/api/leagues') return { ok: true, json: async () => Object.values(ev('LEAGUES_DEFAULT')).concat([custom, edited]) };
+    if (u.startsWith('/api/leagues/') && opts && opts.method === 'PUT') { puts.push(JSON.parse(opts.body)); return { ok: true, json: async () => ({}) }; }
+    return prevFetch(url, opts);
+  };
+  const map = await ev('fetchCloudLeagues()');
+  w.fetch = prevFetch;
+  ok &= check('an unedited in-app copy of the NBA pool is refreshed; an edited CSV is not', () =>
+    map['sixty-fantasy-basketball'].playersCsv === ev('PLAYERS_CSV_NBA') && map['sixty-fantasy-basketball'].poolDataRevision === ev('NBA_POOL_REVISION')
+    && puts.some(p => p.id === 'sixty-fantasy-basketball') && !puts.some(p => p.id === 'my-own-csv') && map['my-own-csv'].playersCsv === edited.playersCsv, true);
+}
 ok &= check('Yahoo league shows Yahoo eligibility, not FantasyPros', 'eligiblePositions(findPlayer("Tyrese Maxey")).join("/")+":"+findPlayer("Tyrese Maxey").pos', 'PG:PG');
 ok &= check('My Rank explains itself with the projection source', 'findPlayer("Nikola Jokic").myRankWhy', v => /league value/.test(v) && /per game/.test(v) && !/draft-safe/.test(v));
 ok &= check('league value column sorts best-first', () => {
