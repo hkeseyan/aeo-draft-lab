@@ -18,6 +18,13 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- 🆕 2026-10-24 — **Game of Zones: user now leaning toward a $200 budget and 12 starters + 8 bench, and is keeping Jokic.** Asked for the user's players worth keeping and the borderline decisions, given the value of the players thrown back into the pool (the departing teams' players plus everything not kept).
+  *2026-10-24:* the Yahoo import carries settings but **no rosters or keeper salaries**, so the user's own keepers can't be judged yet. Asked the user to paste his roster with salaries and the escalation rule. Meanwhile computed linear auction $ for these settings (6 × $200 = $1,200; 120 roster spots; $1 minimums; value above the #121 player, roto category value):
+  - Top of the board: Jokic $44, SGA $38, Wembanyama $35, Luka $31, Maxey $24.
+  - Further down: #25 ~$14, #50 ~$10, #72 ~$7, #96 ~$4, #108 ~$2.
+  - Last year's salaries were set in an 8-team, 144-spot economy, so many now sit above these values.
+  - Keep rule of thumb: keep when salary ≤ value plus a 10-20% keeper-inflation allowance (more for young risers the escalation keeps cheap); salary within ~$3 of value is borderline.
+
 - 🆕 2026-10-24 — **Game of Zones balance goal: an elite keeper list and elite streaming should be worth about the same.** Three archetypes should all be able to compete for the title:
   - (a) the best keeper roster, adding a player every 2-3 weeks;
   - (b) a competitive but not unbelievable keeper list, catching a strong trending player about once a week;
