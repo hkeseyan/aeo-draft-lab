@@ -18,6 +18,28 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- 🆕 2026-10-24 — **Game of Zones decisions: keep the 82-game cap; lineup leaning 4 G / 4 F / 2 C / 2 Util.**
+  - **Cap:** keep 82 games per slot.
+  - **Games:** assume players can play at most 78, averaging 68-70 (sitting back-to-backs, small injuries, shutdowns).
+  - **Lineup:** G and F should be equal; the user is thinking 4 G / 4 F / 2 C / 2 Util.
+  - **Streaming** should give only a very small advantage.
+  - **Bench count** still to settle.
+  - *Analysis 2026-10-24.* Simulation setup:
+    - Per-position 82 caps, as Yahoo counts them.
+    - Each player plays ~69 of his team's remaining games, max 78.
+    - 2 non-playing stashes per team.
+    - Passive manager = best daily lineup from his own roster. The streamer bound fills every empty slot daily with a free agent.
+
+    | Setup | Passive cap fill | Last position full | Streamer edge | Benched before caps |
+    |---|---|---|---|---|
+    | Last year (8 teams, 3G/3F/1C/3U + 8) | 99.9% | Mar 25 | ~1 game | 1.7/wk |
+    | 4G/4F/2C/2U + 7 (19) | 98.5% | never | ~14 games | 1.0/wk |
+    | 4G/4F/2C/2U + 8 (20) | 99.4% | Apr 4 | ~6 games | 1.5/wk |
+    | **4G/4F/2C/2U + 9 (21)** | 99.7% | Mar 31 | ~3 games | 2.0/wk |
+
+    - An all-out streamer burns the whole cap by ~Jan 26 and adds nothing after. Under the 82 cap, heavy streaming swaps the team's own later games for free-agent games, so it's a trap, not an edge.
+    - **Recommended:** 4G/4F/2C/2U + 9 BN (21) + 2 IL. Its rotation-to-starter ratio, 19/12, matches last year's 16/10. 8 BN (20) also keeps the streaming edge tiny if the user prefers +2.
+
 - 🆕 2026-10-24 — **Game of Zones: the design logic behind 10 starters + 8 bench, and constraints for the 6-team change.** User's reasons for the current setup:
   - **No premium waiver players:** in an 8-team league, very premium players shouldn't always sit on the wire.
   - **Light streaming:** some managers don't want to stream daily, one reason for roto. The league started as H2H 9-cat with the same roster, and the deep bench cut streaming's value a little: on heavy nights you sit players anyway, so active managers gain less than in a start-10/sit-3 league.
