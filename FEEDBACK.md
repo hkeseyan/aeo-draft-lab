@@ -18,6 +18,47 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- 🆕 2026-10-24 — **Game of Zones: the design logic behind 10 starters + 8 bench, and constraints for the 6-team change.** User's reasons for the current setup:
+  - **No premium waiver players:** in an 8-team league, very premium players shouldn't always sit on the wire.
+  - **Light streaming:** some managers don't want to stream daily, one reason for roto. The league started as H2H 9-cat with the same roster, and the deep bench cut streaming's value a little: on heavy nights you sit players anyway, so active managers gain less than in a start-10/sit-3 league.
+  - **Keeper stashing:** nobody should feel forced to drop a young player or rookie still earning minutes; holding him shouldn't be a losing proposition.
+  - **Rookies bought, not claimed:** a top rookie like AJ Dybantsa shouldn't sit on the wire until someone grabs him free and keeps him cheaply for years. Managers should spend real auction money and hold them, not forever, but less chaotically.
+
+  Assumptions for the analysis:
+  - Each manager carries ~2 injured keepers in the IL slots and ~2 young players he isn't compelled to start.
+  - The rest is the regular rotation.
+
+  Constraints for the change:
+  - **Don't add 4 roster slots.** Add at least 2, possibly 3, and decide the starter/bench mix, even converting a current bench spot to a starter.
+  - **If 2 or more starters are added, at least one is a 2nd C.**
+  - **No plain Util additions:** positions should mean something; G and F are already easy to navigate instead of PG/SG/SF/PF.
+
+  *Analysis 2026-10-24 (the user decides).* Simulation setup:
+  - Position-legal snake rosters by Yahoo ADP, 2 non-playing stashes per team, IL outside the roster.
+  - Real NBA team schedules from Oct 26 to Apr 11; daily lineup is a maximum matching of players to G/F/C/Util slots; no streaming.
+
+  Per team, last year's 8-team setup vs the 6-team options:
+
+  | Option | Roster | Benched games/wk | Uncapped use of 82 | Median cap date |
+  |---|---|---|---|---|
+  | Now, 8 teams: 10 = 3G/3F/1C/3U + 8 BN | 18 | 1.8 | 119% | Mar 18 |
+  | A: 11 = 3G/3F/2C/3U + 9 | 20 | 2.3 | 123% | Mar 14 |
+  | B: 12 = 4G/3F/2C/3U + 8 | 20 | 1.4 | 115% | Mar 23 |
+  | **C: 12 = 4G/3F/2C/3U + 9** | 21 | 1.9 | 119% | Mar 18 |
+  | D: 11 + 10 | 21 | 3.1 | 127% | Mar 10 |
+  | E: 13 = 4G/4F/2C/3U + 8 | 21 | 1.2 | 112% | Mar 26 |
+
+  - **Wire line** (rotation players rostered): now 128 (#129 John Collins / McCain types), 6×20 → 108 (#109 Drummond / Caruso / DeRozan), 6×21 → 114 (#115 Aday Mara / Klay / McCollum).
+  - **C supply:** 40 Yahoo C-eligible players in the top 120 by ADP, so a 2nd C slot is easily filled.
+  - **Recommended: C.** 12 starters (4G/3F/2C/3U) + 9 BN = 21, 2 IL. It reproduces last year's feel on benching, cap use and cap date. The extra G balances the 2nd C (4 backcourt vs 5 frontcourt).
+  - **Cap caveat:** an 82 cap is reached around Mar 18 with the season running to Apr 11. Last year's season ended around weeks 20-22, which masked this. For option C:
+
+    | Cap per slot | Median date reached | Teams reaching it |
+    |---|---|---|
+    | 90 | Mar 30 | all |
+    | 95 | Apr 6 | 90% |
+    | 98 | Apr 9 | half |
+
 - 🆕 2026-10-24 — **Game of Zones: roster spots first, then budget and keeper fairness.** User added **Game of Zones Dynasty** from the Yahoo card and cut it to 6 teams; no other settings changed yet. Today it has **10 starters + 8 bench** (8 teams). User's proposal: add 2 starters and no bench, so 20 active players at the draft, plus 2 IL that don't count during keepers/draft, starting 12. Keep the **82-game cap per slot** even though a late start leaves players ~78 games: bench players fill the rest. That worked last year (started week 1, ended weeks 20-22 for playoffs), but some teams hit the cap early, so extra starting slots are welcome, especially going to the end of the regular season with no playoffs. Late-season shutdowns let bench players play more, offset by going to the very end. **Budget** has always been $200 minus keeper costs. User agrees fewer managers, more spots and a constant budget may be too punishing for keeping expensive players. User also wants to **reduce the edge of very cheap premium keepers** (top-25 players for under $10) without banning them: no team should walk in with 12-15 outstanding keepers and then add 3-4 premium players. Target shape: keep **4-6 core + 4-8 cheap contributors**, draft **~2 more core** and fill the rest with auxiliary players. Settle the optimal spots first, then the budget if necessary. *Analysis 2026-10-24 (the user decides):*
   - Read from the imported profile: Yahoo 478.l.98050, 9-cat roto, 3 G / 3 F / 1 C / 3 Util + 8 BN + 2 IL, **auction Tue Oct 27 8:00 PM PT**.
   - **Cap timing is driven by bench size, not starter count.** Simulation: 150 game days from Oct 26 to Apr 11, 20-man rosters on random teams, availability from projected GP, best players start daily, no streaming. Median date a team hits the 82 cap:
