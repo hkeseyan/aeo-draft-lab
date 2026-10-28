@@ -41,9 +41,27 @@ for(const kind of ['auctionMarketValues()','auctionTargetValues()']){
 assert.equal(w.document.querySelectorAll('#auctionPoolTable tbody tr').length,ev('available().filter(auctionEligible).length'));
 assert.ok(w.document.querySelectorAll('#auctionPoolTable tbody tr').length>300);
 assert.ok(w.document.querySelector('#auctionPoolTable thead').textContent.includes('Win est. $'));
-assert.ok(w.document.querySelector('#auctionPoolTable tbody').textContent.includes('Last in tier'));
+assert.ok(w.document.querySelectorAll('#auctionPoolTable tr.nba-tier-break').length>0);
+assert.ok([...w.document.querySelectorAll('.nba-tier-cell')].every(td=>/^(T\d+|Depth)$/.test(td.textContent)));
+assert.ok(!w.document.querySelector('#auctionPoolTable tbody').textContent.includes('value drop'));
 assert.ok(w.document.querySelector('#auctionPoolTable tbody').textContent.includes('FT impact'));
-assert.ok(ev('(()=>{const pool=available(),t=nbaAuctionTierMap(pool,auctionTargetValues());return t.get(findPlayer("Cade Cunningham").id).tier<t.get(findPlayer("Scottie Barnes").id).tier})()'));
+assert.ok(ev('(()=>{const pool=available(),t=nbaAuctionTierMap(pool);return t.get(findPlayer("Cade Cunningham").id).tier<=t.get(findPlayer("Scottie Barnes").id).tier})()'));
+assert.equal(ev('LEAGUE.auctionCompetitiveness'),4);
+assert.ok(ev('PLAYERS.filter(p=>p.review?.sampleGames>0).length>300'));
+assert.ok(ev('PLAYERS.every(p=>!p.review||p.review.rateWeight<=.1)'));
+assert.ok(ev('findPlayer("Jalen Williams").gp<5&&findPlayer("Cason Wallace").gp<12'));
+assert.ok(ev('(()=>{const p=findPlayer("Jalen Williams"),b=nbaAuctionBidGuide(p,auctionTargetValues(),auctionMarketValues());return b.target<=2&&b.stretch<=2})()'));
+assert.ok(ev('findPlayer("Ajay Mitchell").review.mpg>30&&findPlayer("Jared McCain").review.mpg>26'));
+assert.ok(ev('findPlayer("Ace Bailey").review.mpg>30&&findPlayer("Yaxel Lendeborg").review.mpg>29'));
+assert.ok(ev('findPlayer("Anthony Black").review.mpg-findPlayer("Anthony Black").review.priorMpg<1'));
+assert.ok(ev('findPlayer("Anthony Davis").categoryValue>findPlayer("AJ Dybantsa").categoryValue'));
+// Prices, cash and opponent perceptions do not define contribution tiers.
+assert.ok(ev(`(()=>{const pool=available(),before=JSON.stringify([...nbaAuctionTierMap(pool)]);return before===JSON.stringify([...nbaAuctionTierMap(pool,new Map(pool.map(p=>[p.id,Math.random()*10000])))])})()`));
+// Applying the review again never compounds an injury or early-game adjustment.
+assert.ok(ev(`(()=>{const p=findPlayer('Ajay Mitchell'),before=JSON.stringify([p.gp,p.minutes,p.st]);applyNbaRotoReview();return before===JSON.stringify([p.gp,p.minutes,p.st])})()`));
+// Daily roto fills occasional absences fully, but a season-long stash cannot
+// claim an entire replacement player's season as its own contribution.
+assert.ok(ev(`(()=>{const fill=nbaRotoFill(),lines=nbaRotoFilledLines([],fill),ad=findPlayer('Anthony Davis'),stash=findPlayer('Jalen Williams');return Math.abs(lines.get(ad).missed-(fill.cap-ad.gp)*fill.rate)<.001&&lines.get(stash).missed<(fill.cap-stash.gp)*fill.rate*.1})()`));
 
 // Update the exact existing imported league, retaining its ID, Yahoo linkage,
 // nomination order and date, with no duplicate profile and no stale points mode.
@@ -87,6 +105,13 @@ await ev('loadSetup()');
 assert.equal(ev('auctionPicks.length'),1);
 assert.equal(ev('auctionTeamState(mySlot).left'),69);
 assert.equal(ev('KEEPERS.length'),61);
+// A valuation-only migration retains purchases under the same keeper revision.
+cloud=[{...profile,auctionModelRevision:'older-model'}];
+const reviewed=await ev('fetchCloudLeagues()');
+assert.equal(reviewed['fixture-existing-goz'].keeperDataRevision,def.keeperDataRevision);
+assert.equal(reviewed['fixture-existing-goz'].auctionModelRevision,ev('NBA_ROTO_REVIEW.revision'));
+await ev('loadSetup()');
+assert.equal(ev('auctionPicks.length'),1);
 assert.ok(ev(`(()=>{const t=auctionTargetValues(),m=auctionMarketValues();return available().every(p=>{const b=nbaAuctionBidGuide(p,t,m);return b.target<=b.stretch&&b.stretch<=auctionTeamState(mySlot).maxBid})})()`));
 assert.ok(ev(`(()=>{for(let i=0;i<58;i++){if(!simAuctionSale()||OWNERS.some(o=>!auctionTeamState(OWNER_SLOT[o]).valid))return false;}return auctionPicks.length===59&&OWNERS.every(o=>auctionTeamState(OWNER_SLOT[o]).used===20)&&!simAuctionSale()})()`));
 assert.deepEqual(errors,[]);
