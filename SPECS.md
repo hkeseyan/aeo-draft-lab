@@ -12,6 +12,12 @@ incomplete, not final.
 
 ## Sports
 
+### Game of Zones keeper auction (2026-10-27)
+
+Game of Zones loads all six final keeper lists: 61 players / $759, leaving $441 for 59 spots. Confirmed settings are six teams, $200, 20 draftable spots (3 G / 3 F / 2 C / 3 Util plus nine bench), two post-draft IR, and standard nine-category roto with TO at quarter weight. It retains the previously planned 82-game cap. The existing imported league is upgraded in place, preserving its ID, Yahoo connection, draft date and any valid six-team nomination order; no duplicate profile is added. `game-of-zones-2026` is the fallback when no matching current league exists.
+
+Murphy is finalized at $15; Ball Don't Lie has $99 / 12 spots. Barnes is released; Sunny releases Powell, Davis and Zion; Mamba's 13 keepers cost $143. Versioned declarations override old keeper guesses once, with the previous setup backed up; subsequent sales and saved mocks persist. The entire available NBA pool appears with personal target, projected winning bid, stretch, category value, tier-drop labels and FT-risk flags. Category-derived prices conserve the actual remaining cash across remaining roster slots; the opponent market is a separate ADP/category blend. Cade ranks above Giannis with the full FT penalty retained. NBA auctions use basketball eligibility and composite-position roster needs. No complex recommender or automatic scarcity bid escalator was added. See `docs/GAME_OF_ZONES_2026.md`.
+
 The app serves more than one sport from one deployment. A league profile names its
 sport (`sport:'nfl'|'nhl'|'nba'`, defaulting to `'nfl'` so every pre-existing football
 profile keeps working untouched), and a **sport pack** in `SPORTS` supplies
