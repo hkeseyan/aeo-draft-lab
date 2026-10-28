@@ -18,6 +18,10 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- ✅ 2026-10-27 — **Publish Game of Zones final auction room into the existing league.** User confirms Murphy $15 kept, Barnes $33 released; all six final lists and budgets now form the versioned league baseline. The entire available NBA pool uses 9-cat roto with TO at 0.25 and no FT punt, with tier drops and separate target / estimated winning / stretch bids. The existing imported league migrates in place without a duplicate; stale guesses are backed up and superseded once. No complex recommender was added. Full test suite passes, including all six budgets, exact remaining-cash conservation, migration and a complete legal auction. This supersedes the previous offline-only preparation. See `docs/GAME_OF_ZONES_2026.md`.
+
+- ✅ 2026-10-27 — **Game of Zones final keeper mock preparation.** Confirmed six teams, $200, 20 draftable spots (3 G / 3 F / 2 C / 3 Util + 9 bench), two post-draft IR. All six managers submitted; Sunny releases Powell, Davis and Zion. Ball Don't Lie releases Barnes and is reconsidering Murphy at $15. Added `game-of-zones-2026` with all submitted lists, exact remaining budgets, an editable Murphy scenario, and separate estimated market / preferred / stretch bids for mock practice. Earlier 12-starter proposals and simulated keeper lists below are superseded. Verified all six budgets, scenario save/reload, and a full legal 59-purchase NBA auction; full test suite passes. See `docs/GAME_OF_ZONES_2026.md`. Unrelated feedback is deferred during this league-specific change.
+
 - 🆕 2026-10-24 — **Game of Zones keeper data provided.** The user pasted every team's 2025-26 finishing roster with Yahoo's "Cost / Drafted Value". Rules:
   - The **2025 draft value** is the basis.
   - **Undrafted players count as $1.**

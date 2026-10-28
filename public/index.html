@@ -271,6 +271,7 @@
       <div id="draftAnalysis" class="small muted">Not run yet.</div>
     </div>
     <div id="auctionRoom" style="display:none">
+      <div class="card" id="keeperScenarioCard" style="display:none"></div>
       <div class="grid2">
         <div>
           <div class="card">
@@ -2917,6 +2918,352 @@ Doug McDermott,SF/PF,FA,519.0,539.0,19.3,,9,50,15.3,2.3,2.2,0.0,0.0,2.1,5.3,5.9,
 Isaiah Stevens,PG,FA,520.0,540.0,42.1,,9,25,17.3,4.7,10.5,2.5,0.0,4.1,2.2,7.4,15.4,1.8,2.4,0.0,0.0,,,540.0,cbs,,2825,25,,6257,,PG,,,PG
 `;
 
+// Game of Zones submitted keeper snapshot; editable scenarios, never Yahoo writes.
+const GAME_OF_ZONES_2026={
+  "asOf": "2026-10-27",
+  "revision": "goz-final-2026-10-27-to025-v2",
+  "owners": [
+    "Ball Don't Lie",
+    "It's Always Sunny in Philly",
+    "Aspire LLC",
+    "Xcho's Team",
+    "Jenna Jameson",
+    "MambaMentality"
+  ],
+  "keepers": {
+    "Ball Don't Lie": [
+      [
+        "Nikola Jokic",
+        65
+      ],
+      [
+        "Tyrese Haliburton",
+        4
+      ],
+      [
+        "Trey Murphy III",
+        15
+      ],
+      [
+        "Donovan Clingan",
+        6
+      ],
+      [
+        "Dejounte Murray",
+        5
+      ],
+      [
+        "Ryan Rollins",
+        2
+      ],
+      [
+        "Kon Knueppel",
+        2
+      ],
+      [
+        "Jaden McDaniels",
+        2
+      ]
+    ],
+    "It's Always Sunny in Philly": [
+      [
+        "Victor Wembanyama",
+        45
+      ],
+      [
+        "Jayson Tatum",
+        21
+      ],
+      [
+        "Tyrese Maxey",
+        17
+      ],
+      [
+        "Amen Thompson",
+        4
+      ],
+      [
+        "Alperen Sengun",
+        5
+      ],
+      [
+        "Jalen Brunson",
+        6
+      ],
+      [
+        "Onyeka Okongwu",
+        4
+      ],
+      [
+        "Joel Embiid",
+        18
+      ],
+      [
+        "OG Anunoby",
+        5
+      ],
+      [
+        "Dyson Daniels",
+        6
+      ],
+      [
+        "VJ Edgecombe",
+        10
+      ]
+    ],
+    "Aspire LLC": [
+      [
+        "Anthony Edwards",
+        38
+      ],
+      [
+        "Cooper Flagg",
+        43
+      ],
+      [
+        "Karl-Anthony Towns",
+        24
+      ],
+      [
+        "Austin Reaves",
+        5
+      ],
+      [
+        "Brandon Miller",
+        9
+      ],
+      [
+        "Franz Wagner",
+        17
+      ],
+      [
+        "Stephon Castle",
+        12
+      ],
+      [
+        "Dylan Harper",
+        4
+      ]
+    ],
+    "Xcho's Team": [
+      [
+        "Naz Reid",
+        4
+      ],
+      [
+        "De'Aaron Fox",
+        9
+      ],
+      [
+        "Jamal Murray",
+        16
+      ],
+      [
+        "Jaime Jaquez Jr.",
+        2
+      ],
+      [
+        "Jabari Smith Jr.",
+        9
+      ],
+      [
+        "Michael Porter Jr.",
+        7
+      ],
+      [
+        "Ja Morant",
+        22
+      ],
+      [
+        "Mikal Bridges",
+        9
+      ],
+      [
+        "Jalen Green",
+        6
+      ],
+      [
+        "Desmond Bane",
+        10
+      ],
+      [
+        "Dillon Brooks",
+        2
+      ],
+      [
+        "Lauri Markkanen",
+        8
+      ],
+      [
+        "Deni Avdija",
+        9
+      ],
+      [
+        "Brandon Ingram",
+        17
+      ]
+    ],
+    "Jenna Jameson": [
+      [
+        "Shai Gilgeous-Alexander",
+        21
+      ],
+      [
+        "Trae Young",
+        32
+      ],
+      [
+        "Jaylen Brown",
+        14
+      ],
+      [
+        "Jarrett Allen",
+        8
+      ],
+      [
+        "Rudy Gobert",
+        9
+      ],
+      [
+        "CJ McCollum",
+        6
+      ],
+      [
+        "Kyshawn George",
+        2
+      ]
+    ],
+    "MambaMentality": [
+      [
+        "Kyrie Irving",
+        6
+      ],
+      [
+        "Damian Lillard",
+        4
+      ],
+      [
+        "Walker Kessler",
+        5
+      ],
+      [
+        "Ivica Zubac",
+        5
+      ],
+      [
+        "Coby White",
+        4
+      ],
+      [
+        "Luka Doncic",
+        62
+      ],
+      [
+        "Ty Jerome",
+        2
+      ],
+      [
+        "Derrick White",
+        5
+      ],
+      [
+        "Kel'el Ware",
+        6
+      ],
+      [
+        "Julius Randle",
+        5
+      ],
+      [
+        "Jalen Johnson",
+        5
+      ],
+      [
+        "James Harden",
+        22
+      ],
+      [
+        "Donovan Mitchell",
+        12
+      ]
+    ]
+  },
+  "keeperKeys": [
+    "Ball Don't Lie|Nikola Jokic",
+    "Ball Don't Lie|Tyrese Haliburton",
+    "Ball Don't Lie|Trey Murphy III",
+    "Ball Don't Lie|Donovan Clingan",
+    "Ball Don't Lie|Dejounte Murray",
+    "Ball Don't Lie|Ryan Rollins",
+    "Ball Don't Lie|Kon Knueppel",
+    "Ball Don't Lie|Jaden McDaniels",
+    "It's Always Sunny in Philly|Victor Wembanyama",
+    "It's Always Sunny in Philly|Jayson Tatum",
+    "It's Always Sunny in Philly|Tyrese Maxey",
+    "It's Always Sunny in Philly|Amen Thompson",
+    "It's Always Sunny in Philly|Alperen Sengun",
+    "It's Always Sunny in Philly|Jalen Brunson",
+    "It's Always Sunny in Philly|Onyeka Okongwu",
+    "It's Always Sunny in Philly|Joel Embiid",
+    "It's Always Sunny in Philly|OG Anunoby",
+    "It's Always Sunny in Philly|Dyson Daniels",
+    "It's Always Sunny in Philly|VJ Edgecombe",
+    "Aspire LLC|Anthony Edwards",
+    "Aspire LLC|Cooper Flagg",
+    "Aspire LLC|Karl-Anthony Towns",
+    "Aspire LLC|Austin Reaves",
+    "Aspire LLC|Brandon Miller",
+    "Aspire LLC|Franz Wagner",
+    "Aspire LLC|Stephon Castle",
+    "Aspire LLC|Dylan Harper",
+    "Xcho's Team|Naz Reid",
+    "Xcho's Team|De'Aaron Fox",
+    "Xcho's Team|Jamal Murray",
+    "Xcho's Team|Jaime Jaquez Jr.",
+    "Xcho's Team|Jabari Smith Jr.",
+    "Xcho's Team|Michael Porter Jr.",
+    "Xcho's Team|Ja Morant",
+    "Xcho's Team|Mikal Bridges",
+    "Xcho's Team|Jalen Green",
+    "Xcho's Team|Desmond Bane",
+    "Xcho's Team|Dillon Brooks",
+    "Xcho's Team|Lauri Markkanen",
+    "Xcho's Team|Deni Avdija",
+    "Xcho's Team|Brandon Ingram",
+    "Jenna Jameson|Shai Gilgeous-Alexander",
+    "Jenna Jameson|Trae Young",
+    "Jenna Jameson|Jaylen Brown",
+    "Jenna Jameson|Jarrett Allen",
+    "Jenna Jameson|Rudy Gobert",
+    "Jenna Jameson|CJ McCollum",
+    "Jenna Jameson|Kyshawn George",
+    "MambaMentality|Kyrie Irving",
+    "MambaMentality|Damian Lillard",
+    "MambaMentality|Walker Kessler",
+    "MambaMentality|Ivica Zubac",
+    "MambaMentality|Coby White",
+    "MambaMentality|Luka Doncic",
+    "MambaMentality|Ty Jerome",
+    "MambaMentality|Derrick White",
+    "MambaMentality|Kel'el Ware",
+    "MambaMentality|Julius Randle",
+    "MambaMentality|Jalen Johnson",
+    "MambaMentality|James Harden",
+    "MambaMentality|Donovan Mitchell"
+  ],
+  "rostersRaw": "Ball Don't Lie|Ryan Rollins|FA|2\nBall Don't Lie|Reed Sheppard|3|4\nBall Don't Lie|Scottie Barnes|32|33\nBall Don't Lie|Jaden McDaniels|FA|2\nBall Don't Lie|Precious Achiuwa|FA|2\nBall Don't Lie|Nikola Jokic|64|65\nBall Don't Lie|Immanuel Quickley|9|10\nBall Don't Lie|Donovan Clingan|5|6\nBall Don't Lie|Royce O'Neale|FA|2\nBall Don't Lie|Andrew Nembhard|2|3\nBall Don't Lie|Kon Knueppel|FA|2\nBall Don't Lie|Tristan da Silva|FA|2\nBall Don't Lie|Tre Jones|FA|2\nBall Don't Lie|Matas Buzelis|10|11\nBall Don't Lie|Dejounte Murray|4|5\nBall Don't Lie|Trey Murphy III|14|15\nBall Don't Lie|Collin Gillespie|FA|2\nBall Don't Lie|Bilal Coulibaly|FA|2\nBall Don't Lie|Jalen Williams|9|10\nBall Don't Lie|Tyrese Haliburton|3|4\nJenna Jameson|Quentin Grimes|3|4\nJenna Jameson|Trae Young|31|32\nJenna Jameson|CJ McCollum|5|6\nJenna Jameson|Aaron Nesmith|3|4\nJenna Jameson|Khris Middleton|FA|2\nJenna Jameson|Nickeil Alexander-Walker|FA|2\nJenna Jameson|Giannis Antetokounmpo|59|60\nJenna Jameson|Jake LaRavia|FA|2\nJenna Jameson|Jaylen Brown|13|14\nJenna Jameson|Alex Sarr|2|3\nJenna Jameson|Buddy Hield|1|2\nJenna Jameson|Shai Gilgeous-Alexander|20|21\nJenna Jameson|Rudy Gobert|8|9\nJenna Jameson|Dennis Schroder|1|2\nJenna Jameson|Jarrett Allen|7|8\nJenna Jameson|Collin Sexton|1|2\nJenna Jameson|Kyshawn George|FA|2\nJenna Jameson|Harrison Barnes|1|2\nJenna Jameson|Stephen Curry|40|41\nJenna Jameson|Santi Aldama|2|3\nIt's Always Sunny in Philly|Jrue Holiday|1|2\nIt's Always Sunny in Philly|Ace Bailey|2|3\nIt's Always Sunny in Philly|Jayson Tatum|20|21\nIt's Always Sunny in Philly|Alperen Sengun|4|5\nIt's Always Sunny in Philly|VJ Edgecombe|9|10\nIt's Always Sunny in Philly|Jalen Brunson|5|6\nIt's Always Sunny in Philly|OG Anunoby|4|5\nIt's Always Sunny in Philly|Victor Wembanyama|44|45\nIt's Always Sunny in Philly|Onyeka Okongwu|3|4\nIt's Always Sunny in Philly|Amen Thompson|3|4\nIt's Always Sunny in Philly|Zion Williamson|21|22\nIt's Always Sunny in Philly|Tyrese Maxey|16|17\nIt's Always Sunny in Philly|Joel Embiid|17|18\nIt's Always Sunny in Philly|Jalen Suggs|2|3\nIt's Always Sunny in Philly|Norman Powell|7|8\nIt's Always Sunny in Philly|Dyson Daniels|5|6\nIt's Always Sunny in Philly|Russell Westbrook|FA|2\nIt's Always Sunny in Philly|Devin Vassell|3|4\nIt's Always Sunny in Philly|Anthony Davis|29|30\nIt's Always Sunny in Philly|Shaedon Sharpe|4|5\nAspire LLC|Dylan Harper|3|4\nAspire LLC|Stephon Castle|11|12\nAspire LLC|P.J. Washington Jr.|FA|2\nAspire LLC|Jerami Grant|FA|2\nAspire LLC|Toumani Camara|7|8\nAspire LLC|Isaiah Hartenstein|5|6\nAspire LLC|Cooper Flagg|42|43\nAspire LLC|Karl-Anthony Towns|23|24\nAspire LLC|Anthony Edwards|37|38\nAspire LLC|Bennedict Mathurin|3|4\nAspire LLC|Austin Reaves|4|5\nAspire LLC|Kawhi Leonard|25|26\nAspire LLC|Andrew Wiggins|2|3\nAspire LLC|Brandon Miller|8|9\nAspire LLC|Aaron Gordon|3|4\nAspire LLC|Josh Giddey|9|10\nAspire LLC|Grayson Allen|FA|2\nAspire LLC|Mark Williams|3|4\nAspire LLC|Franz Wagner|16|17\nMambaMentality|Isaiah Collier|FA|2\nMambaMentality|James Harden|21|22\nMambaMentality|Donovan Mitchell|11|12\nMambaMentality|Jalen Johnson|4|5\nMambaMentality|Bobby Portis Jr.|FA|2\nMambaMentality|Julius Randle|4|5\nMambaMentality|Kel'el Ware|5|6\nMambaMentality|Derrick White|4|5\nMambaMentality|Ty Jerome|FA|2\nMambaMentality|Maxime Raynaud|FA|2\nMambaMentality|LaMelo Ball|31|32\nMambaMentality|Luka Doncic|61|62\nMambaMentality|Nikola Vucevic|6|7\nMambaMentality|John Collins|6|7\nMambaMentality|Deandre Ayton|16|17\nMambaMentality|Coby White|3|4\nMambaMentality|Ivica Zubac|4|5\nMambaMentality|Walker Kessler|4|5\nMambaMentality|Damian Lillard|3|4\nMambaMentality|Kyrie Irving|5|6\nXcho's Team|Brandon Ingram|16|17\nXcho's Team|Deni Avdija|8|9\nXcho's Team|Mikal Bridges|8|9\nXcho's Team|Naz Reid|3|4\nXcho's Team|De'Aaron Fox|8|9\nXcho's Team|Bam Adebayo|29|30\nXcho's Team|Jamal Murray|15|16\nXcho's Team|Jalen Green|5|6\nXcho's Team|Desmond Bane|9|10\nXcho's Team|Michael Porter Jr.|6|7\nXcho's Team|Miles Bridges|11|12\nXcho's Team|Jabari Smith Jr.|8|9\nXcho's Team|Jaime Jaquez Jr.|FA|2\nXcho's Team|Wendell Carter Jr.|FA|2\nXcho's Team|Dillon Brooks|FA|2\nXcho's Team|Ryan Kalkbrenner|FA|2\nXcho's Team|Devin Booker|30|31\nXcho's Team|Lauri Markkanen|7|8\nXcho's Team|Kristaps Porzingis|5|6\nXcho's Team|Ja Morant|21|22",
+  "assumptions": [
+    "Final declarations: Murphy $15 kept, Scottie Barnes released; Sunny releases Powell, Davis and Zion. All six lists are final.",
+    "Six teams, $200, 20 draftable spots: 3 G / 3 F / 2 C / 3 Util and nine bench; two post-draft IR. 82-game cap retained from prior planning.",
+    "Nine-category season roto; eight categories weight 1, TO weight 0.25. FG/FT impacts include attempts; FT is not punted. Category scores use the existing Hashtag/CBS/ESPN raw-stat blend, not fantasy points.",
+    "Auction target dollars are normalized across the actual available pool and remaining league cash, with a star-heavy premium allocation above 66-starter / 120-rostered replacement. Market estimates blend ADP spending and category value; they are estimates, not Yahoo quoted salaries.",
+    "Target and stretch are separate from projected winning bids. Displayed tiers and tier drops use remaining personal roto value, so a name-based market favorite can rank lower for our build.",
+    "Kawhi left-knee swelling: re-evaluation after one week, reported period of weeks; availability estimate reduced to 50 GP as a scenario, not a medical return date. Barnes receives no invented full-season usage boost.",
+    "Draft date and actual nomination order remain unverified unless already stored on the imported league. Historic 2025 Yahoo ID 59451 is not a current-season ID."
+  ]
+};
+function gameOfZonesPlayerCsv(){ return PLAYERS_CSV_NBA; }
+
 const FANTASTIC_2026_STRATEGY={
   budgetAtDraft:89,openRosterSpots:8,
   preferredBuild:[40,25,10,10],avoidBuild:[65,15,5,5],
@@ -3437,6 +3784,25 @@ const LEAGUES_DEFAULT = {
     meOwner:'Me',
     ownerSlot:{'Me':1,'Team 2':2,'Team 3':3,'Team 4':4,'Team 5':5,'Team 6':6,'Team 7':7,'Team 8':8,'Team 9':9,'Team 10':10,'Team 11':11,'Team 12':12},
     rostersRaw:'', playersCsv:PLAYERS_CSV_NBA,
+    poolDataRevision:'nba-2026-10-24-injury-minutes',
+  },
+  'game-of-zones-2026': {
+    id:'game-of-zones-2026', name:'Game of Zones · 2026 keeper auction', sport:'nba', platform:'yahoo',
+    leagueType:'keeper',draftType:'auction',officialDraft:false,superflex:false,
+    teams:6,rounds:20,rosterSize:20,irSlots:2,mySlot:1,auctionBudget:200,minBid:1,
+    starters:{G:3,F:3,C:2,UTIL:3},flexEligible:[],rosterPositions:['G','F','C','UTIL'],
+    scoringMode:'roto',scoringLabel:'9-cat Roto · 11 starters / 9 bench',lineupPeriod:'daily',maxGamesPlayed:82,
+    categoryStats:{player:['FG%','FT%','3PM','PTS','REB','AST','STL','BLK','TO']},categoryWeights:{TO:0.25},
+    maxKeepers:null,keeperCostType:'dollar',keeperHorizon:0,
+    keeperRules:{annualIncrease:1,undraftedFirstKeeperCost:2,costPersistsThroughTransactions:true,reservePerOpenRosterSpot:1,irCountsAtDraft:false},
+    owners:GAME_OF_ZONES_2026.owners,meOwner:"Ball Don't Lie",
+    ownerSlot:Object.fromEntries(GAME_OF_ZONES_2026.owners.map((o,i)=>[o,i+1])),
+    rostersRaw:GAME_OF_ZONES_2026.rostersRaw,playersCsv:gameOfZonesPlayerCsv(),
+    leagueKeepers:GAME_OF_ZONES_2026.keeperKeys,myLocked:[],myKeepers:[],
+    auctionValuation:'nba-roto-v1',keeperDataRevision:GAME_OF_ZONES_2026.revision,
+    assumptions:GAME_OF_ZONES_2026.assumptions,
+    draftDateLabel:'TBD',keeperDeadlineLabel:'Final keepers submitted',
+    sourceHistoricalYahooLeagueId:'59451',sourceHistoricalYahooSeason:2025,
     poolDataRevision:'nba-2026-10-24-injury-minutes',
   },
   'fantastic-auction': {
@@ -4871,7 +5237,7 @@ function auctionSurplus(p,repl){ return Math.max(0, auctionWeight(p)-(repl[p.pos
 function auctionEligible(p){
   if(p.pos==='K' && !(LEAGUE.starters.K||0))return false;
   if(p.pos==='DST' && !(LEAGUE.starters.DST||0))return false;
-  return ['QB','RB','WR','TE','K','DST'].includes(p.pos);
+  return SPORT.positions.includes(p.pos);
 }
 function auctionFallbackValues(){
   const out=new Map(); if(LEAGUE.draftType!=='auction')return out;
@@ -5434,8 +5800,75 @@ function scaleAuctionValuesToRemainingBudget(base){
   pool.forEach((p,i)=>out.set(p.id,vals[i]));
   return out;
 }
-function auctionMarketValues(){ return scaleAuctionValuesToRemainingBudget(auctionOpponentBaseValues()); }
-function auctionTargetValues(){ return scaleAuctionValuesToRemainingBudget(auctionTargetBaseValues()); }
+function isNbaRotoAuction(){return SPORT.id==='nba'&&LEAGUE.scoringMode==='roto'&&LEAGUE.auctionValuation==='nba-roto-v1';}
+// Two independent price layers. Personal value uses the same attempt-weighted
+// category scores as My Rank (including TO=.25). Market models star spending by
+// ADP as well as category value. Neither uses fantasy-point projections.
+function nbaAuctionBaseWeights(market=false){
+  const pool=PLAYERS.filter(auctionEligible).filter(p=>Number.isFinite(p.categoryValue)).sort((a,b)=>b.categoryValue-a.categoryValue);
+  const total=LEAGUE.teams*LEAGUE.rosterSize, starters=LEAGUE.teams*Object.values(LEAGUE.starters).reduce((a,b)=>a+b,0);
+  const out=new Map(pool.map(p=>[p.id,0]));
+  for(const [n,share] of [[starters,.9],[total,.1]]){
+    const floor=pool[Math.min(pool.length,n)-1]?.categoryValue??0;
+    const sum=pool.slice(0,total).reduce((a,p)=>a+Math.max(0,p.categoryValue-floor),0)||1;
+    pool.forEach(p=>out.set(p.id,out.get(p.id)+share*Math.max(0,p.categoryValue-floor)/sum));
+  }
+  if(market){
+    const byAdp=pool.slice().sort((a,b)=>marketAdp(a)-marketAdp(b));
+    const rankWeight=i=>Math.exp(-Math.pow(i/18,.8));
+    const sum=byAdp.slice(0,total).reduce((a,p,i)=>a+rankWeight(i),0)||1;
+    byAdp.forEach((p,i)=>out.set(p.id,.4*(out.get(p.id)||0)+.6*rankWeight(i)/sum));
+  }
+  return out;
+}
+// Allocate only the actual money left across the actual open spots. Water-fill
+// the price cap, then use largest remainders so rounding cannot create money.
+function nbaAuctionRemainingValues(market=false){
+  const weights=nbaAuctionBaseWeights(market),out=new Map(),states=OWNERS.map(o=>auctionTeamState(OWNER_SLOT[o]));
+  const slots=states.reduce((a,s)=>a+s.open,0),cash=states.reduce((a,s)=>a+Math.max(0,s.left),0),min=LEAGUE.minBid||1;
+  const pool=available().filter(auctionEligible).sort((a,b)=>(weights.get(b.id)||0)-(weights.get(a.id)||0)||a.myRank-b.myRank).slice(0,slots);
+  if(!pool.length)return out;
+  const cap=auctionPriceCap(),values=pool.map(()=>min),active=new Set(pool.map((p,i)=>i));
+  let extra=Math.max(0,cash-pool.length*min);
+  while(extra>1e-8&&active.size){
+    const sum=[...active].reduce((a,i)=>a+(weights.get(pool[i].id)||0),0),share=i=>sum>0?(weights.get(pool[i].id)||0)/sum:1/active.size;
+    const capped=[...active].filter(i=>extra*share(i)>=cap-values[i]);
+    if(!capped.length){for(const i of active)values[i]+=extra*share(i);extra=0;break;}
+    for(const i of capped){extra-=cap-values[i];values[i]=cap;active.delete(i);}
+  }
+  const rounded=values.map(v=>Math.floor(v+1e-8));
+  let remainder=Math.round(values.reduce((a,v)=>a+v,0))-rounded.reduce((a,v)=>a+v,0);
+  const order=values.map((v,i)=>({i,f:v-rounded[i]})).sort((a,b)=>b.f-a.f||a.i-b.i);
+  for(const {i} of order){if(remainder<=0)break;if(rounded[i]<cap){rounded[i]++;remainder--;}}
+  pool.forEach((p,i)=>out.set(p.id,rounded[i]));return out;
+}
+function nbaAuctionBidGuide(p,targets,market,contexts=null){
+  const legal=auctionTeamState(mySlot).maxBid,value=targets.get(p.id)||1;
+  const target=Math.min(legal,Math.max(1,Math.round(value*.9)));
+  const stretch=Math.min(legal,Math.max(target,Math.round(value*1.1)));
+  const teams=contexts||OWNERS.map(o=>{const slot=OWNER_SLOT[o];return {state:auctionTeamState(slot),counts:countsOf(rosterOf(slot))};});
+  const offers=teams.map(({state:s,counts})=>{if(!s.open)return 0;
+    const need=needScoreFor(counts,p);
+    return Math.min(s.maxBid,Math.max(1,Math.round((market.get(p.id)||1)*(1+.08*Math.max(0,need)))));
+  }).sort((a,b)=>b-a);
+  const winning=offers[0]>0?Math.min(offers[0],(offers[1]||0)+1):0;
+  return {target,stretch,winning,value};
+}
+function nbaAuctionTierMap(players,targets){
+  const sorted=players.slice().sort((a,b)=>b.categoryValue-a.categoryValue),out=new Map();
+  const open=OWNERS.reduce((n,o)=>n+auctionTeamState(OWNER_SLOT[o]).open,0);
+  let tier=1,top=sorted[0]?.categoryValue||0,previous=top;
+  const cliff=Math.max(.45,Math.abs(top)*.14);
+  sorted.forEach((p,i)=>{
+    if(i>0&&(previous-p.categoryValue>cliff||top-p.categoryValue>Math.max(.7,Math.abs(top)*.3))){tier++;top=p.categoryValue;}
+    out.set(p.id,{tier,label:i<open?'T'+tier:'Depth',last:false,next:null,gap:0});previous=p.categoryValue;
+  });
+  sorted.forEach((p,i)=>{const entry=out.get(p.id),next=sorted[i+1];
+    if(next&&i<open&&out.get(next.id).tier!==entry.tier){entry.last=true;entry.next=next.name;entry.gap=Math.max(0,(targets.get(p.id)||1)-(targets.get(next.id)||1));}
+  });return out;
+}
+function auctionMarketValues(){ return isNbaRotoAuction()?nbaAuctionRemainingValues(true):scaleAuctionValuesToRemainingBudget(auctionOpponentBaseValues()); }
+function auctionTargetValues(){ return isNbaRotoAuction()?nbaAuctionRemainingValues(false):scaleAuctionValuesToRemainingBudget(auctionTargetBaseValues()); }
 function recordAuctionSale(){
   const raw=el('auctionPlayerInput').value.trim(), owner=el('auctionWinner').value, price=+el('auctionPrice').value;
   const p=findPlayer(raw); if(!p||p.drafted){el('auctionStatus').textContent='Choose an available player.';return;}
@@ -5456,7 +5889,7 @@ function simAuctionSale(){
   const offers=[];
   for(let slot=1;slot<=LEAGUE.teams;slot++){
     const st=auctionTeamState(slot);if(st.open<=0||st.maxBid<st.min)continue;
-    const owner=SLOT_OWNER[slot], counts=countsOf(rosterOf(slot)), need=needScore(counts,p.pos);
+    const owner=SLOT_OWNER[slot], counts=countsOf(rosterOf(slot)), need=needScoreFor(counts,p);
     const tend=TENDENCIES[owner], bias=tend&&tend.enabled?(tend.bias[p.pos]||0):0;
     const willingness=Math.min(st.maxBid,Math.max(st.min,Math.round(mv*(1+0.12*need+0.04*bias+(Math.random()*0.20-0.10)))));
     offers.push({slot,w:willingness});
@@ -5504,17 +5937,30 @@ function auctionPosTiers(availByPos, valOf){
   });
   return out;
 }
+function renderKeeperScenario(){
+  const card=el('keeperScenarioCard');if(!card)return;
+  card.style.display=isNbaRotoAuction()?'':'none';if(!isNbaRotoAuction())return;
+  const states=OWNERS.map(o=>auctionTeamState(OWNER_SLOT[o])),cash=states.reduce((n,s)=>n+s.left,0),open=states.reduce((n,s)=>n+s.open,0);
+  const targets=auctionTargetValues(),market=auctionMarketValues(),pool=available().filter(auctionEligible).sort((a,b)=>b.categoryValue-a.categoryValue),tiers=nbaAuctionTierMap(pool,targets),best=pool[0];
+  const top=best?pool.filter(p=>tiers.get(p.id).tier===tiers.get(best.id).tier):[],next=pool.find(p=>best&&tiers.get(p.id).tier!==tiers.get(best.id).tier);
+  const guide=best?nbaAuctionBidGuide(best,targets,market):null;
+  card.innerHTML=`<h2>Game of Zones · final keepers loaded</h2><p>6 teams · $200 · 11 starters / 9 bench · 2 post-draft IR. <b>9-category roto: TO 25%, all other categories 100%; no FT punt.</b></p><p>${KEEPERS.length} keepers · $${cash} left league-wide · ${open} auction spots. Your budget: <b>$${auctionTeamState(mySlot).left}</b> for ${auctionTeamState(mySlot).open} spots. Murphy kept at $15; Barnes, Davis, Zion and Powell available.</p>${best?`<p><b>Top remaining tier: ${top.map(p=>p.name).join(', ')}.</b> ${next?'Next tier starts with '+next.name+'.':''} ${top.length===1?'Only one player remains in this tier.':''} ${guide?'For '+best.name+': target $'+guide.target+' · projected win $'+guide.winning+' · stretch $'+guide.stretch+'.':''}</p>`:'<p>Auction complete.</p>'}<p class="small muted">Targets and tier drops follow remaining roto category value; winning bids separately estimate rival spending and legal budgets. All prices update after sales. These are estimates, not quoted Yahoo salaries. Raw-stat projection blend: Hashtag/CBS/ESPN, snapshot updated Oct 24; Kawhi availability scenario 50 GP after Oct 27 knee news. Use the nomination controls to record sales or run mocks. Nomination order remains unverified unless already imported.</p>`;
+}
 function renderAuctionRoom(){
   if(!el('auctionRoom'))return;
   if(!PLAYERS.length){el('auctionStatus').textContent='No player data loaded for this league yet.';return;}
+  renderKeeperScenario();
   const vals=auctionMarketValues(), targets=auctionTargetValues();
-  const allAvail=available().filter(auctionEligible).sort((a,b)=>(vals.get(b.id)||0)-(vals.get(a.id)||0));
+  const nbaAuction=isNbaRotoAuction();
+  const allAvail=available().filter(auctionEligible).sort((a,b)=>nbaAuction?(b.categoryValue-a.categoryValue):((vals.get(b.id)||0)-(vals.get(a.id)||0)));
+  const nbaTiers=nbaAuction?nbaAuctionTierMap(allAvail,targets):null;
+  const nbaContexts=nbaAuction?OWNERS.map(o=>{const slot=OWNER_SLOT[o];return {state:auctionTeamState(slot),counts:countsOf(rosterOf(slot))};}):null;
   // How many are left at each position — the "how urgently do I need to bid on a
   // RB" read, which is the auction equivalent of the snake room's scarcity cues.
   const byPos={}; allAvail.forEach(p=>{(byPos[p.pos]=byPos[p.pos]||[]).push(p);});
   const tiers=auctionPosTiers(byPos, p=>vals.get(p.id)||0);
   const cEl=el('auctionPosCounts');
-  if(cEl)cEl.innerHTML=['QB','RB','WR','TE','K','DST'].filter(x=>byPos[x])
+  if(cEl)cEl.innerHTML=SPORT.positions.filter(x=>byPos[x])
     .map(x=>{const t=tiers[x]||{green:0,yellow:0,red:byPos[x].length};
       return `<span class="pos ${x}">${x}</span>&nbsp;<span class="tier-g" title="top tier left">${t.green}</span>/<span class="tier-y" title="still rosterable">${t.yellow}</span>/<span class="tier-r" title="past replacement level">${t.red}</span>`;})
     .join(' &nbsp;');
@@ -5525,13 +5971,32 @@ function renderAuctionRoom(){
   if(q)avail=avail.filter(p=>p.name.toLowerCase().includes(q));
   const src=auctionPriceSourceStatus();
   el('auctionPoolCount').textContent=`(${avail.length}${posF!=='ALL'||q?` of ${allAvail.length}`:''})${src.market?'':' · market est.'}${src.target?'':' · target est.'}`;
-  el('auctionPlayerList').innerHTML=avail.slice(0,160).map(p=>`<option value="${p.name}">`).join('');
+  el('auctionPlayerList').innerHTML=(nbaAuction?avail:avail.slice(0,160)).map(p=>`<option value="${p.name}">`).join('');
   el('auctionWinner').innerHTML=OWNERS.map(o=>`<option value="${o}">${teamLabel(o)}${o===ME_OWNER?' · me':''}</option>`).join('');
   if(ME_OWNER)el('auctionWinner').value=ME_OWNER;
   const ptb=el('auctionPoolTable').querySelector('tbody');
+  const bidPlan=LEAGUES[CURRENT_LEAGUE_ID]?.auctionBidPlan;
+  const planned=Array.isArray(bidPlan)?new Map(bidPlan.map(x=>[normName(x.player),x])):null;
+  el('auctionPoolTable').querySelector('thead').innerHTML=nbaAuction
+    ? '<tr><th>Tier</th><th>Target $</th><th>Win est. $</th><th>Stretch $</th><th>Roto value</th><th>Pos</th><th>Player</th><th>Team</th><th></th></tr>'
+    : planned
+    ? '<tr><th>Market est. $</th><th>Preferred $</th><th>Stretch $</th><th>ECR</th><th>Pos</th><th>Player</th><th>Team</th><th></th></tr>'
+    : '<tr><th>Market $</th><th>Target $</th><th>ECR</th><th>Pos</th><th>Player</th><th>Team</th><th></th></tr>';
   // ECR rather than ADP: Market $ already *is* the auction's draft-position
   // signal, so ADP was a second version of the same thing taking up a column.
-  ptb.innerHTML=avail.slice(0,100).map(p=>`<tr><td><b>$${vals.get(p.id)||1}</b></td><td class="val-good"><b>$${targets.get(p.id)||1}</b></td><td>${p.ecr?Math.round(p.ecr):'—'}</td><td><span class="pos ${p.pos}">${p.pos}</span></td><td>${headshotImg(p)}${p.name}${rookieBadge(p)}</td><td class="muted">${p.team||''}</td><td><button class="pick-btn" data-aucbuy="${p.id}">select</button></td></tr>`).join('');
+  const myMax=auctionTeamState(mySlot).maxBid;
+  ptb.innerHTML=(nbaAuction?avail:avail.slice(0,100)).map(p=>{
+    if(nbaAuction){
+      const guide=nbaAuctionBidGuide(p,targets,vals,nbaContexts),t=nbaTiers.get(p.id),ft=p.categoryZ?.['FT%'];
+      const cliff=t.last?`<div class="small tier-y">Last in tier · next: ${t.next}${t.gap?' · $'+t.gap+' value drop':''}</div>`:'';
+      const ftNote=ft< -1?`<div class="small val-bad">FT impact ${ft.toFixed(1)} z · attempts weighted</div>`:'';
+      return `<tr><td>${t.label}${cliff}</td><td class="val-good"><b>$${guide.target}</b></td><td>$${guide.winning}</td><td><b>$${guide.stretch}</b></td><td>${p.categoryValue.toFixed(2)}</td><td>${posCell(p)}</td><td>${headshotImg(p)}${p.name}${rookieBadge(p)}${ftNote}</td><td class="muted">${p.team||''}</td><td><button class="pick-btn" data-aucbuy="${p.id}">select</button></td></tr>`;
+    }
+    const plan=planned?.get(normName(p.name));
+    const stretch=planned?Math.min(myMax,plan?.stretch??Math.max(1,Math.round(targets.get(p.id)||1))):null;
+    const preferred=planned?Math.min(stretch,plan?.target??Math.max(1,Math.round((targets.get(p.id)||1)*0.7))):(targets.get(p.id)||1);
+    return `<tr><td><b>$${vals.get(p.id)||1}</b></td><td class="val-good"><b>$${preferred}</b></td>${planned?`<td>$${stretch}</td>`:''}<td>${p.ecr?Math.round(p.ecr):'—'}</td><td><span class="pos ${p.pos}">${p.pos}</span></td><td>${headshotImg(p)}${p.name}${rookieBadge(p)}${plan?`<div class="small muted">${plan.note}</div>`:''}</td><td class="muted">${p.team||''}</td><td><button class="pick-btn" data-aucbuy="${p.id}">select</button></td></tr>`;
+  }).join('');
   ptb.querySelectorAll('[data-aucbuy]').forEach(b=>b.onclick=()=>{const p=PLAYERS.find(x=>x.id===+b.dataset.aucbuy);if(p){el('auctionPlayerInput').value=p.name;el('auctionPrice').value=vals.get(p.id)||1;}});
   const btb=el('auctionBudgetTable').querySelector('tbody');
   // Keeper-spend / draft-spend split removed deliberately: mid-auction the only
@@ -8328,7 +8793,7 @@ async function restoreBackup(ts){
 }
 
 // ---------- SETUP PERSISTENCE (cloud: /api/setup) ----------
-async function apiSetup(method,body){const r=await fetch('/api/setup?league='+encodeURIComponent(CURRENT_LEAGUE_ID),{method,headers:{'Content-Type':'application/json',...(typeof tokenHdr==='function'?tokenHdr():{})},body:body?JSON.stringify(body):undefined});if(!r.ok)throw new Error('HTTP '+r.status);const t=await r.text();return t?JSON.parse(t):null;}
+async function apiSetup(method,body,leagueId=CURRENT_LEAGUE_ID){const r=await fetch('/api/setup?league='+encodeURIComponent(leagueId),{method,headers:{'Content-Type':'application/json',...(typeof tokenHdr==='function'?tokenHdr():{})},body:body?JSON.stringify(body):undefined});if(!r.ok)throw new Error('HTTP '+r.status);const t=await r.text();return t?JSON.parse(t):null;}
 
 // ---------- COMMISH (membership: returning/dues/contact) ----------
 let COMMISH={};
@@ -8373,14 +8838,33 @@ async function loadCommish(){
 let _saveT=null;
 // Auto-saves keepers/trades AND in-progress draft picks — losing a live draft to a
 // redeploy or device switch was the whole reason this app beats a spreadsheet.
-function saveSetup(){if(!canSave())return; if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(async()=>{try{await apiSetup('PUT',{assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick,myRosterNames:myRoster().map(p=>p.name),streamConfidence:STREAM_CONFIDENCE,puntCats:[...PUNT_CATS],seededLiveSnapshot:!!LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames,appliedLiveSnapshotCount:LEAGUES[CURRENT_LEAGUE_ID]?.initialPickNames?.length||0});const s=el('setupStatus');if(s)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();}catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud (deploy + KV needed). Changes kept locally this session.';}},600);}
+function saveSetup(){
+  if(!canSave())return;if(_saveT)clearTimeout(_saveT);
+  const leagueId=CURRENT_LEAGUE_ID;
+  const payload={assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick,myRosterNames:myRoster().map(p=>p.name),streamConfidence:STREAM_CONFIDENCE,puntCats:[...PUNT_CATS],keeperDataRevision:LEAGUES[leagueId]?.keeperDataRevision,seededLiveSnapshot:!!LEAGUES[leagueId]?.initialPickNames,appliedLiveSnapshotCount:LEAGUES[leagueId]?.initialPickNames?.length||0};
+  _saveT=setTimeout(async()=>{try{
+    await apiSetup('PUT',payload,leagueId);
+    const s=el('setupStatus');if(s&&CURRENT_LEAGUE_ID===leagueId)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();
+  }catch(e){const s=el('setupStatus');if(s)s.textContent='⚠ Setup not saved to cloud. Changes kept locally this session.';}},600);
+}
 function applyTendencies(t){ if(!t)return; OWNERS.forEach(o=>{const v=t[o]; if(v)TENDENCIES[o]={enabled:!!v.enabled,bias:Object.assign(blankBias(),v.bias||{})};}); }
-async function loadSetup(){try{const s=await apiSetup('GET');if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||s.seededLiveSnapshot||(Array.isArray(s.picks)&&s.picks.length)||(Array.isArray(s.auctionPicks)&&s.auctionPicks.length))){
-  if(Array.isArray(s.assigned))assigned=new Set(s.assigned);
+async function loadSetup(){try{
+  const leagueId=CURRENT_LEAGUE_ID,s=await apiSetup('GET');if(leagueId!==CURRENT_LEAGUE_ID)return;
+  const revision=LEAGUES[leagueId]?.keeperDataRevision;
+  if(isNbaRotoAuction()&&s?.keeperDataRevision!==revision){
+    // The server's normal setup PUT backs up the previous active scenario.
+    // Final declarations replace pre-declaration guesses once, not on every load.
+    assigned=new Set();cutPlayers=new Set();playerTrades={};pickOwnerOverride={};PUNT_CATS=new Set();queued=new Set();
+    rebuildKeepers();applyKeepers();resetDraft();
+    if(canSave())await apiSetup('PUT',{assigned:[],cutPlayers:[],playerTrades:{},pickOwnerOverride:{},puntCats:[],queued:[],picks:[],auctionPicks:[],curPick:1,keeperDataRevision:revision},leagueId);
+    if(el('teamsWrap'))renderTeams();return;
+  }
+  if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||s.seededLiveSnapshot||(Array.isArray(s.picks)&&s.picks.length)||(Array.isArray(s.auctionPicks)&&s.auctionPicks.length))){
+  if(Array.isArray(s.assigned))assigned=new Set(isNbaRotoAuction()?s.assigned.filter(k=>leagueKeeperKeys().includes(k)):s.assigned);
   if(Array.isArray(s.cutPlayers))cutPlayers=new Set(s.cutPlayers);
   if(Array.isArray(s.queued))queued=new Set(s.queued);
   if(s.streamConfidence)STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE,...(LEAGUE.defaultStreamConfidence||{}),...s.streamConfidence};
-  if(Array.isArray(s.puntCats)){PUNT_CATS=new Set(s.puntCats);if(SPORT.id!=='nfl')computeMyRanks();}
+  if(Array.isArray(s.puntCats)){PUNT_CATS=new Set(isNbaRotoAuction()?[]:s.puntCats);if(SPORT.id!=='nfl')computeMyRanks();}
   auctionPicks=Array.isArray(s.auctionPicks)?s.auctionPicks.slice():[];
   pickOwnerOverride=s.pickOwnerOverride||{}; playerTrades=s.playerTrades||{};
   applyTendencies(s.tendencies);
@@ -8487,6 +8971,7 @@ function applyLeagueProfile(id){
     auctionMaxPriceShare:profile.auctionMaxPriceShare||null,
     keeperHorizon:(profile.keeperHorizon!=null?profile.keeperHorizon:null),
     keeperRules:profile.keeperRules||{},
+    auctionValuation:profile.auctionValuation||null,
     auctionBudget:profile.auctionBudget||200,rosterSize:profile.rosterSize||profile.rounds||16,irSlots:profile.irSlots||0,minBid:profile.minBid||1,
     scoringLabel:profile.scoringLabel||'TBD', draftDateLabel:profile.draftDateLabel||'TBD', keeperDeadlineLabel:profile.keeperDeadlineLabel||'TBD',
     sport:SPORT.id, platform:profile.platform||null, scoringMode:profile.scoringMode||'points', scoring:profile.scoring||null,
@@ -8530,10 +9015,15 @@ function applyLeagueProfile(id){
     Object.entries(profile.superflexAdpOverrides).forEach(([name,adp])=>{const p=findPlayer(name);if(p){p.adp=+adp;p.ecr=+adp;}});
   }
   computePosRanks();
+  if(profile.auctionValuation==='nba-roto-v1'){
+    const kawhi=findPlayer('Kawhi Leonard');
+    if(kawhi&&kawhi.gp>50){const ratio=50/kawhi.gp;kawhi.gp=50;Object.keys(kawhi.st||{}).forEach(k=>{if(Number.isFinite(kawhi.st[k]))kawhi.st[k]*=ratio;});kawhi.proj*=ratio;}
+  }
   computeMyRanks();
   const projHead=el('projHeader');if(projHead)projHead.textContent=projectionLabel();
   fillPosFilters();
   MY_LOCKED.forEach(n=>assigned.add(ME_OWNER+'|'+n));
+  (profile.initialKeeperKeys||[]).forEach(k=>assigned.add(k));
 
   initKeepers(); applyKeepers(); resetDraft();
   if(Array.isArray(profile.initialPickNames)){
@@ -8574,6 +9064,22 @@ function switchLeague(id){
 // Cloud-backed league list. Falls back to (and, on a truly first run, seeds the
 // cloud with) LEAGUES_DEFAULT so the app still works offline or before the API
 // has ever been reached — see the LEAGUES_DEFAULT comment above for why.
+function isGameOfZonesProfile(p){
+  return !!p&&(p.id==='game-of-zones-2026'||((p.sport==='nba'||/game.*of.*zones/i.test(p.name||''))&&/game.*of.*zones/i.test(p.name||'')&&!/202[0-5]/.test(p.name||'')));
+}
+function gameOfZonesFinalProfile(existing){
+  const def=LEAGUES_DEFAULT['game-of-zones-2026'];
+  // Keep the exact imported league ID, Yahoo connection, name and dated settings.
+  // Retain a real nomination order only when it maps these six teams legally.
+  const slots=existing.ownerSlot||{},validOrder=def.owners.every(o=>Number.isInteger(slots[o])&&slots[o]>=1&&slots[o]<=6)&&new Set(def.owners.map(o=>slots[o])).size===6;
+  return {...existing,...def,id:existing.id,name:existing.name||def.name,
+    ownerSlot:validOrder?Object.fromEntries(def.owners.map(o=>[o,slots[o]])):def.ownerSlot,
+    mySlot:validOrder?slots[def.meOwner]:def.mySlot,
+    draftDateLabel:existing.draftDateLabel||def.draftDateLabel,
+    yahooLeagueId:existing.yahooLeagueId,yahooLeagueKey:existing.yahooLeagueKey,yahooLeagueUrl:existing.yahooLeagueUrl,
+    officialDraft:existing.officialDraft===true,
+  };
+}
 async function fetchCloudLeagues(){
   try{
     const r=await fetch('/api/leagues');
@@ -8581,8 +9087,14 @@ async function fetchCloudLeagues(){
     const list=await r.json();
     if(Array.isArray(list) && list.length){
       const map={}; list.forEach(p=>{ if(p&&p.id) map[p.id]=p; });
+      const gozUpdates=[];
+      const existingGoz=Object.values(map).filter(isGameOfZonesProfile);
+      existingGoz.forEach(cur=>{
+        if(cur.keeperDataRevision===GAME_OF_ZONES_2026.revision&&cur.auctionValuation==='nba-roto-v1')return;
+        const merged=gameOfZonesFinalProfile(cur);map[cur.id]=merged;gozUpdates.push(merged);
+      });
       // Add newly-shipped built-in profiles without overwriting any cloud-edited profile.
-      const missing=Object.values(LEAGUES_DEFAULT).filter(p=>!map[p.id]);
+      const missing=Object.values(LEAGUES_DEFAULT).filter(p=>!map[p.id]&&!(p.id==='game-of-zones-2026'&&existingGoz.length));
       await Promise.all(missing.map(p=>fetch('/api/leagues/'+encodeURIComponent(p.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}).catch(()=>{})));
       missing.forEach(p=>map[p.id]=p);
       // A cloud profile, once seeded, is never overwritten by later code defaults
@@ -8599,7 +9111,7 @@ async function fetchCloudLeagues(){
       // only where the cloud copy has no value at all.
       const BACKFILL=['waiverRules','leagueKeepers','auctionDecay','auctionShape','auctionMaxPriceShare','keeperHorizon','keeperRules','sport','platform','platformEligibility','scoring','scoringMode','categoryStats','maxGamesPlayed','maxAcquisitionsPerWeek','minGoalieGamesPerWeek','rosterPositions','lineupPeriod','marketAdpSource','defaultStreamConfidence','projectionSources','availabilityDiscounts','assumptions','lockinCeilingWeight'];
       const isEmpty=v=>v==null||v===''||(Array.isArray(v)&&!v.length)||(typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length);
-      const toPatch=[];
+      const toPatch=[...gozUpdates];
       Object.values(LEAGUES_DEFAULT).forEach(def=>{
         const cur=map[def.id]; if(!cur)return;
         const add={};
