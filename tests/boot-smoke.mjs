@@ -677,7 +677,7 @@ ok &= check('punting FT% lifts Giannis and drops Curry', () => ev(`(function(){
 })()`), true);
 ok &= check('team table pools FG%/FT% and offers nine punt boxes', () =>
   /FG%\/FT% pooled/.test(w.document.getElementById('catTeamTable').textContent) &&
-  w.document.querySelectorAll('#catPuntControls [data-punt]').length === 9, true);
+  w.document.querySelectorAll('#catPuntControls [data-cat-weight]').length === 9, true);
 ev('switchLeague("yahoo-nba-public-roto")');
 await new Promise(r => setTimeout(r, 300));
 ok &= check('NBA Rotisserie template: roto scoring with the 82-game position cap', 'LEAGUE.scoringMode+":"+LEAGUE.maxGamesPlayed+":"+isCategoryLeague()', 'roto:82:true');

@@ -44,7 +44,35 @@ assert.ok(w.document.querySelector('#auctionPoolTable thead').textContent.includ
 assert.ok(w.document.querySelectorAll('#auctionPoolTable tr.nba-tier-break').length>0);
 assert.ok([...w.document.querySelectorAll('.nba-tier-cell')].every(td=>/^(T\d+|Depth)$/.test(td.textContent)));
 assert.ok(!w.document.querySelector('#auctionPoolTable tbody').textContent.includes('value drop'));
-assert.ok(w.document.querySelector('#auctionPoolTable tbody').textContent.includes('FT impact'));
+assert.equal(w.document.querySelectorAll('#auctionPoolTable thead .catcol').length,9);
+assert.equal(w.document.querySelectorAll('#auctionPoolTable tbody tr:first-child .catcell').length,9);
+assert.equal(w.document.querySelector('#catTeamCard').style.display,'');
+assert.equal(w.document.querySelectorAll('#catTeamTable [data-cat-team]').length,6);
+assert.equal(w.document.querySelectorAll('#catPuntControls [data-cat-weight]').length,9);
+for(const select of w.document.querySelectorAll('#catPuntControls [data-cat-weight]')){
+  assert.deepEqual([...select.options].map(o=>Number(o.value)),[0,.25,.5,.75,1,1.5,2]);
+  assert.equal(Number(select.value),select.dataset.catWeight==='TO'?.25:1);
+}
+// All nine signed category contributions use the same weighting mechanism.
+// Increasing any category raises its positive contributors and penalizes its
+// negative contributors; this is not a special free-throw markdown.
+assert.ok(ev(`(()=>{for(const cat of nhlCategoryConfig().skater){
+  const old=nbaCatWeight(cat),before=new Map(PLAYERS.map(p=>[p.id,p.categoryValue]));
+  CATEGORY_WEIGHT_OVERRIDES[cat]=2;computeMyRanks();
+  if(!PLAYERS.every(p=>Math.abs(p.categoryValue-before.get(p.id)-(2-old)*p.categoryZ[cat])<1e-8))return false;
+  delete CATEGORY_WEIGHT_OVERRIDES[cat];computeMyRanks();
+}return true})()`));
+const initialMarket=ev('JSON.stringify([...auctionMarketValues()])');
+const beforePunt=ev('findPlayer("Giannis Antetokounmpo").categoryValue');
+const ftSelect=w.document.querySelector('[data-cat-weight="FT%"]');
+ftSelect.value='0';ftSelect.dispatchEvent(new w.Event('change'));
+assert.equal(ev('nbaCatWeight("FT%")'),0);
+assert.ok(ev('findPlayer("Giannis Antetokounmpo").categoryValue')>beforePunt);
+assert.equal(ev('JSON.stringify([...auctionMarketValues()])'),initialMarket,'personal punts must not change opponent preferences');
+assert.ok(w.document.querySelector('#auctionPoolTable thead .punted'));
+w.document.querySelector('[data-cat-reset]').click();
+assert.equal(ev('nbaCatWeight("FT%")'),1);
+assert.equal(ev('nbaCatWeight("TO")'),.25);
 assert.ok(ev('(()=>{const pool=available(),t=nbaAuctionTierMap(pool);return t.get(findPlayer("Cade Cunningham").id).tier<=t.get(findPlayer("Scottie Barnes").id).tier})()'));
 assert.equal(ev('LEAGUE.auctionCompetitiveness'),4);
 assert.ok(ev('PLAYERS.filter(p=>p.review?.sampleGames>0).length>300'));
@@ -106,6 +134,18 @@ assert.equal(ev('auctionPicks.length'),1);
 assert.equal(ev('auctionTeamState(mySlot).left'),69);
 assert.equal(ev('KEEPERS.length'),61);
 // A valuation-only migration retains purchases under the same keeper revision.
+for(const [cat,value] of [['FT%','0'],['AST','1.5']]){
+  const select=w.document.querySelector(`[data-cat-weight="${cat}"]`);select.value=value;select.dispatchEvent(new w.Event('change'));
+}
+await new Promise(r=>setTimeout(r,700));
+assert.equal(setups.get('fixture-existing-goz').categoryWeights.AST,1.5);
+assert.equal(setups.get('fixture-existing-goz').categoryWeights['FT%'],0);
+assert.equal(ev('getConfig().categoryWeights.AST'),1.5);
+ev('applyCategoryPreferences(null);computeMyRanks()');await ev('loadSetup()');
+assert.equal(ev('nbaCatWeight("AST")'),1.5);assert.equal(ev('nbaCatWeight("FT%")'),0);
+assert.equal(ev('auctionPicks.length'),1);
+ev('applyCategoryPreferences(null);computeMyRanks();render();saveSetup()');
+await new Promise(r=>setTimeout(r,700));
 cloud=[{...profile,auctionModelRevision:'older-model'}];
 const reviewed=await ev('fetchCloudLeagues()');
 assert.equal(reviewed['fixture-existing-goz'].keeperDataRevision,def.keeperDataRevision);
