@@ -2675,6 +2675,32 @@ var worker_default = {
           return J({ error: "Yahoo leagues request failed: " + e.message }, 502);
         }
       }
+      if (path === "/api/yahoo/draft-results") {
+        const denied = requireAdmin();
+        if (denied) return denied;
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const suppliedKey = url.searchParams.get("key");
+        if (suppliedKey && !/^\d+\.l\.\d+$/.test(suppliedKey)) return J({ error: "invalid Yahoo league key" }, 400);
+        try {
+          const token = await getYahooAccessToken(env, kv, url);
+          if (!token) return J({ error: "Yahoo account not connected." }, 401);
+          const profile = suppliedKey ? null : await kv.get(leagueProfileKey(lg), { type: "json" });
+          if (!suppliedKey && !profile) return J({ error: "Draft Lab league profile not found." }, 404);
+          const key = suppliedKey || await resolveYahooLeagueKey(token, profile);
+          if (!/^\d+\.l\.\d+$/.test(key)) return J({ error: "invalid Yahoo league key" }, 400);
+          const [draftRaw, teamsRaw] = await Promise.all([yahooJson(token, `league/${key}/draftresults`), yahooJson(token, `league/${key}/teams`)]);
+          const teams = collectYahooEntities(teamsRaw, "team").filter(t => t.team_key).map(t => ({ key: t.team_key, name: t.name || "", mine: String(t.is_owned_by_current_login || "") === "1" }));
+          const teamNames = new Map(teams.map(t => [t.key, t.name]));
+          const picks = collectYahooEntities(draftRaw, "draft_result").filter(p => p.player_key && p.team_key);
+          const playerKeys = [...new Set(picks.map(p => p.player_key))];
+          const batches = [];
+          for (let i = 0; i < playerKeys.length; i += 25) batches.push(playerKeys.slice(i, i + 25));
+          const playerRaw = await Promise.all(batches.map(keys => yahooJson(token, `players;player_keys=${keys.join(',')}`)));
+          const names = new Map(playerRaw.flatMap(raw => collectYahooEntities(raw, "player")).filter(p => p.player_key).map(p => [p.player_key, p.name]));
+          const results = picks.map(p => ({ pick: Number(p.pick) || null, round: Number(p.round) || null, teamKey: p.team_key, team: teamNames.get(p.team_key) || p.team_key, playerKey: p.player_key, name: names.get(p.player_key) || p.player_key, cost: p.cost != null && p.cost !== '' && Number.isFinite(Number(p.cost)) ? Number(p.cost) : null, keeper: String(p.is_keeper || '') === '1' })).sort((a,b) => (a.pick || 0) - (b.pick || 0));
+          return J({ key, source: "Yahoo official draft results", fetchedAt: new Date().toISOString(), teams, results, count: results.length });
+        } catch (e) { return J({ error: "Yahoo draft results request failed: " + e.message }, 502); }
+      }
       if (path === "/api/yahoo/league-settings") {
         const denied = requireAdmin();
         if (denied) return denied;

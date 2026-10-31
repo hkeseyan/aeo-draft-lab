@@ -45,5 +45,9 @@ The update deliberately provides tier-drop visibility without an automatic scarc
 
 ## Validation
 
+October 31 additions: live priority dropdowns (0 / 0.25 / 0.5 / 0.75 / 1 / 1.5 / 2; TO default 0.25, others 1), persisted per draft; zero hard-punts a category. All category weaknesses and strengths use the same signed contribution math. Opponent estimates remain independent of personal weight changes. The auction room now includes all nine colored player-category columns and own-team plus six-team color-coded category comparisons. Raw totals and actual scoring are unchanged by personal priorities.
+
+The official-results button uses the existing connected Yahoo account through the signed-in admin's Draft Lab session. It reads `/api/yahoo/draft-results` with this profile's current Yahoo key or resolves it from the saved profile; it does not use the historical 2025 ID. It displays actual prices and keeper flags without replacing saved mocks or sales. Missing salaries remain blank.
+
 `npm test` covers all sports plus the dedicated `tests/game-of-zones.test.mjs`: all61 keeper joins and six budgets; no duplicate imported profile; preserved connection/date/nomination order; old-setup backup; TO=.25 and full FT; Cade above Giannis; full available-player list; exact remaining-dollar conservation; manual sale and reload; all remaining purchases completing legally; tier labels and FT flags.
 
