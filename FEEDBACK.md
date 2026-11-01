@@ -18,6 +18,10 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
+- ✅ 2026-10-31 — **Game of Zones keeps its actual 18-player roster.** The extra C and bench were never added before the auction; the league agreed to retain 3 G / 3 F / 1 C / 3 Util (10 starters), eight bench, two IL and $200. Corrected the abandoned 20-player proposal in Draft Lab with a one-time roster-only migration that preserves purchases, keepers, custom projections/priorities and mocks. Extra bench would tie up useful waiver players and add cap-management work without more starting opportunities. The independent roster revision leaves the keeper revision unchanged; the full test suite passes, including migration preservation, exact remaining cash and a complete 47-purchase / 108-player auction. See `SPECS.md` and `docs/GAME_OF_ZONES_2026.md`.
+
+- 🆕 2026-10-31 — **NBA in-season roto management and future mobile notifications.** Track injuries such as Haliburton's against actual games used/remaining by position group, projected legal starts, replacement coverage, pooled FG%/FT%, all nine category forecasts and standings gaps. Help the user reach the end of the season near the games cap with a competitive category balance instead of maximizing starts immediately. Favor marginal waiver improvements in REB, BLK and FG% while protecting current strengths; retain modest young-player keeper upside without shifting into a rebuild. Capture the requirements now; injury-driven refresh, in-season dashboards and mobile notifications belong to the next implementation phase.
+
 - ✅ 2026-11-01 — **Game of Zones: pull the auction results and analyze them.** The 6-team auction was held (scheduled Tue Oct 27, 8:00 PM PT). User: "you can try to pull the auction results now and analyze."
   *Done:*
   - **Pull:** Yahoo's official results for 478.l.98050, fetched read-only with the connected grant: draftresults, teams, players, rosters.
