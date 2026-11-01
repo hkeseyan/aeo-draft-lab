@@ -18,7 +18,18 @@ Status legend: 🆕 new · 🔧 in progress · ✅ done (see SPECS.md) · ⛔ wo
 
 ## Entries
 
-- 🔧 2026-10-31 — **Analyze completed Game of Zones auction through the existing Draft Lab connection.** User requests actual results and costs, value versus prices paid, and category balance across six teams. Use the server-side Yahoo grant already connected in Draft Lab. Added a read-only official-results route/view and fixed OAuth navigation being swallowed by the SPA. Actual retrieval/analysis remains pending an authenticated Draft Lab session; do not substitute pre-draft keepers or mocks for official results.
+- ✅ 2026-11-01 — **Game of Zones: pull the auction results and analyze them.** The 6-team auction was held (scheduled Tue Oct 27, 8:00 PM PT). User: "you can try to pull the auction results now and analyze."
+  *Done:*
+  - **Pull:** Yahoo's official results for 478.l.98050, fetched read-only with the connected grant: draftresults, teams, players, rosters.
+  - **Keepers:** all 61 final keepers matched at their recorded salaries.
+  - **Purchases:** 47 (18 drafted per team). Saved in `docs/game-of-zones-2026-auction-results.tsv`.
+  - **Price vs the room's own pre-sale personal value**, by team: Ball Don't Lie +$34 (spent $99), Sunny +$18, Mamba +$10, Xcho +$3, Aspire −$16, Jenna Jameson −$33.
+  - **Biggest bargains:** Curry $14 and Kawhi $4 (both +$18 vs personal value), Garland $3, Durant $27, LeBron $7.
+  - **Biggest overpays:** Giannis $43, Duren $19, Cade $45, LaMelo $24, Banchero $9.
+  - **Projected roto table**, today's rosters, 11 slots × 82 filled best-first: Sunny 37, Ball Don't Lie 36, Mamba 35, Aspire / Xcho / Jenna 27.
+  - **The user's team:** 1st in FT% and 3PM, 2nd in PTS and AST, last in REB and BLK. Prioritizing Clingan's games projects 37.
+
+- ✅ 2026-10-31 — **Analyze completed Game of Zones auction through the existing Draft Lab connection.** User requests actual results and costs, value versus prices paid, and category balance across six teams. Use the server-side Yahoo grant already connected in Draft Lab. Added a read-only official-results route/view and fixed OAuth navigation being swallowed by the SPA. Actual retrieval/analysis remains pending an authenticated Draft Lab session; do not substitute pre-draft keepers or mocks for official results. *Done 2026-11-01:* official results pulled and analysed; see the entry above.
 
 - ✅ 2026-10-27 — **Live category weights and auction category comparison.** Replace NBA punt checkboxes with 0 / 0.25 / 0.5 / 0.75 / 1 / 1.5 / 2 dropdowns, default 1 except TO 0.25; zero is a hard punt. Persist draft-specific choices and recompute personal values/tier contributions immediately. Show the color-coded category team analysis in Game of Zones auctions, including all six rosters, and expose all nine category contributions consistently instead of singling out FT weaknesses. Preserve actual scoring, opponent perception, keepers and purchases. Completed October 31: all nine dropdowns and colored player/team analysis, independent rival estimates, saved preference round trips and category-symmetry checks pass the full suite.
 
