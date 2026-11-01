@@ -17,6 +17,10 @@ assert.equal(t.values.PTS,1535);
 assert.equal(t.values['FG%'],.5);
 assert.ok(t.usage.every(s=>s.used<=s.capacity));
 assert.ok(t.players.every(p=>p.countedGames<=p.games));
+const pooled=R.projectTeam({id:'pooled',players:[player('best',['C'],84,20),player('second',['C'],84,10)]},[slot('C',2,82)],cats,1);
+assert.equal(pooled.games,164);
+assert.equal(pooled.players.find(p=>p.id==='best').countedGames,84,'multiple same-position spots share a cap; it is not an individual player limit');
+assert.equal(pooled.players.find(p=>p.id==='second').countedGames,80);
 
 const limited=[player('g',['G'],40,9),player('f',['F'],40,8),player('dual',['G','F'],10,1)];
 t=R.projectTeam({id:'limited',players:limited},[slot('G'),slot('F')],cats,1);

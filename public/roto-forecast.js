@@ -54,7 +54,10 @@
     const players=[...new Map((team.players||[]).filter(p=>p&&p.id!=null).map(p=>[p.id,p])).values()];
     const active=players.filter(p=>p.games>0&&p.eligibleSlots?.length);
     const core=allocate(active,slots.map(s=>({...s,capacity:s.count})),Object.fromEntries(active.map(p=>[p.id,1])));
-    const primary=core.map(a=>({...a,games:Math.min(active.find(p=>p.id===a.playerId).games,slots.find(s=>s.key===a.slot).gamesPerSlot),kind:'primary'}));
+    const coreIds=new Set(core.map(a=>a.playerId)),corePlayers=active.filter(p=>coreIds.has(p.id));
+    // Repeated C/G/Util positions share one group cap. A player may contribute
+    // more than one nominal spot's cap if the group's combined budget allows it.
+    const primary=allocate(corePlayers,slots,Object.fromEntries(corePlayers.map(p=>[p.id,p.games]))).map(a=>({...a,kind:'primary'}));
     const primaryById=Object.fromEntries(primary.map(a=>[a.playerId,a.games]));
     const left=slots.map(s=>({...s,capacity:Math.max(0,s.capacity-sum(primary.filter(a=>a.slot===s.key).map(a=>a.games)))*Math.max(0,Math.min(1,coverage))}));
     // A primary player cannot also be his own replacement. The same rostered
