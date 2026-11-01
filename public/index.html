@@ -215,9 +215,29 @@
       <div class="board" id="boardGrid"></div>
     </div>
     <div class="card" id="catTeamCard" style="display:none">
-      <h2>My projected categories <span class="muted small" id="catTeamSub"></span></h2>
+      <h2><span id="catTeamTitle">My projected categories</span> <span class="muted small" id="catTeamSub"></span></h2>
       <div id="catPuntControls" class="row small muted" style="margin-bottom:6px"></div>
-      <div style="overflow-x:auto"><table class="cat-team-table" id="catTeamTable"></table></div>
+      <details id="catRawDetails" open><summary class="small muted">Uncapped roster totals and per-player averages</summary><div style="overflow-x:auto"><table class="cat-team-table" id="catTeamTable"></table></div></details>
+    </div>
+    <div class="card" id="rotoForecastCard" style="display:none">
+      <h2>Projected roto standings</h2>
+      <div class="row small" style="margin-bottom:8px;flex-wrap:wrap">
+        <label>Roster source <select id="rotoRosterSource"><option value="draft">Draft / mock rosters</option><option value="yahoo" disabled>Yahoo roster snapshot</option></select></label>
+        <button class="btn ghost small" id="rotoYahooSync">Load current Yahoo rosters</button>
+        <label>Bench coverage <select id="rotoBenchCoverage"><option value="0">0%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1">100%</option></select></label>
+      </div>
+      <p id="rotoForecastStatus" class="small muted"></p>
+      <div class="scroll"><table class="cat-team-table" id="rotoStandingsTable"></table></div>
+      <details style="margin-top:10px"><summary>Player games and lineup scenarios</summary>
+        <div class="row small" style="margin:8px 0"><label>Team <select id="rotoPlanTeam"></select></label><button class="btn ghost small" id="rotoResetGames">Reset GP assumptions</button></div>
+        <p class="small muted" id="rotoPositionUsage"></p>
+        <div class="scroll"><table class="cat-team-table" id="rotoPlayerGames"></table></div>
+        <p class="small muted">Projected GP is availability; counted GP is the portion this lineup can use. Edit GP to test an injury scenario while keeping per-game production fixed.</p>
+        <div class="row small" style="margin:10px 0;flex-wrap:wrap"><label>Bench instead <select id="rotoSwapFrom"></select></label><label>Favor <select id="rotoSwapTo"></select></label><label>Counted games <input id="rotoSwapGames" type="number" min="0" max="162" value="20" style="width:60px"></label></div>
+        <p class="small" id="rotoSwapSummary"></p>
+        <div class="scroll"><table class="cat-team-table" id="rotoSwapTable"></table></div>
+      </details>
+      <details class="small muted" style="margin-top:10px"><summary>Forecast assumptions</summary><p id="rotoForecastMethod"></p></details>
     </div>
     <div class="draft-workspace" id="snakeDraftGrid">
     <div class="card" id="nhlLiveCard" style="display:none">
@@ -783,10 +803,13 @@
   </section>
 </main>
 <script src="/auction-values.js"></script>
+<script src="/roto-forecast.js"></script>
+<script src="/roto-ui.js"></script>
 <script>
 // ---------- LEAGUE CONFIG ----------
 // LEAGUE / mySlot are set per active league profile by applyLeagueProfile() (see LEAGUES registry + INIT below).
 let LEAGUE = {};
+let ROTO_FORECAST={};
 // overall pick number for (round r 1-based, slot s 1-based). Snake reverses order
 // on even rounds; linear keeps the same team order every round (no reversal).
 function overall(r,s){const N=LEAGUE.teams; if(LEAGUE.draftType==='linear')return (r-1)*N+s; return (r-1)*N + (r%2===1 ? s : (N - s + 1));}
@@ -6828,10 +6851,14 @@ function renderPool(){
 // White = the league median for that stat; green/red scale toward the best/worst
 // team. Hover a cell for the median, range and my rank.
 function renderCatTeamTable(){
+  if(typeof renderRotoForecast==='function')renderRotoForecast();
   const card=el('catTeamCard');if(!card)return;
   const show=isCategoryLeague();
   card.style.display=show?'':'none';if(!show)return;
   const table=el('catTeamTable'), sub=el('catTeamSub');
+  const roto=LEAGUE.scoringMode==='roto',details=el('catRawDetails');
+  el('catTeamTitle').textContent=roto?'Category priorities and roster reference':'My projected categories';
+  if(details.dataset.mode!==LEAGUE.scoringMode){details.open=!roto;details.dataset.mode=LEAGUE.scoringMode;}
   // Hockey keeps its punt boxes in the live-pick card; basketball has no live card
   // yet, so they sit here.
   const punts=el('catPuntControls');if(punts){if(SPORT.id==='nhl')punts.innerHTML='';else renderPuntControls(punts);}
@@ -7501,13 +7528,14 @@ function setStatus(s){el('saveStatus').textContent=s; setTimeout(()=>el('saveSta
 // Full backup, independent of the cloud KV store — includes keepers/trades/picks
 // so "Export config JSON" is a real point-in-time snapshot you can keep as a file.
 function getConfig(){return {league:CURRENT_LEAGUE_ID,PLAYERS,KEEPERS,picks,auctionPicks,curPick,
-  assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],streamConfidence:STREAM_CONFIDENCE,puntCats:[...PUNT_CATS],categoryWeights:{...CATEGORY_WEIGHT_OVERRIDES},seed:el('seedWarn').style.display};}
+  assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],streamConfidence:STREAM_CONFIDENCE,puntCats:[...PUNT_CATS],categoryWeights:{...CATEGORY_WEIGHT_OVERRIDES},rotoForecast:ROTO_FORECAST,seed:el('seedWarn').style.display};}
 function applyConfig(cfg){PLAYERS=cfg.PLAYERS;KEEPERS=cfg.KEEPERS;picks=cfg.picks||[];auctionPicks=cfg.auctionPicks||[];curPick=cfg.curPick;
   if(Array.isArray(cfg.assigned))assigned=new Set(cfg.assigned);
   if(Array.isArray(cfg.cutPlayers))cutPlayers=new Set(cfg.cutPlayers);
   if(Array.isArray(cfg.queued))queued=new Set(cfg.queued);
   pickOwnerOverride=cfg.pickOwnerOverride||{}; playerTrades=cfg.playerTrades||{};
   if(cfg.streamConfidence)STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE,...(LEAGUE.defaultStreamConfidence||{}),...cfg.streamConfidence};
+  ROTO_FORECAST=cfg.rotoForecast&&typeof cfg.rotoForecast==='object'?cfg.rotoForecast:{};
   applyCategoryPreferences(cfg.categoryWeights,cfg.puntCats||[]);if(SPORT.id!=='nfl')computeMyRanks();
   if(cfg.tendencies)OWNERS.forEach(o=>{const t=cfg.tendencies[o]; if(t)TENDENCIES[o]={enabled:!!t.enabled,bias:Object.assign({QB:0,RB:0,WR:0,TE:0},t.bias||{})};});
   if(cfg.seed==='none')el('seedWarn').style.display='none';
@@ -8977,7 +9005,7 @@ let _saveT=null;
 function saveSetup(){
   if(!canSave())return;if(_saveT)clearTimeout(_saveT);
   const leagueId=CURRENT_LEAGUE_ID;
-  const payload={assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick,myRosterNames:myRoster().map(p=>p.name),streamConfidence:STREAM_CONFIDENCE,puntCats:[...PUNT_CATS],categoryWeights:{...CATEGORY_WEIGHT_OVERRIDES},keeperDataRevision:LEAGUES[leagueId]?.keeperDataRevision,seededLiveSnapshot:!!LEAGUES[leagueId]?.initialPickNames,appliedLiveSnapshotCount:LEAGUES[leagueId]?.initialPickNames?.length||0};
+  const payload={assigned:[...assigned],cutPlayers:[...cutPlayers],pickOwnerOverride,playerTrades,tendencies:TENDENCIES,queued:[...queued],picks,auctionPicks,curPick,myRosterNames:myRoster().map(p=>p.name),streamConfidence:STREAM_CONFIDENCE,puntCats:[...PUNT_CATS],categoryWeights:{...CATEGORY_WEIGHT_OVERRIDES},rotoForecast:ROTO_FORECAST,keeperDataRevision:LEAGUES[leagueId]?.keeperDataRevision,seededLiveSnapshot:!!LEAGUES[leagueId]?.initialPickNames,appliedLiveSnapshotCount:LEAGUES[leagueId]?.initialPickNames?.length||0};
   _saveT=setTimeout(async()=>{try{
     await apiSetup('PUT',payload,leagueId);
     const s=el('setupStatus');if(s&&CURRENT_LEAGUE_ID===leagueId)s.textContent='☁ Setup saved '+new Date().toLocaleTimeString();
@@ -8995,7 +9023,8 @@ async function loadSetup(){try{
     if(canSave())await apiSetup('PUT',{assigned:[],cutPlayers:[],playerTrades:{},pickOwnerOverride:{},puntCats:[],queued:[],picks:[],auctionPicks:[],curPick:1,keeperDataRevision:revision},leagueId);
     if(el('teamsWrap'))renderTeams();return;
   }
-  if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||s.categoryWeights||s.seededLiveSnapshot||(Array.isArray(s.picks)&&s.picks.length)||(Array.isArray(s.auctionPicks)&&s.auctionPicks.length))){
+  if(s&&(s.assigned||s.cutPlayers||s.pickOwnerOverride||s.tendencies||s.categoryWeights||s.rotoForecast||s.seededLiveSnapshot||(Array.isArray(s.picks)&&s.picks.length)||(Array.isArray(s.auctionPicks)&&s.auctionPicks.length))){
+  ROTO_FORECAST=s.rotoForecast&&typeof s.rotoForecast==='object'?s.rotoForecast:{};
   if(Array.isArray(s.assigned))assigned=new Set(isNbaRotoAuction()?s.assigned.filter(k=>leagueKeeperKeys().includes(k)):s.assigned);
   if(Array.isArray(s.cutPlayers))cutPlayers=new Set(s.cutPlayers);
   if(Array.isArray(s.queued))queued=new Set(s.queued);
@@ -9135,6 +9164,7 @@ function applyLeagueProfile(id){
   assigned=new Set(); cutPlayers=new Set(); pickOwnerOverride={}; playerTrades={}; queued=new Set(); KEEPERS=[]; picks=[]; auctionPicks=[]; curPick=1;
   STREAM_CONFIDENCE={...DEFAULT_STREAM_CONFIDENCE,...(LEAGUE.defaultStreamConfidence||{})};
   PUNT_CATS=new Set();CATEGORY_WEIGHT_OVERRIDES={};
+  ROTO_FORECAST={};
 
   const w=el('seedWarn');
   if(PLAYERS_CSV && PLAYERS_CSV.indexOf('__PLAYERS')!==0 && PLAYERS_CSV.trim().length>20){

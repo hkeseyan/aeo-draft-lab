@@ -2675,6 +2675,29 @@ var worker_default = {
           return J({ error: "Yahoo leagues request failed: " + e.message }, 502);
         }
       }
+      if (path === "/api/yahoo/roto-rosters") {
+        const denied = requireAdmin();
+        if (denied) return denied;
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        try {
+          const profile = await kv.get(leagueProfileKey(lg), { type: "json" });
+          if (!profile) return J({ error: "Draft Lab league profile not found." }, 404);
+          if (profile.scoringMode !== "roto") return J({ error: "Choose a rotisserie league." }, 400);
+          if (profile.platform !== "yahoo") return J({ error: "This league is not connected through Yahoo." }, 400);
+          const token = await getYahooAccessToken(env, kv, url);
+          if (!token) return J({ error: "Yahoo account not connected." }, 401);
+          const key = await resolveYahooLeagueKey(token, profile);
+          if (!/^\d+\.l\.\d+$/.test(key)) return J({ error: "invalid Yahoo league key" }, 400);
+          const raw = await yahooJson(token, `league/${key}/teams`);
+          const meta = collectYahooEntities(raw, "team").filter(t => new RegExp('^'+key.replaceAll('.', '\\.')+'\\.t\\.\\d+$').test(t.team_key||''));
+          if (!meta.length || meta.length > 30) throw Error("Yahoo did not return a complete supported team list.");
+          const teams = await Promise.all(meta.map(async t => ({
+            id:t.team_key, name:t.name||t.team_key, mine:String(t.is_owned_by_current_login||'')==='1',
+            players:yahooPlayerRows(await yahooJson(token, `team/${t.team_key}/roster`), '', profile.sport)
+          })));
+          return J({key,source:'Yahoo current rosters',fetchedAt:new Date().toISOString(),teams});
+        } catch (e) { return J({ error: "Yahoo roster request failed: " + e.message }, 502); }
+      }
       if (path === "/api/yahoo/draft-results") {
         const denied = requireAdmin();
         if (denied) return denied;

@@ -12,6 +12,14 @@ incomplete, not final.
 
 ## Sports
 
+### Roto projected standings (2026-10-31)
+
+Every existing NBA/NHL rotisserie page now has a full-season capacity forecast with category standings points, counted GP, rostered bench replacement GP and unfilled position capacity. Position-legal matching selects the primary lineup; bench players share one GP budget across eligible positions and fill only the configured fraction of uncovered capacity (daily default 75%, weekly 50%). No free agents are invented. Percentages/ratios pool their proper exposure, ties split roto points, and lower-is-better categories reverse direction. All actual scoring categories count equally regardless of personal punts or TO draft weights. Empty groups remain unknown.
+
+Use draft/mock rosters or load a separate, timestamped current Yahoo roster snapshot through the existing connection. This never replaces draft purchases or keepers. Missing projections and incomplete rosters are labeled. Expand player games to inspect each team's allocated starts, adjust projected GP while retaining per-game rates, or compare a bounded legal block of starts between two rostered players and see category/roto-point changes. Source/snapshot, coverage and GP assumptions persist privately per league and in configs/mocks. The former uncapped roster totals remain a collapsed reference for roto leagues.
+
+This is not yet banked actuals plus remaining-season projections or a daily schedule simulation; it cannot identify a reliable calendar switch date. Current injury projection dates remain visible. Exact cap pacing, dated injury scenarios, weekly lock handling and notifications remain future work. Unrostered replacement archetypes are designed but deferred. The category-driven core also supports future sports once their projection/league adapters exist; no new MLB product is claimed. See `docs/ROTO_FORECAST.md` for math, limitations and the archetype design.
+
 ### Game of Zones keeper auction (2026-10-27)
 
 NBA category draft pages offer per-category priority dropdowns: 0, 0.25, 0.5, 0.75, 1, 1.5 and 2. Defaults are 1 except TO at 0.25; zero is a hard punt. Draft-specific overrides are saved in setup and config/mock snapshots, reset on league switches, and immediately update personal category values, ranks, tiers and bids. Opponent market weights retain default category priorities. These preferences never alter the league's scoring or projected raw category totals. All nine signed contributions follow the same z-score weighting; FT receives no additional special markdown.
