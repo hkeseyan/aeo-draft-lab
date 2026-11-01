@@ -985,9 +985,9 @@ ok &= check('excluded injury cannot create a claim ticket', () => {const row=[..
 // budget conservation checks live in game-of-zones.test.mjs.
 ev('switchLeague("game-of-zones-2026")');
 await new Promise(r=>setTimeout(r,350));
-ok &= check('Game of Zones final categories and roster',()=>ev('[LEAGUE.teams,LEAGUE.auctionBudget,LEAGUE.rosterSize,LEAGUE.irSlots,Object.values(LEAGUE.starters).reduce((a,b)=>a+b,0),LEAGUE.categoryWeights.TO].join(",")'),'6,200,20,2,11,0.25');
+ok &= check('Game of Zones final categories and roster',()=>ev('[LEAGUE.teams,LEAGUE.auctionBudget,LEAGUE.rosterSize,LEAGUE.irSlots,Object.values(LEAGUE.starters).reduce((a,b)=>a+b,0),LEAGUE.categoryWeights.TO].join(",")'),'6,200,18,2,10,0.25');
 ok &= check('all 61 final keepers resolve','KEEPERS.length===61&&KEEPERS.every(k=>!!findPlayer(k.name))',true);
-ok &= check('all six final budgets',()=>ev('OWNERS.map(o=>{const s=auctionTeamState(OWNER_SLOT[o]);return [s.used,s.keeperSpend,s.left,s.open,s.maxBid].join("/")}).join(";")'),'8/101/99/12/88;11/141/59/9/51;8/152/48/12/37;14/130/70/6/65;7/92/108/13/96;13/143/57/7/51');
+ok &= check('all six final budgets',()=>ev('OWNERS.map(o=>{const s=auctionTeamState(OWNER_SLOT[o]);return [s.used,s.keeperSpend,s.left,s.open,s.maxBid].join("/")}).join(";")'),'8/101/99/10/90;11/141/59/7/53;8/152/48/10/39;14/130/70/4/67;7/92/108/11/98;13/143/57/5/53');
 ok &= check('Cade ranks above Giannis with FT fully counted','findPlayer("Cade Cunningham").categoryValue>findPlayer("Giannis Antetokounmpo").categoryValue&&nbaCatWeight("FT%")===1',true);
 ok &= check('no errors in NBA auction',()=>errors.slice(0,3).join(' | '),'');
 

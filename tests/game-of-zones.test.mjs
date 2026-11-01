@@ -27,7 +27,12 @@ await new Promise(r=>setTimeout(r,50));
 assert.equal(ev('KEEPERS.length'),61);
 assert.equal(ev('leagueKeeperKeys().length'),61);
 assert.equal(ev('auctionTeamState(mySlot).left'),99);
-assert.equal(ev('auctionTeamState(mySlot).open'),12);
+assert.equal(ev('auctionTeamState(mySlot).open'),10);
+assert.equal(ev('LEAGUE.rosterSize'),18);
+assert.equal(ev('Object.values(LEAGUE.starters).reduce((a,b)=>a+b,0)'),10);
+assert.equal(ev('LEAGUE.starters.C'),1);
+assert.equal(ev('LEAGUE.irSlots'),2);
+assert.ok(w.document.querySelector('#keeperScenarioCard').textContent.includes('10 starters / 8 bench'));
 assert.equal(ev('findPlayer("Trey Murphy III").drafted'),true);
 assert.equal(ev('findPlayer("Scottie Barnes").drafted'),false);
 assert.equal(ev('nbaCatWeight("TO")'),.25);
@@ -35,7 +40,7 @@ assert.equal(ev('nbaCatWeight("FT%")'),1);
 assert.ok(ev('findPlayer("Cade Cunningham").categoryValue>findPlayer("Giannis Antetokounmpo").categoryValue'));
 assert.ok(ev('auctionTargetValues().get(findPlayer("Cade Cunningham").id)>auctionTargetValues().get(findPlayer("Giannis Antetokounmpo").id)'));
 for(const kind of ['auctionMarketValues()','auctionTargetValues()']){
-  assert.equal(ev(`${kind}.size`),59);
+  assert.equal(ev(`${kind}.size`),47);
   assert.equal(ev(`[...${kind}.values()].reduce((a,v)=>a+v,0)`),441);
 }
 assert.equal(w.document.querySelectorAll('#auctionPoolTable tbody tr').length,ev('available().filter(auctionEligible).length'));
@@ -106,6 +111,9 @@ assert.equal(profile.mySlot,3);
 assert.equal(profile.scoringMode,'roto');
 assert.equal(profile.categoryWeights.TO,.25);
 assert.equal(profile.leagueKeepers.length,61);
+assert.equal(profile.rosterSize,18);
+assert.equal(profile.rounds,18);
+assert.equal(profile.rosterSettingsRevision,def.rosterSettingsRevision);
 assert.ok(puts.some(p=>p.id==='fixture-existing-goz'&&p.leagueKeepers.length===61));
 assert.ok(!puts.some(p=>p.id==='game-of-zones-2026'));
 w.__migrated=migrated;ev('LEAGUES=window.__migrated;delete window.__migrated;');
@@ -125,7 +133,7 @@ assert.equal(setups.get('fixture-existing-goz').keeperDataRevision,def.keeperDat
 ev('el("auctionPlayerInput").value="Cade Cunningham";el("auctionWinner").value=ME_OWNER;el("auctionPrice").value=30;recordAuctionSale()');
 assert.equal(ev('auctionPicks.length'),1);
 assert.equal(ev('auctionTeamState(mySlot).left'),69);
-assert.equal(ev('auctionTargetValues().size'),58);
+assert.equal(ev('auctionTargetValues().size'),46);
 assert.equal(ev('[...auctionTargetValues().values()].reduce((a,v)=>a+v,0)'),411);
 assert.ok(!w.document.querySelector('#auctionPoolTable tbody').textContent.includes('Cade Cunningham'));
 await new Promise(r=>setTimeout(r,700));
@@ -152,8 +160,24 @@ assert.equal(reviewed['fixture-existing-goz'].keeperDataRevision,def.keeperDataR
 assert.equal(reviewed['fixture-existing-goz'].auctionModelRevision,ev('NBA_ROTO_REVIEW.revision'));
 await ev('loadSetup()');
 assert.equal(ev('auctionPicks.length'),1);
+// Correct an already-current 20-player cloud profile once, without replacing
+// its custom projections/priorities or touching the saved auction purchases.
+cloud=[{...reviewed['fixture-existing-goz'],rosterSettingsRevision:null,rounds:20,rosterSize:20,starters:{G:3,F:3,C:2,UTIL:3},categoryWeights:{TO:.25,REB:1.5},poolDataRevision:'custom-projection-snapshot',customNote:'preserve me',assumptions:[...def.assumptions,'My custom league note']}];
+const beforeRosterSetup=JSON.stringify(setups.get('fixture-existing-goz'));
+const corrected=await ev('fetchCloudLeagues()');
+assert.equal(corrected['fixture-existing-goz'].rosterSize,18);
+assert.equal(corrected['fixture-existing-goz'].starters.C,1);
+assert.equal(corrected['fixture-existing-goz'].keeperDataRevision,def.keeperDataRevision);
+assert.equal(corrected['fixture-existing-goz'].poolDataRevision,'custom-projection-snapshot');
+assert.equal(corrected['fixture-existing-goz'].categoryWeights.REB,1.5);
+assert.equal(corrected['fixture-existing-goz'].customNote,'preserve me');
+assert.ok(corrected['fixture-existing-goz'].assumptions.includes('My custom league note'));
+assert.equal(JSON.stringify(setups.get('fixture-existing-goz')),beforeRosterSetup);
+cloud=Object.values(corrected);puts.length=0;
+await ev('fetchCloudLeagues()');
+assert.equal(puts.length,0,'roster migration must be one-time');
 assert.ok(ev(`(()=>{const t=auctionTargetValues(),m=auctionMarketValues();return available().every(p=>{const b=nbaAuctionBidGuide(p,t,m);return b.target<=b.stretch&&b.stretch<=auctionTeamState(mySlot).maxBid})})()`));
-assert.ok(ev(`(()=>{for(let i=0;i<58;i++){if(!simAuctionSale()||OWNERS.some(o=>!auctionTeamState(OWNER_SLOT[o]).valid))return false;}return auctionPicks.length===59&&OWNERS.every(o=>auctionTeamState(OWNER_SLOT[o]).used===20)&&!simAuctionSale()})()`));
+assert.ok(ev(`(()=>{for(let i=0;i<46;i++){if(!simAuctionSale()||OWNERS.some(o=>!auctionTeamState(OWNER_SLOT[o]).valid))return false;}return auctionPicks.length===47&&OWNERS.every(o=>auctionTeamState(OWNER_SLOT[o]).used===18)&&!simAuctionSale()})()`));
 assert.deepEqual(errors,[]);
 dom.window.close();
 console.log('Game of Zones: final keepers, existing-league migration, category tiers, exact budgets, persistence and complete auction passed.');
