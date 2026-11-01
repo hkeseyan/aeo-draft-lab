@@ -51,6 +51,8 @@ NBA-specific and names the exact code that has to change.
 
 ### In-season roto management — requirements captured October 31, 2026
 
+**First forecast shipped separately:** `docs/ROTO_FORECAST.md` describes the cross-sport full-season capacity standings table, rostered bench coverage, GP assumptions and lineup-swap comparison. It can use a separate current Yahoo roster snapshot without replacing mocks. Actual cap counters, banked actuals, remaining calendars and dated switch windows below are still the next phase; do not treat the capacity estimate as that completed in-season system. Hypothetical unrostered archetypes are designed and deferred there.
+
 **Status: planned; no injury-monitoring or mobile notification service is enabled by this note.** This builds on the existing normalized league snapshot rather than treating auction results or saved mock rosters as current ownership. Game of Zones is confirmed at six teams, $200, 10 starters (3 G / 3 F / 1 C / 3 Util), eight bench and two IL, with Yahoo's 82-game cap. The extra C and bench were not added before the draft. The league prefers leaving useful players available on waivers to increasing bench hoarding and lineup/cap-management work.
 
 The user's objective is a controlled finish near the games cap with a competitive all-category roster. Favor waiver improvements in rebounds, blocks and FG%, while protecting FT%, threes and assists. Current-season contention comes first; ascending-player keeper value is a modest tiebreaker rather than a reason to accumulate noncontributors. Defaults remain weight 1 for eight categories and 0.25 for TO in personal valuations; actual standings still count all nine categories equally.

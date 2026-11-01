@@ -3,7 +3,7 @@ import worker from '../worker.js';
 
 const kv = {
   async get(key, options) {
-    if (key === 'league:fixture-goz') return {id:'fixture-goz',sport:'nba',name:'Game of Zones',yahooLeagueKey:'466.l.777'};
+    if (key === 'league:fixture-goz') return {id:'fixture-goz',sport:'nba',platform:'yahoo',scoringMode:'roto',name:'Game of Zones',yahooLeagueKey:'466.l.777'};
     if (key !== 'yahooAuth:default') return null;
     const value = { access_token: 'test-token', expires_at: Date.now() + 600000 };
     return options?.type === 'json' ? value : JSON.stringify(value);
@@ -13,6 +13,7 @@ const oldFetch = globalThis.fetch;
 const seen = [];
 globalThis.fetch = async input => {
   const url = String(input); seen.push(url);
+  if (url.includes('/team/466.l.777.t.1/roster')) return new Response(JSON.stringify({fantasy_content:{team:[{team_key:'466.l.777.t.1'},{roster:{players:{count:1,0:{player:[[{player_key:'466.p.1'},{name:{full:'Anthony Davis'}},{display_position:'PF/C'},{eligible_positions:[{position:'F'},{position:'C'},{position:'Util'}]},{selected_position:[{position:'IL'}]},{status:'O'}]]}}}}]}}));
   if (url.includes('/league/466.l.777/draftresults')) return new Response(JSON.stringify({fantasy_content:{league:[{league_key:'466.l.777'},{draft_results:{count:2,0:{draft_result:{pick:1,round:1,team_key:'466.l.777.t.1',player_key:'466.p.1',cost:'37',is_keeper:'0'}},1:{draft_result:{pick:2,round:1,team_key:'466.l.777.t.1',player_key:'466.p.2',is_keeper:'1'}}}}]}}));
   if (url.includes('/league/466.l.777/teams')) return new Response(JSON.stringify({fantasy_content:{league:[{teams:{count:1,0:{team:[[{team_key:'466.l.777.t.1'},{name:'Ball Don’t Lie'},{is_owned_by_current_login:1}]]}}}]}}));
   if (url.includes('/players;player_keys=466.p.1,466.p.2')) return new Response(JSON.stringify({fantasy_content:{players:{count:2,0:{player:[[{player_key:'466.p.1'},{name:{full:'Anthony Davis'}}]]},1:{player:[[{player_key:'466.p.2'},{name:{full:'Nikola Jokić'}}]]}}}}));
@@ -77,6 +78,15 @@ try {
   assert.equal(res.status,200);assert.equal((await res.json()).results[0].cost,37,'resolve the saved connected profile without a pasted Yahoo key');
   res=await worker.fetch(new Request('https://draft.test/api/yahoo/draft-results?key=bad'),{MOCKS:kv},{});assert.equal(res.status,400);
   res=await worker.fetch(new Request('https://draft.test/api/yahoo/draft-results?key=466.l.777'),{MOCKS:kv,GOOGLE_CLIENT_ID:'test',GOOGLE_CLIENT_SECRET:'test'},{});assert.equal(res.status,401);
+  res=await worker.fetch(new Request('https://draft.test/api/yahoo/roto-rosters?league=fixture-goz'),{MOCKS:kv},{});
+  assert.equal(res.status,200);
+  const rosters=await res.json();assert.equal(rosters.teams.length,1);
+  assert.equal(rosters.teams[0].id,'466.l.777.t.1');assert.equal(rosters.teams[0].mine,true);
+  assert.equal(rosters.teams[0].players[0].pos,'F/C/Util');assert.equal(rosters.teams[0].players[0].roster_slot,'IL');
+  assert.equal(rosters.teams[0].players[0].name,'Anthony Davis');
+  assert.ok(rosters.fetchedAt);
+  res=await worker.fetch(new Request('https://draft.test/api/yahoo/roto-rosters?league=fixture-goz',{method:'POST'}),{MOCKS:kv},{});assert.equal(res.status,405);
+  res=await worker.fetch(new Request('https://draft.test/api/yahoo/roto-rosters?league=fixture-goz'),{MOCKS:kv,GOOGLE_CLIENT_ID:'test',GOOGLE_CLIENT_SECRET:'test'},{});assert.equal(res.status,401);
   console.log('Yahoo NHL/NBA league and settings tests passed');
 } finally {
   globalThis.fetch = oldFetch;
