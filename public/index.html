@@ -183,17 +183,19 @@
   .ranker-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .ranker-controls label{display:grid;gap:3px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.35px}
   .ranker-duel{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
-  .ranker-player{min-height:215px;text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:16px;color:var(--ink);padding:18px;cursor:pointer;touch-action:pan-y;display:flex;flex-direction:column;justify-content:space-between}
+  .ranker-player{min-height:215px;text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:16px;color:var(--ink);padding:18px 96px 18px 18px;cursor:pointer;touch-action:pan-y;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden;transition:transform .16s ease,background .16s ease,border-color .16s ease}
   .ranker-player:hover,.ranker-player:focus{border-color:var(--accent);outline:none;background:#203050}
+  .ranker-player.dragging{transition:none}
   .ranker-player .ranker-name{font-size:24px;line-height:1.05;font-weight:750;letter-spacing:-.5px}
   .ranker-player .ranker-meta{font-size:13px;color:var(--muted)}
   .ranker-player .ranker-choose{font-size:12px;color:#a8c7ff;font-weight:700}
+  .ranker-headshot{position:absolute;right:12px;top:14px;width:70px;height:70px;object-fit:cover;object-position:top;border-radius:50%;border:2px solid var(--line);background:var(--bg)}
   .ranker-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .ranker-actions button{min-height:54px;font-size:14px}
   .ranker-board{margin-top:12px}
   @media(max-width:560px){
     header{padding:10px 12px;gap:8px} header h1{width:100%} nav{margin-left:0;overflow:auto;max-width:100%;padding-bottom:2px;flex-wrap:nowrap} nav button{white-space:nowrap;padding:7px 10px}
-    main{padding:12px}.ranker-player{min-height:245px;padding:16px}.ranker-player .ranker-name{font-size:22px}.ranker-duel{gap:8px}.ranker-actions{gap:8px}
+    main{padding:12px}.ranker-player{min-height:245px;padding:16px 78px 16px 16px}.ranker-headshot{width:56px;height:56px;right:10px;top:12px}.ranker-player .ranker-name{font-size:22px}.ranker-duel{gap:8px}.ranker-actions{gap:8px}
   }
 </style>
 </head>
@@ -275,16 +277,16 @@
         <p class="small muted">Pick the player you would rather have. Every answer is saved with its scenario; the MVP board combines all choices into one personal ranking.</p>
         <div class="ranker-controls">
           <label>Decision
-            <select id="rankerDecision"><option value="overall">Overall value</option><option value="trade">Trade value</option><option value="start_sit">Start / sit</option><option value="waiver">Waiver decision</option><option value="draft">Draft decision</option></select>
+            <select id="rankerDecision"><option value="overall">⭐ Overall value</option><option value="trade">🔁 Trade value</option><option value="start_sit">🏈 Start / sit</option><option value="waiver">🧲 Waiver decision</option><option value="draft">📝 Draft decision</option></select>
           </label>
           <label>Timeframe
-            <select id="rankerTimeframe"><option value="season">This season</option><option value="week">This week</option><option value="long_term">Long term</option></select>
+            <select id="rankerTimeframe"><option value="season">📅 This season</option><option value="week">⚡ This week</option><option value="long_term">🌱 Long term</option></select>
           </label>
           <label>Team window
-            <select id="rankerWindow"><option value="neutral">Neutral</option><option value="competing">Competing</option><option value="rebuilding">Rebuilding</option></select>
+            <select id="rankerWindow"><option value="neutral">⚖️ Neutral</option><option value="competing">🏆 Competing</option><option value="rebuilding">🌱 Rebuilding</option></select>
           </label>
           <label>Format
-            <select id="rankerFormat"><option value="generic">Generic</option><option value="redraft">Redraft</option><option value="dynasty">Dynasty</option><option value="keeper">Keeper</option><option value="guillotine">Guillotine</option><option value="best_ball">Best ball</option></select>
+            <select id="rankerFormat"><option value="generic">🏈 Generic</option><option value="redraft">📆 Redraft</option><option value="dynasty">🏰 Dynasty</option><option value="keeper">🔒 Keeper</option><option value="guillotine">⚔️ Guillotine</option><option value="best_ball">🎯 Best ball</option></select>
           </label>
         </div>
         <div class="ranker-duel" aria-live="polite">
@@ -292,8 +294,8 @@
           <button class="ranker-player" id="rankerRight" type="button"></button>
         </div>
         <div class="ranker-actions">
-          <button class="btn" id="rankerChooseLeft" type="button">Choose left</button>
-          <button class="btn" id="rankerChooseRight" type="button">Choose right</button>
+          <button class="btn" id="rankerChooseLeft" type="button">← Choose left</button>
+          <button class="btn" id="rankerChooseRight" type="button">Choose right →</button>
         </div>
         <div class="row" style="margin-top:10px"><button class="btn ghost" id="rankerSkip" type="button">Skip matchup</button><span class="small muted" id="rankerStatus">Loading your NFL ranker…</span></div>
       </div>
@@ -8739,10 +8741,11 @@ function nextRankerMatchup(){
 function renderRankerCard(id,p,label){
   const card=el(id);if(!card)return;card.innerHTML='';
   if(!p){card.disabled=true;card.textContent='No NFL players available.';return;}
-  card.disabled=false;
+  card.disabled=false;card.dataset.side=label;card.setAttribute('aria-label',`Choose ${p.name}`);
+  if(p.sleeperId){const portrait=document.createElement('img');portrait.className='ranker-headshot';portrait.src=`https://sleepercdn.com/content/nfl/players/${p.sleeperId}.jpg`;portrait.alt=`${p.name} headshot`;portrait.onerror=()=>portrait.style.display='none';card.appendChild(portrait);}
   const meta=document.createElement('span');meta.className='ranker-meta';meta.textContent=[p.pos,p.team].filter(Boolean).join(' · ');
   const name=document.createElement('span');name.className='ranker-name';name.textContent=p.name;
-  const choose=document.createElement('span');choose.className='ranker-choose';choose.textContent=`Tap or swipe to choose ${label}`;
+  const choose=document.createElement('span');choose.className='ranker-choose';choose.textContent=label==='left'?'Swipe ← or tap to choose':'Swipe → or tap to choose';
   card.append(meta,name,choose);
 }
 function renderRanker(){
@@ -8785,11 +8788,12 @@ async function undoRanker(){
 function wireRanker(){
   const left=el('rankerLeft'),right=el('rankerRight');if(!left||!right)return;
   el('rankerChooseLeft').onclick=()=>rankerChoose('left');el('rankerChooseRight').onclick=()=>rankerChoose('right');
-  const tap=(card,side)=>{if(card.dataset.swiped==='1'){card.dataset.swiped='';return;}rankerChoose(side);};
+  const tap=(card,side)=>{if(card.dataset.swiped==='1'||card.dataset.suppressClick==='1'){card.dataset.swiped='';card.dataset.suppressClick='';return;}rankerChoose(side);};
   left.onclick=()=>tap(left,'left');right.onclick=()=>tap(right,'right');el('rankerSkip').onclick=()=>{RANKER_MATCHUP=null;nextRankerMatchup();renderRanker();};el('rankerUndo').onclick=undoRanker;
-  // A deliberate horizontal swipe is the same binary action as tapping a card;
-  // vertical movement remains available for ordinary mobile scrolling.
-  [[left,'left'],[right,'right']].forEach(([card,side])=>{let start=null;card.addEventListener('pointerdown',e=>{start={x:e.clientX,y:e.clientY};});card.addEventListener('pointerup',e=>{if(start&&Math.abs(e.clientX-start.x)>58&&Math.abs(e.clientY-start.y)<45){card.dataset.swiped='1';rankerChoose(side);}start=null;});card.addEventListener('pointercancel',()=>{start=null;});});
+  // Outward swipes are intentional selection gestures: left card to the left,
+  // right card to the right. Pointer events cover touch, pen, and mouse on
+  // current mobile browsers while preserving vertical-page scrolling.
+  [[left,'left',-1],[right,'right',1]].forEach(([card,side,direction])=>{let start=null;const reset=()=>{card.classList.remove('dragging');card.style.removeProperty('transform');start=null;};card.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;start={x:e.clientX,y:e.clientY,id:e.pointerId};card.dataset.suppressClick='';card.classList.add('dragging');if(card.setPointerCapture)card.setPointerCapture(e.pointerId);});card.addEventListener('pointermove',e=>{if(!start||e.pointerId!==start.id)return;const dx=e.clientX-start.x,dy=e.clientY-start.y;if(Math.abs(dx)>Math.abs(dy))card.style.transform=`translateX(${Math.max(-88,Math.min(88,dx))}px) rotate(${dx/24}deg)`;});card.addEventListener('pointerup',e=>{if(!start||e.pointerId!==start.id)return;const dx=e.clientX-start.x,dy=e.clientY-start.y;if(Math.abs(dx)>14)card.dataset.suppressClick='1';const chosen=dx*direction>=64&&Math.abs(dy)<70;reset();if(chosen){card.dataset.swiped='1';rankerChoose(side);}});card.addEventListener('pointercancel',reset);});
 }
 function applyRankerVisibility(){ renderAppNavigation(); }
 
