@@ -986,6 +986,8 @@ ok &= check('radar tab hidden for football', () => w.document.querySelector('nav
 ok &= check('player ranker is available for NFL', () => w.document.querySelector('nav button[data-view="ranker"]').dataset.available, 'true');
 await ev('loadRanker()');
 ok &= check('ranker renders a binary matchup', () => w.document.getElementById('rankerLeft').textContent && w.document.getElementById('rankerRight').textContent, v => !!v);
+ok &= check('ranker displays available player headshots', () => w.document.querySelectorAll('.ranker-headshot').length, v => v > 0);
+ok &= check('ranker labels contexts with quick visual cues', () => [...w.document.getElementById('rankerDecision').options].map(x=>x.textContent).join('|'), v => v.includes('⭐') && v.includes('🔁'));
 w.document.getElementById('rankerDecision').value = 'trade';
 w.document.getElementById('rankerTimeframe').value = 'long_term';
 w.document.getElementById('rankerWindow').value = 'rebuilding';
