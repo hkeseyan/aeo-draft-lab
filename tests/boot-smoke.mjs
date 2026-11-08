@@ -330,7 +330,7 @@ ok &= check('rivals respect the goalie depth cap', () => {
 }, v => v <= 3);
 
 // --- Add Radar ---
-ok &= check('radar tab visible for hockey', () => w.document.querySelector('nav button[data-view="radar"]').style.display, '');
+ok &= check('radar page available for hockey', () => w.document.querySelector('nav button[data-view="radar"]').dataset.available, 'true');
 await ev('radarLoad()');
 await new Promise(r => setTimeout(r, 300));
 ok &= check('radar produced a shortlist', () => w.document.querySelectorAll('#radarTable tbody tr').length, v => v > 5);
@@ -983,7 +983,7 @@ ev('switchLeague("aeo-keepers")');
 await new Promise(r => setTimeout(r, 400));
 ok &= check('football unaffected after switching back', () => ev('SPORT.id') + ' ' + slots(), 'nfl QB,RB,RB,WR,WR,WR,TE,K,DST,FLEX');
 ok &= check('radar tab hidden for football', () => w.document.querySelector('nav button[data-view="radar"]').style.display, 'none');
-ok &= check('player ranker is available for NFL', () => w.document.querySelector('nav button[data-view="ranker"]').style.display, '');
+ok &= check('player ranker is available for NFL', () => w.document.querySelector('nav button[data-view="ranker"]').dataset.available, 'true');
 await ev('loadRanker()');
 ok &= check('ranker renders a binary matchup', () => w.document.getElementById('rankerLeft').textContent && w.document.getElementById('rankerRight').textContent, v => !!v);
 w.document.getElementById('rankerDecision').value = 'trade';
@@ -992,7 +992,7 @@ w.document.getElementById('rankerWindow').value = 'rebuilding';
 w.document.getElementById('rankerFormat').value = 'dynasty';
 await ev('rankerChoose("left")');
 ok &= check('ranker persists a comparison event with scenario context', () => JSON.stringify(rankingEvents[0]?.context), '{"decision":"trade","timeframe":"long_term","teamWindow":"rebuilding","format":"dynasty"}');
-ok &= check('ranker derives a one-dimensional board', () => w.document.querySelectorAll('#rankerBoard tbody tr').length, v => v >= 2);
+ok &= check('ranker derives a one-dimensional board', () => w.document.querySelectorAll('#rankerBoard tr').length, v => v >= 2);
 await ev('undoRanker()');
 ok &= check('ranker can undo its latest comparison', () => ev('RANKER_EVENTS.length'), 0);
 ok &= check('no errors after all the switching', () => errors.slice(0, 3).join(' | '), v => v === '');

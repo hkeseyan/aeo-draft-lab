@@ -10,6 +10,12 @@ features not yet reflected here — the user will bring those notes over from
 another device and they need to be merged in. Until then, treat this doc as
 incomplete, not final.
 
+## Management areas and navigation (2026-11-07)
+
+Navigation has four top-level areas with contextual pages underneath: **In-season** (Waiver Lab, Trade Lab, Roto standings, H2H matchups, applicable Add Radar); **Draft** (Draft Room, Teams & Keepers, Draft Trades, Mocks, Strategy Lab); **Commissioner** (Leagues, Members & dues, Data); **Tools** (Overview and the existing NFL Player Ranker). Trade Lab and H2H calculations are marked planned. Draft Trades remains the keeper/draft roster/pick editing tool; it is distinct from in-season trade analysis. Tools Overview provides explicit access to the NFL ranker while its additional-sport/community evolution remains future work.
+
+Roto projected standings now occupies its own In-season page, outside Draft Room, with the existing saved roster/GP/coverage state and an expandable category-priority control. Fresh signed-in visits start in In-season (Roto for roto leagues, Waiver Lab otherwise); guests keep Draft Room only. The browser remembers the selected area and per-league pages, retains the current area across league changes and chooses an applicable fallback there. League/page links and back/forward navigation are supported. Existing admin-only pages and removal of private guest DOM are preserved. Navigation changes never rewrite fantasy or projection state. See `docs/NAVIGATION.md`.
+
 ## Sports
 
 ### Roto projected standings (2026-10-31)

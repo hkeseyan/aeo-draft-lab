@@ -48,6 +48,7 @@ function rotoForecastModel(){
 function renderRotoForecast(){
   const card=el('rotoForecastCard');if(!card)return;
   card.style.display=rotoForecastEnabled()?'':'none';if(!rotoForecastEnabled()||typeof RotoForecast==='undefined')return;
+  const priorities=el('rotoPuntControls');if(priorities)renderPuntControls(priorities);
   const model=rotoForecastModel();ROTO_LAST_MODEL=model;
   const esc=faabEsc,fmt=v=>Number.isFinite(v)?v.toFixed(1):'—';
   const source=el('rotoRosterSource');source.value=model.snapshot?'yahoo':'draft';
