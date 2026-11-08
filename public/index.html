@@ -26,9 +26,18 @@
   header h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
   .tag{font-size:11px;color:var(--muted);border:1px solid var(--line);padding:2px 8px;border-radius:20px}
   .seedwarn{background:rgba(245,158,11,.12);border:1px solid var(--warn);color:#ffd98a;padding:6px 12px;border-radius:8px;font-size:12px}
-  nav{display:flex;gap:4px;margin-left:auto}
+  nav{display:flex;gap:4px}
   nav button{background:transparent;border:1px solid transparent;color:var(--muted);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
   nav button.active{background:var(--panel2);color:var(--ink);border-color:var(--line)}
+  .app-navigation{flex:1 0 100%;min-width:0;display:grid;gap:8px}
+  .app-navigation nav{overflow-x:auto;max-width:100%;padding:2px 0;scrollbar-width:thin}
+  .app-navigation button{flex-shrink:0;white-space:nowrap}
+  #workspaceNav{gap:8px;border-bottom:1px solid var(--line);padding-bottom:9px}
+  #workspaceNav button{font-size:14px;padding:8px 15px}
+  #workspaceNav button.active{color:#fff;background:#263e69;border-color:var(--accent)}
+  .app-navigation button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .nav-planned{font-size:10px;font-weight:400;opacity:.75;margin-left:3px}
+  @media(max-width:760px){.app-navigation{width:calc(100vw - 36px)}.app-navigation button{padding:7px 10px}#workspaceNav button{padding:8px 11px}}
   main{padding:16px 18px;max-width:1620px;margin:0 auto}
   .view{display:none} .view.active{display:block}
   .grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:16px}
@@ -196,22 +205,68 @@
   <span class="tag" id="leagueTag1">12-team · Half-PPR · Snake · Slot 6</span>
   <span class="tag" id="leagueTag2">Draft Sep 8 · Keepers Sep 1</span>
   <span class="seedwarn" id="seedWarn">⚠ Baseline ranking (SEED) — replace with FantasyPros/Yahoo ADP in the Data tab</span>
-  <nav>
-    <button data-view="room" class="active">Draft Room</button>
-    <button data-view="ranker">Player Ranker</button>
-    <button data-view="inseason">Waiver Lab</button>
-    <button data-view="teams">Teams & Keepers</button>
-    <button data-view="trades">Trades</button>
-    <button data-view="mocks">Mocks</button>
-    <button data-view="radar">Add Radar</button>
-    <button data-view="lab">Strategy Lab</button>
-    <button data-view="data">Data</button>
-    <button data-view="leagues">Leagues</button>
-    <button data-view="commish">Commish</button>
-  </nav>
   <div class="acct" id="acctBox"></div>
+  <div class="app-navigation">
+    <nav id="workspaceNav" aria-label="Management areas">
+      <button type="button" data-area="inseason">In-season</button>
+      <button type="button" data-area="draft">Draft</button>
+      <button type="button" data-area="commissioner">Commissioner</button>
+      <button type="button" data-area="tools">Tools</button>
+    </nav>
+    <nav id="pageNav" aria-label="In-season pages">
+      <button type="button" data-view="inseason">Waiver Lab</button>
+      <button type="button" data-view="season-trades">Trade Lab <span class="nav-planned">Planned</span></button>
+      <button type="button" data-view="roto">Roto standings</button>
+      <button type="button" data-view="h2h">H2H matchups <span class="nav-planned">Planned</span></button>
+      <button type="button" data-view="radar">Add Radar</button>
+      <button type="button" data-view="room">Draft Room</button>
+      <button type="button" data-view="teams">Teams &amp; Keepers</button>
+      <button type="button" data-view="trades">Draft Trades</button>
+      <button type="button" data-view="mocks">Mocks</button>
+      <button type="button" data-view="lab">Strategy Lab</button>
+      <button type="button" data-view="leagues">Leagues</button>
+      <button type="button" data-view="commish">Members &amp; dues</button>
+      <button type="button" data-view="data">Data</button>
+      <button type="button" data-view="tools-home">Overview</button>
+      <button type="button" data-view="ranker">Player Ranker</button>
+    </nav>
+  </div>
 </header>
 <main>
+  <!-- IN-SEASON PAGES -->
+  <section class="view" id="view-roto" aria-label="Roto projected standings">
+    <div class="card" id="rotoForecastCard" style="display:none">
+      <h2>Projected roto standings</h2>
+      <details class="small" style="margin-bottom:12px"><summary>Lineup category priorities</summary><div id="rotoPuntControls" class="row small muted" style="margin:8px 0"></div><span class="muted">Priorities affect the lineup plan; all actual scoring categories still count.</span></details>
+      <div class="row small" style="margin-bottom:8px;flex-wrap:wrap">
+        <label>Roster source <select id="rotoRosterSource"><option value="draft">Draft / mock rosters</option><option value="yahoo" disabled>Yahoo roster snapshot</option></select></label>
+        <button class="btn ghost small" id="rotoYahooSync">Load current Yahoo rosters</button>
+        <label>Bench coverage <select id="rotoBenchCoverage"><option value="0">0%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1">100%</option></select></label>
+      </div>
+      <p id="rotoForecastStatus" class="small muted"></p>
+      <div class="scroll"><table class="cat-team-table" id="rotoStandingsTable"></table></div>
+      <details style="margin-top:10px"><summary>Player games and lineup scenarios</summary>
+        <div class="row small" style="margin:8px 0"><label>Team <select id="rotoPlanTeam"></select></label><button class="btn ghost small" id="rotoResetGames">Reset GP assumptions</button></div>
+        <p class="small muted" id="rotoPositionUsage"></p>
+        <div class="scroll"><table class="cat-team-table" id="rotoPlayerGames"></table></div>
+        <p class="small muted">Projected GP is availability; counted GP is the portion this lineup can use. Edit GP to test an injury scenario while keeping per-game production fixed.</p>
+        <div class="row small" style="margin:10px 0;flex-wrap:wrap"><label>Bench instead <select id="rotoSwapFrom"></select></label><label>Favor <select id="rotoSwapTo"></select></label><label>Counted games <input id="rotoSwapGames" type="number" min="0" max="162" value="20" style="width:60px"></label></div>
+        <p class="small" id="rotoSwapSummary"></p>
+        <div class="scroll"><table class="cat-team-table" id="rotoSwapTable"></table></div>
+      </details>
+      <details class="small muted" style="margin-top:10px"><summary>Forecast assumptions</summary><p id="rotoForecastMethod"></p></details>
+    </div>
+  </section>
+  <section class="view" id="view-season-trades" aria-label="In-season Trade Lab">
+    <div class="card"><h2>Trade Lab <span class="tag">Planned</span></h2><p>Evaluate player trades using current rosters, league rules, keeper costs and each team's goals.</p><p class="small muted">In-season trade analysis is planned. Draft Trades handles keeper rights, draft rosters and draft picks.</p></div>
+  </section>
+  <section class="view" id="view-h2h" aria-label="H2H matchup projections">
+    <div class="card"><h2>H2H matchup projections <span class="tag">Planned</span></h2><p>Project upcoming matchups using scoring settings, expected lineups, player availability and schedules.</p><p class="small muted">Matchup calculations are planned.</p></div>
+  </section>
+  <!-- GENERAL TOOLS -->
+  <section class="view" id="view-tools-home" aria-label="Tools overview">
+    <div class="card"><h2>Tools</h2><h3>Player Ranker <span class="tag">NFL</span></h3><p>Compare player pairs and save your preferences with the decision and team context.</p><button type="button" class="btn" id="openPlayerRanker">Open NFL Player Ranker</button></div>
+  </section>
   <!-- PLAYER RANKER -->
   <section class="view" id="view-ranker">
     <div class="ranker">
@@ -273,26 +328,6 @@
       <h2><span id="catTeamTitle">My projected categories</span> <span class="muted small" id="catTeamSub"></span></h2>
       <div id="catPuntControls" class="row small muted" style="margin-bottom:6px"></div>
       <details id="catRawDetails" open><summary class="small muted">Uncapped roster totals and per-player averages</summary><div style="overflow-x:auto"><table class="cat-team-table" id="catTeamTable"></table></div></details>
-    </div>
-    <div class="card" id="rotoForecastCard" style="display:none">
-      <h2>Projected roto standings</h2>
-      <div class="row small" style="margin-bottom:8px;flex-wrap:wrap">
-        <label>Roster source <select id="rotoRosterSource"><option value="draft">Draft / mock rosters</option><option value="yahoo" disabled>Yahoo roster snapshot</option></select></label>
-        <button class="btn ghost small" id="rotoYahooSync">Load current Yahoo rosters</button>
-        <label>Bench coverage <select id="rotoBenchCoverage"><option value="0">0%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1">100%</option></select></label>
-      </div>
-      <p id="rotoForecastStatus" class="small muted"></p>
-      <div class="scroll"><table class="cat-team-table" id="rotoStandingsTable"></table></div>
-      <details style="margin-top:10px"><summary>Player games and lineup scenarios</summary>
-        <div class="row small" style="margin:8px 0"><label>Team <select id="rotoPlanTeam"></select></label><button class="btn ghost small" id="rotoResetGames">Reset GP assumptions</button></div>
-        <p class="small muted" id="rotoPositionUsage"></p>
-        <div class="scroll"><table class="cat-team-table" id="rotoPlayerGames"></table></div>
-        <p class="small muted">Projected GP is availability; counted GP is the portion this lineup can use. Edit GP to test an injury scenario while keeping per-game production fixed.</p>
-        <div class="row small" style="margin:10px 0;flex-wrap:wrap"><label>Bench instead <select id="rotoSwapFrom"></select></label><label>Favor <select id="rotoSwapTo"></select></label><label>Counted games <input id="rotoSwapGames" type="number" min="0" max="162" value="20" style="width:60px"></label></div>
-        <p class="small" id="rotoSwapSummary"></p>
-        <div class="scroll"><table class="cat-team-table" id="rotoSwapTable"></table></div>
-      </details>
-      <details class="small muted" style="margin-top:10px"><summary>Forecast assumptions</summary><p id="rotoForecastMethod"></p></details>
     </div>
     <div class="draft-workspace" id="snakeDraftGrid">
     <div class="card" id="nhlLiveCard" style="display:none">
@@ -4368,7 +4403,7 @@ function applyAccessUI(){
     if(ME.admin) return true;
     return !ADMIN_ONLY_VIEWS.includes(v);
   };
-  document.querySelectorAll('nav button').forEach(b=>{ if(!allowed(b.dataset.view))b.style.display='none'; });
+  document.querySelectorAll('#pageNav [data-view]').forEach(b=>{ if(!allowed(b.dataset.view))b.style.display='none'; });
   if(roomOnly()){ const sel=el('leagueSelect'); if(sel)sel.style.display='none'; }
   // Hiding the tab isn't enough — the other views' data still populates the DOM
   // in the background and a right-click "Inspect" would see it. Strip those
@@ -8756,27 +8791,121 @@ function wireRanker(){
   // vertical movement remains available for ordinary mobile scrolling.
   [[left,'left'],[right,'right']].forEach(([card,side])=>{let start=null;card.addEventListener('pointerdown',e=>{start={x:e.clientX,y:e.clientY};});card.addEventListener('pointerup',e=>{if(start&&Math.abs(e.clientX-start.x)>58&&Math.abs(e.clientY-start.y)<45){card.dataset.swiped='1';rankerChoose(side);}start=null;});card.addEventListener('pointercancel',()=>{start=null;});});
 }
-function applyRankerVisibility(){
-  const btn=document.querySelector('nav button[data-view="ranker"]'),visible=SPORT.id==='nfl'&&!roomOnly();if(btn)btn.style.display=visible?'':'none';
-  const section=el('view-ranker');if(section&&!visible&&section.classList.contains('active')){const room=document.querySelector('nav button[data-view="room"]');if(room)room.click();}
+function applyRankerVisibility(){ renderAppNavigation(); }
+
+// ---------- MANAGEMENT AREAS + PAGE ROUTING ----------
+const APP_AREAS={inseason:'In-season',draft:'Draft',commissioner:'Commissioner',tools:'Tools'};
+const APP_PAGES={
+  inseason:{area:'inseason',label:'Waiver Lab'},
+  'season-trades':{area:'inseason',label:'Trade Lab'},
+  roto:{area:'inseason',label:'Roto standings'},
+  h2h:{area:'inseason',label:'H2H matchups'},
+  radar:{area:'inseason',label:'Add Radar'},
+  room:{area:'draft',label:'Draft Room'},
+  teams:{area:'draft',label:'Teams & Keepers'},
+  trades:{area:'draft',label:'Draft Trades'},
+  mocks:{area:'draft',label:'Mocks'},
+  lab:{area:'draft',label:'Strategy Lab'},
+  leagues:{area:'commissioner',label:'Leagues'},
+  commish:{area:'commissioner',label:'Members & dues'},
+  data:{area:'commissioner',label:'Data'},
+  'tools-home':{area:'tools',label:'Tools overview'},
+  ranker:{area:'tools',label:'Player Ranker'},
+};
+let ACTIVE_AREA='inseason',ACTIVE_PAGE=null,APP_NAV_READY=false;
+function appPageAvailable(view){
+  if(!APP_PAGES[view]||!el('view-'+view))return false;
+  if(roomOnly())return view==='room';
+  if(!ME.admin&&ADMIN_ONLY_VIEWS.includes(view))return false;
+  if(view==='roto')return isCategoryLeague()&&LEAGUE.scoringMode==='roto';
+  if(view==='h2h')return LEAGUE.scoringMode!=='roto'&&LEAGUE.leagueType!=='guillotine';
+  if(view==='radar')return radarVisible();
+  if(view==='ranker')return SPORT.id==='nfl';
+  return true;
 }
+function appAreaAvailable(area){return Object.keys(APP_PAGES).some(v=>APP_PAGES[v].area===area&&appPageAvailable(v));}
+function appDefaultPage(area){
+  const defaults={inseason:appPageAvailable('roto')?'roto':'inseason',draft:'room',commissioner:'leagues',tools:'tools-home'};
+  return appPageAvailable(defaults[area])?defaults[area]:Object.keys(APP_PAGES).find(v=>APP_PAGES[v].area===area&&appPageAvailable(v));
+}
+function appSavedPages(){
+  try{const saved=JSON.parse(localStorage.getItem('aeo-workspace-pages:'+CURRENT_LEAGUE_ID)||'{}');return saved&&typeof saved==='object'&&!Array.isArray(saved)?saved:{};}catch{return {};}
+}
+function appRoutePage(){
+  const parts=location.hash.slice(1).split('/'),page=parts.length===2?parts[1]:parts[0];
+  return APP_PAGES[page]&&(parts.length===1||APP_PAGES[page].area===parts[0])?page:null;
+}
+function renderAppNavigation(){
+  document.querySelectorAll('#workspaceNav [data-area]').forEach(b=>{
+    b.style.display=appAreaAvailable(b.dataset.area)?'':'none';
+    b.classList.toggle('active',b.dataset.area===ACTIVE_AREA);
+    b.setAttribute('aria-pressed',String(b.dataset.area===ACTIVE_AREA));
+  });
+  document.querySelectorAll('#pageNav [data-view]').forEach(b=>{
+    const available=appPageAvailable(b.dataset.view),active=b.dataset.view===ACTIVE_PAGE;
+    b.dataset.available=String(available);
+    b.style.display=available&&APP_PAGES[b.dataset.view].area===ACTIVE_AREA?'':'none';
+    b.classList.toggle('active',active);
+    if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
+  });
+  el('pageNav')?.setAttribute('aria-label',(APP_AREAS[ACTIVE_AREA]||'')+' pages');
+  if(ACTIVE_PAGE&&LEAGUE.name)document.title=LEAGUE.name+' — '+APP_PAGES[ACTIVE_PAGE].label+' · Draft Lab';
+}
+function showAppPage(view,{historyMode='push',load=true}={}){
+  if(!appPageAvailable(view))return false;
+  ACTIVE_PAGE=view;ACTIVE_AREA=APP_PAGES[view].area;
+  document.querySelectorAll('main .view').forEach(section=>section.classList.toggle('active',section.id==='view-'+view));
+  renderAppNavigation();
+  if(!roomOnly())try{
+    const saved=appSavedPages();saved[ACTIVE_AREA]=view;
+    localStorage.setItem('aeo-workspace-pages:'+CURRENT_LEAGUE_ID,JSON.stringify(saved));
+    localStorage.setItem('aeo-workspace-area',ACTIVE_AREA);
+  }catch{}
+  if(historyMode)try{
+    const url=new URL(location.href);url.searchParams.set('league',CURRENT_LEAGUE_ID);url.hash=ACTIVE_AREA+'/'+view;
+    if(url.href!==location.href)history[historyMode==='replace'?'replaceState':'pushState']({},'',url);
+  }catch{}
+  if(load){
+    if(view==='room')render();
+    if(view==='lab')renderStratCards();
+    if(view==='teams'){updateKeeperCopy();renderTeams();renderTendencies();}
+    if(view==='mocks')renderMocks();
+    if(view==='trades'){renderTrades();renderBackupHistory();}
+    if(view==='leagues')renderLeaguesTab();
+    if(view==='commish')renderCommish();
+    if(view==='inseason')loadInSeasonState();
+    if(view==='ranker')loadRanker();
+    if(view==='roto'&&typeof renderRotoForecast==='function')renderRotoForecast();
+  }
+  return true;
+}
+function openAppArea(area){
+  if(!appAreaAvailable(area))return;
+  const saved=appSavedPages()[area];
+  showAppPage(saved&&APP_PAGES[saved]?.area===area&&appPageAvailable(saved)?saved:appDefaultPage(area));
+}
+function restoreAppNavigation(){
+  const route=APP_NAV_READY?null:appRoutePage();
+  let area=ACTIVE_AREA;
+  if(!APP_NAV_READY){try{area=localStorage.getItem('aeo-workspace-area')||'inseason';}catch{}if(route)area=APP_PAGES[route].area;}
+  if(!appAreaAvailable(area))area=roomOnly()?'draft':'inseason';
+  const saved=appSavedPages()[area];
+  const current=APP_NAV_READY&&APP_PAGES[ACTIVE_PAGE]?.area===area&&appPageAvailable(ACTIVE_PAGE)?ACTIVE_PAGE:null;
+  const view=route&&appPageAvailable(route)?route:current||(saved&&APP_PAGES[saved]?.area===area&&appPageAvailable(saved)?saved:appDefaultPage(area));
+  showAppPage(view,{historyMode:'replace',load:false});APP_NAV_READY=true;
+}
+window.addEventListener('popstate',()=>{
+  const params=new URLSearchParams(location.search),league=params.get('league');
+  if(league&&league!==CURRENT_LEAGUE_ID&&LEAGUES[league]){APP_NAV_READY=false;applyLeagueProfile(league);return;}
+  const page=appRoutePage();if(page&&page!==ACTIVE_PAGE){if(!showAppPage(page,{historyMode:null}))restoreAppNavigation();}
+});
 
 // ---------- EVENTS ----------
 wireRanker();
 wireRadar();
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
-  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active'); el('view-'+b.dataset.view).classList.add('active');
-  if(b.dataset.view==='lab')renderStratCards();
-  if(b.dataset.view==='teams'){updateKeeperCopy();renderTeams();renderTendencies();}
-  if(b.dataset.view==='mocks')renderMocks();
-  if(b.dataset.view==='trades'){renderTrades();renderBackupHistory();}
-  if(b.dataset.view==='leagues')renderLeaguesTab();
-  if(b.dataset.view==='commish')renderCommish();
-  if(b.dataset.view==='inseason')loadInSeasonState();
-  if(b.dataset.view==='ranker')loadRanker();
-});
+document.querySelectorAll('#pageNav [data-view]').forEach(b=>b.onclick=()=>showAppPage(b.dataset.view));
+document.querySelectorAll('#workspaceNav [data-area]').forEach(b=>b.onclick=()=>openAppArea(b.dataset.area));
+el('openPlayerRanker').onclick=()=>{if(SPORT.id!=='nfl')switchSport('nfl');showAppPage('ranker');};
 el('faabYahooRun').onclick=()=>runFaab(true);
 el('faabManualRun').onclick=()=>runFaab(false);
 el('faabSave').onclick=()=>saveFaabState().catch(e=>el('faabStatus').textContent='⚠ '+e.message);
@@ -8917,13 +9046,7 @@ let RADAR_SCHED=null;
 const RADAR_LIGHT_BONUS=0.35;
 function radarVisible(){ return !!(SPORT.addRadar) && LEAGUE.lineupPeriod!=='weekly' && LEAGUE.scoringMode==='points' && !roomOnly(); }
 function applyRadarVisibility(){
-  const btn=document.querySelector('nav button[data-view="radar"]');
-  if(btn) btn.style.display=radarVisible()?'':'none';
-  const sec=el('view-radar');
-  if(sec && !radarVisible() && sec.classList.contains('active')){
-    const room=document.querySelector('nav button[data-view="room"]');
-    if(room) room.click();   // don't strand the user on a tab that no longer applies
-  }
+  renderAppNavigation();
   const rs=el('radarRostered');
   if(rs && radarVisible() && !rs.dataset.touched) rs.value=LEAGUE.teams*(LEAGUE.rosterSize||LEAGUE.rounds||16);
   const start=el('radarStart');
@@ -9371,6 +9494,7 @@ function applyLeagueProfile(id){
     if(el('commishTable'))loadCommish();
     if(el('faabWeek'))loadInSeasonState();
   }
+  restoreAppNavigation();
   loadSetup();
   loadExposure();
 }

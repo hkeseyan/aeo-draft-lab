@@ -1,5 +1,7 @@
 # Roto projected standings — October 31, 2026
 
+Navigation update, November 7: this module now lives at **In-season → Roto standings**, with its own category-priority controls. It is no longer part of Draft Room. Saved forecasts and all model assumptions below are unchanged; see `NAVIGATION.md`.
+
 ## User objective
 
 Every rotisserie league should show projected final category standings from player production and projected games, including rostered players who cover the primary lineup's missed games. Help the user plan category tradeoffs: for example, favor Paul George's rebounds/steals over Keyonte George's assists once the expected assists lead is sufficient. The question is attainable standings points from counted starts, not a sum of every bench player's full projection.

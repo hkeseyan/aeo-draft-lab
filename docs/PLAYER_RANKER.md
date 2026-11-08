@@ -7,7 +7,7 @@ claim that one number can answer every fantasy question.
 
 ## Mobile UI
 
-The **Player Ranker** tab is shown for NFL only. Two large cards present a matchup;
+The **Tools → Player Ranker** page is shown for NFL only. Tools Overview can explicitly open it from another sport by switching to NFL. Two large cards present a matchup;
 tapping a card, choosing its button, or making a horizontal swipe on the card records
 that player as the preferred choice. A skip immediately deals another matchup. The
 top of the board favors players with fewer comparisons, then selects a nearby rating
