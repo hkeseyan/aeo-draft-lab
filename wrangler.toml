@@ -7,7 +7,7 @@ compatibility_date = "2026-10-03"
 # time and an idempotency key, so exactly one FAAB report is produced through
 # both daylight- and standard-time weeks.
 [triggers]
-crons = ["17 */4 * * *", "0 8,9 * * 2", "0 16,17 * * 0"]
+crons = ["17 */4 * * *", "0 8,9 * * 2", "0 16,17 * * SUN"]
 
 [assets]
 directory = "./public"
