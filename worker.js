@@ -96,11 +96,15 @@ function rankingContext(raw) {
   // Context is deliberately recorded with every event even though the first board
   // is one-dimensional. Future views can filter/re-weight the same raw events
   // without guessing what a past choice meant.
+  const matchupType = value("matchupType", "cross_position");
   return {
     decision: value("decision", "overall"),
     timeframe: value("timeframe", "season"),
     teamWindow: value("teamWindow", "neutral"),
-    format: value("format", "generic")
+    format: value("format", "generic"),
+    superflex: value("superflex", "off") === "on" ? "on" : "off",
+    tePremium: value("tePremium", "off") === "on" ? "on" : "off",
+    matchupType: matchupType === "same_position" || matchupType === "cross_position" ? matchupType : "cross_position"
   };
 }
 __name(rankingContext, "rankingContext");

@@ -182,6 +182,10 @@
   .ranker{max-width:760px;margin:0 auto}
   .ranker-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .ranker-controls label{display:grid;gap:3px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.35px}
+  .ranker-settings{margin-top:10px}
+  .ranker-settings summary{cursor:pointer;color:var(--muted);font-size:12px;font-weight:700}
+  .ranker-settings .row{margin-top:8px;gap:12px}
+  .ranker-sampling{font-size:11px;color:var(--muted)}
   .ranker-duel{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
   .ranker-player{min-height:215px;text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:16px;color:var(--ink);padding:18px 96px 18px 18px;cursor:pointer;touch-action:pan-y;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden;transition:transform .16s ease,background .16s ease,border-color .16s ease}
   .ranker-player:hover,.ranker-player:focus{border-color:var(--accent);outline:none;background:#203050}
@@ -289,6 +293,14 @@
             <select id="rankerFormat"><option value="generic">🏈 Generic</option><option value="redraft">📆 Redraft</option><option value="dynasty">🏰 Dynasty</option><option value="keeper">🔒 Keeper</option><option value="guillotine">⚔️ Guillotine</option><option value="best_ball">🎯 Best ball</option></select>
           </label>
         </div>
+        <details class="ranker-settings">
+          <summary>⚙️ Ranking settings</summary>
+          <div class="row small">
+            <label><input id="rankerSuperflex" type="checkbox"> Superflex</label>
+            <label><input id="rankerTePremium" type="checkbox"> TE Premium</label>
+            <span class="ranker-sampling" id="rankerSampling"></span>
+          </div>
+        </details>
         <div class="ranker-duel" aria-live="polite">
           <button class="ranker-player" id="rankerLeft" type="button"></button>
           <button class="ranker-player" id="rankerRight" type="button"></button>
@@ -8704,11 +8716,22 @@ async function loadInSeasonState(){
 // ---------- PLAYER RANKER ----------
 // The raw comparison event is the source of truth. Ratings are derived locally
 // from that ledger, so later scenario-specific boards can reuse every answer.
-const RANKER_SPORT='nfl', RANKER_K=28;
-let RANKER_EVENTS=[], RANKER_MATCHUP=null, RANKER_LAST_PAIR='', RANKER_SAVING=false;
+const RANKER_SPORT='nfl', RANKER_K=28, RANKER_SAME_POSITION_TARGET=.65;
+let RANKER_EVENTS=[], RANKER_MATCHUP=null, RANKER_LAST_PAIR='', RANKER_SAVING=false, RANKER_PREFS_READY=false;
 function rankerLocalKey(){return 'aeo-player-ranker:'+RANKER_SPORT;}
+function rankerPrefsKey(){return 'aeo-player-ranker-preferences:'+RANKER_SPORT;}
+function rankerSettings(){return {superflex:!!el('rankerSuperflex')?.checked,tePremium:!!el('rankerTePremium')?.checked};}
+function rankerLoadPreferences(){
+  if(RANKER_PREFS_READY)return;
+  let saved={};try{saved=JSON.parse(localStorage.getItem(rankerPrefsKey())||'{}')||{};}catch(e){}
+  const settings={superflex:typeof saved.superflex==='boolean'?saved.superflex:!!LEAGUE?.superflex,tePremium:typeof saved.tePremium==='boolean'?saved.tePremium:false};
+  el('rankerSuperflex').checked=settings.superflex;el('rankerTePremium').checked=settings.tePremium;RANKER_PREFS_READY=true;
+}
+function rankerSavePreferences(){try{localStorage.setItem(rankerPrefsKey(),JSON.stringify(rankerSettings()));}catch(e){}renderRankerSettings();}
+function rankerMatchupType(){return RANKER_MATCHUP&&RANKER_MATCHUP.samePosition?'same_position':'cross_position';}
+function renderRankerSettings(){const s=rankerSettings(),out=el('rankerSampling');if(out)out.textContent=`${Math.round(RANKER_SAME_POSITION_TARGET*100)}% same-position target · ${s.superflex?'Superflex':'1QB'} · ${s.tePremium?'TE Premium':'standard TE'}`;}
 function rankerPlayer(p){return {id:String(p.id),name:p.name,pos:p.pos,team:p.team};}
-function rankerContext(){return {decision:el('rankerDecision').value,timeframe:el('rankerTimeframe').value,teamWindow:el('rankerWindow').value,format:el('rankerFormat').value};}
+function rankerContext(){const s=rankerSettings();return {decision:el('rankerDecision').value,timeframe:el('rankerTimeframe').value,teamWindow:el('rankerWindow').value,format:el('rankerFormat').value,superflex:s.superflex?'on':'off',tePremium:s.tePremium?'on':'off',matchupType:rankerMatchupType()};}
 function rankerRows(events=RANKER_EVENTS){
   const rows=new Map();
   const row=(p)=>{if(!rows.has(p.id))rows.set(p.id,{...p,rating:1500,wins:0,comparisons:0});return rows.get(p.id);};
@@ -8723,20 +8746,28 @@ function rankerRows(events=RANKER_EVENTS){
 }
 function rankerCounts(){const c=new Map();RANKER_EVENTS.forEach(e=>{[e.winner,e.loser].forEach(p=>c.set(String(p.id),(c.get(String(p.id))||0)+1));});return c;}
 function rankerCandidates(){return PLAYERS.filter(p=>p&&p.id!=null&&p.name&&SPORT.id==='nfl'&&['QB','RB','WR','TE'].includes(p.pos));}
+function rankerRightPool(left,pool,roll=Math.random()){
+  const alternatives=pool.filter(p=>p.id!==left.id),samePosition=alternatives.filter(p=>p.pos===left.pos);
+  return roll<RANKER_SAME_POSITION_TARGET&&samePosition.length?samePosition:alternatives;
+}
 function nextRankerMatchup(){
   const pool=rankerCandidates();if(pool.length<2){RANKER_MATCHUP=null;return;}
   const counts=rankerCounts(), ratings=new Map(rankerRows().map(r=>[String(r.id),r.rating]));
   const shuffled=pool.slice().sort(()=>Math.random()-.5);
   const left=shuffled.slice().sort((a,b)=>(counts.get(String(a.id))||0)-(counts.get(String(b.id))||0))[0];
   const leftRating=ratings.get(String(left.id))||1500;
-  const right=pool.filter(p=>p.id!==left.id).sort((a,b)=>{
+  // Most NFL comparisons stay inside a position, where the choice is more
+  // reliable; the remaining cross-position pairs stitch those position tiers
+  // into one overall board. Fall back safely when a position has no peer.
+  const rightPool=rankerRightPool(left,pool);
+  const right=rightPool.sort((a,b)=>{
     const aCount=counts.get(String(a.id))||0,bCount=counts.get(String(b.id))||0;
     const aGap=Math.abs((ratings.get(String(a.id))||1500)-leftRating),bGap=Math.abs((ratings.get(String(b.id))||1500)-leftRating);
     const pairA=[String(left.id),String(a.id)].sort().join(':'),pairB=[String(left.id),String(b.id)].sort().join(':');
     const aRepeat=pairA===RANKER_LAST_PAIR?1:0,bRepeat=pairB===RANKER_LAST_PAIR?1:0;
     return aRepeat-bRepeat||aCount-bCount||aGap-bGap||Math.random()-.5;
   })[0];
-  RANKER_MATCHUP={left,right};
+  RANKER_MATCHUP={left,right,samePosition:left.pos===right.pos};
 }
 function renderRankerCard(id,p,label){
   const card=el(id);if(!card)return;card.innerHTML='';
@@ -8763,6 +8794,7 @@ function rankerFallback(){try{return JSON.parse(localStorage.getItem(rankerLocal
 function rankerSaveFallback(){try{localStorage.setItem(rankerLocalKey(),JSON.stringify(RANKER_EVENTS));}catch(e){}}
 async function loadRanker(){
   if(!el('rankerBoard')||SPORT.id!=='nfl')return;
+  rankerLoadPreferences();renderRankerSettings();
   const status=el('rankerStatus');status.textContent='Loading your NFL ranker…';
   try{const r=await fetch('/api/rankings?sport='+RANKER_SPORT,{headers:tokenHdr()});const d=await r.json();if(!r.ok)throw new Error(d.error||'HTTP '+r.status);RANKER_EVENTS=Array.isArray(d.events)?d.events:[];status.textContent='☁ Synced across your devices.';}
   catch(e){RANKER_EVENTS=rankerFallback();status.textContent='Local-only until cloud sync is available.';}
@@ -8787,6 +8819,7 @@ async function undoRanker(){
 }
 function wireRanker(){
   const left=el('rankerLeft'),right=el('rankerRight');if(!left||!right)return;
+  el('rankerSuperflex').onchange=()=>rankerSavePreferences();el('rankerTePremium').onchange=()=>rankerSavePreferences();
   el('rankerChooseLeft').onclick=()=>rankerChoose('left');el('rankerChooseRight').onclick=()=>rankerChoose('right');
   const tap=(card,side)=>{if(card.dataset.swiped==='1'||card.dataset.suppressClick==='1'){card.dataset.swiped='';card.dataset.suppressClick='';return;}rankerChoose(side);};
   left.onclick=()=>tap(left,'left');right.onclick=()=>tap(right,'right');el('rankerSkip').onclick=()=>{RANKER_MATCHUP=null;nextRankerMatchup();renderRanker();};el('rankerUndo').onclick=undoRanker;
