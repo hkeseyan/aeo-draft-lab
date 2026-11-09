@@ -21,10 +21,20 @@ Before choosing, the user selects context that travels with the event:
 | `timeframe` | `season`, `week`, `long_term` |
 | `teamWindow` | `neutral`, `competing`, `rebuilding` |
 | `format` | `generic`, `redraft`, `dynasty`, `keeper`, `guillotine`, `best_ball` |
+| `superflex` | `on`, `off` |
+| `tePremium` | `on`, `off` |
+| `matchupType` | `same_position`, `cross_position` |
 
 The first board combines all events into one Elo-style ordering. Context is retained
 rather than applied to that combined score, so a later trade-only or rebuilding-
 dynasty view can be calculated from the original choices without a data migration.
+
+The compact **Ranking settings** panel remembers a Superflex and TE Premium choice
+on the device (Superflex defaults to the active league on first use) and captures
+both values with every new answer. It does not retroactively reinterpret existing
+choices. NFL matchup generation targets 65% same-position pairs, using the remaining
+cross-position pairs to calibrate the overall board; every event records which type
+was shown so this can be measured and tuned later.
 
 ## Data and API
 
@@ -48,7 +58,10 @@ matching the rest of the single-user deployment.
         "decision": "trade",
         "timeframe": "long_term",
         "teamWindow": "rebuilding",
-        "format": "dynasty"
+        "format": "dynasty",
+        "superflex": "on",
+        "tePremium": "off",
+        "matchupType": "same_position"
       }
     }
   ]
@@ -78,4 +91,15 @@ This is deliberately separate from the valuation model’s Player Assessment →
 External Fair/Market Value → Team Utility → Decision Score flow. Pairwise preferences
 are an additional, explainable input to that future system; they do not overwrite
 fair value, market value, or roster-specific recommendations.
+
+## Next data snapshot phase
+
+Injury/IR status, expected-return confidence, season average, and recent-form trend
+need a timestamped, source-attributed NFL player-context snapshot before they appear
+on ranker cards. The current player pool does not contain a trustworthy live feed for
+those fields, so this is intentionally separate from the ranking UI rather than
+displaying stale or invented data. Recent player notes remain their own planned
+feature; the snapshot will supply structured injury/performance facts without
+duplicating those notes. Once the snapshot exists, its revision and source timestamps
+will travel with the later valuation and matchup-priority work.
 
