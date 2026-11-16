@@ -32,7 +32,7 @@ const pool=(key,name,team,status)=>({fantasy_content:{league:[
   {league_key:leagueKey},{players:{count:1,0:player(key,name,team,'LW')}}
 ]}});
 const env={AUTH_TOKEN:'test-export-private-key',MOCKS:new MemoryKv({
-  'league:'+profile.id:profile,
+  ['league:'+profile.id]:profile,
   'yahooAuth:default':{access_token:'super-private-token',expires_at:Date.now()+600000,client_id:null}
 })};
 const originalFetch=globalThis.fetch;
