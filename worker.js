@@ -1060,7 +1060,7 @@ function mergePlayerRows(primary, enrichment) {
   });
 }
 __name(mergePlayerRows, "mergePlayerRows");
-async function yahooFaabSnapshot(env, kv, originUrl, profile) {
+async function yahooFaabSnapshot(env, kv, originUrl, profile, options = {}) {
   const token = await getYahooAccessToken(env, kv, originUrl);
   if (!token) throw new Error("Yahoo account is not connected.");
   const key = await resolveYahooLeagueKey(token, profile);
@@ -1070,7 +1070,7 @@ async function yahooFaabSnapshot(env, kv, originUrl, profile) {
   if (!mine || !mine.team_key) throw new Error("Yahoo league matched, but the current user's team could not be identified.");
   // The default 100-per-status pool hides viable deep-league streamers.
   // Extend only NHL, retain a cap and disclose potential truncation.
-  const poolLimitPerStatus = profile.sport === "nhl" ? 200 : 100;
+  const poolLimitPerStatus = profile.sport === "nhl" && options.poolLimitPerStatus === 200 ? 200 : 100;
   const [rosterRaw, waivers, freeAgents] = await Promise.all([
     yahooJson(token, `team/${mine.team_key}/roster`),
     yahooAvailablePlayers(token, key, "W", poolLimitPerStatus, profile.sport),
@@ -1113,7 +1113,7 @@ async function yahooFaabSnapshot(env, kv, originUrl, profile) {
   };
 }
 __name(yahooFaabSnapshot, "yahooFaabSnapshot");
-async function syncLeagueSnapshot(env, kv, originUrl, profile) {
+async function syncLeagueSnapshot(env, kv, originUrl, profile, options = {}) {
   const config = await kv.get(leagueSourceConfigKey(profile.id), { type: "json" }) || {};
   const previous = await kv.get(leagueSnapshotKey(profile.id), { type: "json" }) || {};
   const sourceStatus = {};
@@ -1121,7 +1121,7 @@ async function syncLeagueSnapshot(env, kv, originUrl, profile) {
   let fantasyPros = null;
   if (config.yahooEnabled !== false) {
     try {
-      yahoo = await yahooFaabSnapshot(env, kv, originUrl, profile);
+      yahoo = await yahooFaabSnapshot(env, kv, originUrl, profile, options);
       sourceStatus.yahoo = {
         ok: true,
         syncedAt: yahoo.syncedAt,
@@ -2714,7 +2714,7 @@ var worker_default = {
         try {
           // The generic sync may legitimately fall back to saved data. For waiver
           // analysis that is NOT a live read: refuse the export if Yahoo failed.
-          const snapshot = await syncLeagueSnapshot(env, kv, url, profile);
+          const snapshot = await syncLeagueSnapshot(env, kv, url, profile, { poolLimitPerStatus: 200 });
           if (!snapshot.sourceStatus?.yahoo?.ok ||
               !snapshot.freshness?.roster?.current || !snapshot.freshness?.available?.current ||
               snapshot.coverage?.roster !== "yahoo" || snapshot.coverage?.available !== "yahoo") {
