@@ -31,7 +31,7 @@ const rosterRaw={fantasy_content:{team:[{team_key:leagueKey+'.t.1'},{roster:{pla
 const pool=(key,name,team,status)=>({fantasy_content:{league:[
   {league_key:leagueKey},{players:{count:1,0:player(key,name,team,'LW')}}
 ]}});
-const env={MOCKS:new MemoryKv({
+const env={AUTH_TOKEN:'test-export-private-key',MOCKS:new MemoryKv({
   'league:'+profile.id:profile,
   'yahooAuth:default':{access_token:'super-private-token',expires_at:Date.now()+600000,client_id:null}
 })};
@@ -50,9 +50,9 @@ globalThis.fetch=async(input)=>{
 };
 try{
   const endpoint='https://draft.test/api/yahoo/hockey-waiver-export?league='+profile.id;
-  let response=await worker.fetch(new Request(endpoint),env,{});
+  let response=await worker.fetch(new Request(endpoint,{headers:{'x-auth-token':'test-export-private-key'}}),env,{});
   assert.equal(response.status,404,'GET should not trigger a live refresh');
-  response=await worker.fetch(new Request(endpoint,{method:'POST'}),env,{});
+  response=await worker.fetch(new Request(endpoint,{method:'POST',headers:{'x-auth-token':'test-export-private-key'}}),env,{});
   assert.equal(response.status,201);
   const data=await response.json();
   assert.equal(data.verifiedLiveYahoo,true);
@@ -67,7 +67,7 @@ try{
   assert.equal(data.availablePool.potentiallyTruncated,false);
   assert.ok(!JSON.stringify(data).includes('super-private-token'));
   assert.ok(calls.some(path=>path.includes('/settings')));
-  response=await worker.fetch(new Request(endpoint),env,{});
+  response=await worker.fetch(new Request(endpoint,{headers:{'x-auth-token':'test-export-private-key'}}),env,{});
   assert.equal(response.status,200);
   const cached=await response.json();
   assert.equal(cached.cached,true);
@@ -82,7 +82,7 @@ try{
     coverage:{roster:'saved',available:'saved'},
     freshness:{roster:{current:false},available:{current:false}}
   }));
-  response=await worker.fetch(new Request(endpoint,{method:'POST'}),env,{});
+  response=await worker.fetch(new Request(endpoint,{method:'POST',headers:{'x-auth-token':'test-export-private-key'}}),env,{});
   assert.equal(response.status,503);
   const failed=await response.json();
   assert.equal(failed.fallbackOnly,true);
