@@ -53,7 +53,7 @@ try{
   let response=await worker.fetch(new Request(endpoint,{headers:{'x-auth-token':'test-export-private-key'}}),env,{});
   assert.equal(response.status,404,'GET should not trigger a live refresh');
   response=await worker.fetch(new Request(endpoint,{method:'POST',headers:{'x-auth-token':'test-export-private-key'}}),env,{});
-  assert.equal(response.status,201);
+  assert.equal(response.status,201,JSON.stringify(await response.clone().json()));
   const data=await response.json();
   assert.equal(data.verifiedLiveYahoo,true);
   assert.equal(data.freshForCurrentRequest,true);
