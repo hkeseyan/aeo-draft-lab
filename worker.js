@@ -1,5 +1,6 @@
 import { analyzeScheduleWaivers, planningWindow, localDate } from './waiver-planner.js';
 import { fetchGameSchedule, manualGameSchedule } from './waiver-schedules.js';
+import { buildYahooHockeyWaiverExport } from './yahoo-hockey-export.js';
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
@@ -1067,10 +1068,13 @@ async function yahooFaabSnapshot(env, kv, originUrl, profile) {
   const teams = collectYahooEntities(teamsRaw, "team").filter((t) => t.team_key);
   const mine = teams.find((t) => String(t.is_owned_by_current_login) === "1") || teams.find((t) => String(t.name || "").toLowerCase() === String(profile.meOwner || "").toLowerCase());
   if (!mine || !mine.team_key) throw new Error("Yahoo league matched, but the current user's team could not be identified.");
+  // The default 100-per-status pool hides viable deep-league streamers.
+  // Extend only NHL, retain a cap and disclose potential truncation.
+  const poolLimitPerStatus = profile.sport === "nhl" ? 200 : 100;
   const [rosterRaw, waivers, freeAgents] = await Promise.all([
     yahooJson(token, `team/${mine.team_key}/roster`),
-    yahooAvailablePlayers(token, key, "W", 100, profile.sport),
-    yahooAvailablePlayers(token, key, "FA", 100, profile.sport)
+    yahooAvailablePlayers(token, key, "W", poolLimitPerStatus, profile.sport),
+    yahooAvailablePlayers(token, key, "FA", poolLimitPerStatus, profile.sport)
   ]);
   let transactionsRaw = null;
   let transactionError = "";
@@ -1094,12 +1098,15 @@ async function yahooFaabSnapshot(env, kv, originUrl, profile) {
   return {
     yahooLeagueKey: key,
     syncedAt: Date.now(),
+    myTeam: { key: mine.team_key, name: mine.name || "" },
     roster,
     available,
     availabilityKind: newlyDropped.length ? "newly_dropped_plus_available" : waivers.length ? "waivers_plus_free_agents" : freeAgents.length ? "free_agents" : "none",
     newlyDroppedCount: newlyDropped.length,
     waiverCount: waivers.length,
     freeAgentCount: freeAgents.length,
+    poolLimitPerStatus,
+    poolPotentiallyTruncated: waivers.length === poolLimitPerStatus || freeAgents.length === poolLimitPerStatus,
     budgets: { mine: teamBudgets.find((team) => team.mine)?.faabBalance ?? null, teams: teamBudgets },
     marketMetadata: available.some((p) => p.roster_pct !== "" || p.roster_trend !== "") ? "yahoo" : "none",
     transactionError
@@ -1124,6 +1131,8 @@ async function syncLeagueSnapshot(env, kv, originUrl, profile) {
         newlyDroppedCount: yahoo.newlyDroppedCount,
         waiverCount: yahoo.waiverCount,
         freeAgentCount: yahoo.freeAgentCount,
+        poolLimitPerStatus: yahoo.poolLimitPerStatus,
+        poolPotentiallyTruncated: yahoo.poolPotentiallyTruncated,
         budgetCount: yahoo.budgets && yahoo.budgets.teams.length || 0,
         warning: [
           !yahoo.roster.length ? "Yahoo returned an empty roster; Draft Lab used the configured roster fallback." : "",
@@ -1160,6 +1169,7 @@ async function syncLeagueSnapshot(env, kv, originUrl, profile) {
     syncedAt: Date.now(),
     roster,
     available,
+    myTeam: yahoo && yahoo.myTeam || previous.myTeam || null,
     budgets: yahoo && yahoo.budgets || previous.budgets || null,
     lineup: fantasyPros && fantasyPros.lineup || previous.lineup || null,
     coverage: {
@@ -2682,6 +2692,41 @@ var worker_default = {
           return J(await emailInSeasonReport(env, b.to || me.email, report));
         } catch (e) {
           return J({ error: e.message }, 502);
+        }
+      }
+      if (path === "/api/yahoo/hockey-waiver-export") {
+        // Never expose this roster/pool export to anonymous users or non-admins.
+        const denied = requireAdmin();
+        if (denied) return denied;
+        if (request.method !== "GET" && request.method !== "POST") return J({ error: "method" }, 405);
+        const profile = await kv.get(leagueProfileKey(lg), { type: "json" });
+        if (!profile) return J({ error: "Draft Lab league profile not found." }, 404);
+        if (profile.platform !== "yahoo" || profile.sport !== "nhl") return J({ error: "Choose a connected Yahoo NHL league." }, 400);
+        const exportKey = `hockeyWaiverExport:${profile.id}`;
+        if (request.method === "GET") {
+          const saved = await kv.get(exportKey, { type: "json" });
+          if (!saved) return J({ error: "No Yahoo hockey export yet. POST to refresh." }, 404);
+          return J({ ...saved, cached: true, cacheAgeMs: Math.max(0, Date.now() - Date.parse(saved.syncedAt)), freshForCurrentRequest: false });
+        }
+        try {
+          // The generic sync may legitimately fall back to saved data. For waiver
+          // analysis that is NOT a live read: refuse the export if Yahoo failed.
+          const snapshot = await syncLeagueSnapshot(env, kv, url, profile);
+          if (!snapshot.sourceStatus?.yahoo?.ok ||
+              !snapshot.freshness?.roster?.current || !snapshot.freshness?.available?.current ||
+              snapshot.coverage?.roster !== "yahoo" || snapshot.coverage?.available !== "yahoo") {
+            return J({ error: "Current Yahoo roster and available players are required.", sourceStatus: snapshot.sourceStatus, fallbackOnly: true }, 503);
+          }
+          const key = snapshot.sourceStatus.yahoo.yahooLeagueKey;
+          if (!/^\\d+\\.l\\.\\d+$/.test(key || "")) return J({ error: "Invalid Yahoo NHL league key." }, 502);
+          const token = await getYahooAccessToken(env, kv, url);
+          if (!token) return J({ error: "Yahoo account not connected." }, 401);
+          const rawSettings = await yahooJson(token, `league/${key}/settings`);
+          const exported = buildYahooHockeyWaiverExport(profile, snapshot, rawSettings);
+          await kv.put(exportKey, JSON.stringify(exported));
+          return J({ ...exported, cached: false, freshForCurrentRequest: true }, 201);
+        } catch (e) {
+          return J({ error: "Yahoo hockey refresh failed: " + e.message, verifiedLiveYahoo: false }, 502);
         }
       }
       if (path === "/api/yahoo/status") {
