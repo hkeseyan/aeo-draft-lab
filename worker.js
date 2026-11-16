@@ -2696,6 +2696,9 @@ var worker_default = {
       }
       if (path === "/api/yahoo/hockey-waiver-export") {
         // Never expose this roster/pool export to anonymous users or non-admins.
+        // On deployments with no Google login and no AUTH_TOKEN, currentUser()
+        // treats everyone as owner; do not publish private roster exports there.
+        if (!ACCOUNTS_ON(env) && !env.AUTH_TOKEN) return J({ error: "Configure Google sign-in or AUTH_TOKEN before exporting private league data." }, 403);
         const denied = requireAdmin();
         if (denied) return denied;
         if (request.method !== "GET" && request.method !== "POST") return J({ error: "method" }, 405);
