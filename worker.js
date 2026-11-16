@@ -2721,7 +2721,7 @@ var worker_default = {
             return J({ error: "Current Yahoo roster and available players are required.", sourceStatus: snapshot.sourceStatus, fallbackOnly: true }, 503);
           }
           const key = snapshot.sourceStatus.yahoo.yahooLeagueKey;
-          if (!/^\\d+\\.l\\.\\d+$/.test(key || "")) return J({ error: "Invalid Yahoo NHL league key." }, 502);
+          if (!/^\d+\.l\.\d+$/.test(key || "")) return J({ error: "Invalid Yahoo NHL league key." }, 502);
           const token = await getYahooAccessToken(env, kv, url);
           if (!token) return J({ error: "Yahoo account not connected." }, 401);
           const rawSettings = await yahooJson(token, `league/${key}/settings`);
