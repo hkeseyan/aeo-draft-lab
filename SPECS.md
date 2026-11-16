@@ -1043,3 +1043,16 @@ Later valuation work: league/team-specific ROS value, line/PP deployment, ice ti
 
 `docs/WAIVER_DECISION_LOGIC.md` preserves the manager's reusable rationale and counterfactual acceptance cases. Named hold/drop examples are temporary supervised labels. Future valuation must distinguish intrinsic ROS value from team holding value, account for positional shortage and reliable goalie volume, and reevaluate conditional holds as injured teammates return. The existing confirmed-season-out exclusion is player-independent; tests include previously unknown 99%-owned core targets plus a temporary IR case. Dynamic value/role protection and comprehensive news ingestion are not yet implemented and must not be presented as learned behavior.
 
+
+
+## Yahoo NHL live waiver snapshot export (November 2026)
+
+In-season → Waiver Lab → League data sources shows **Yahoo NHL: verified live waiver snapshot** for a selected Yahoo hockey league. It reuses the existing private Yahoo OAuth grant; no parallel token store, claim write API, or new provider credentials. The owner clicks **Refresh live Yahoo + prepare export**, then **Copy JSON** or **Download JSON** to share current league information with the fantasy assistant.
+
+- `POST /api/yahoo/hockey-waiver-export?league=<draft-lab-id>` performs a Yahoo refresh and returns a versioned, read-only JSON document. A `GET` returns only the previous cached export with an explicit `cached=true` and `freshForCurrentRequest=false`; GET never refreshes silently.
+- The export includes the Yahoo league key, scoring type, exact stat categories and point modifiers, roster positions, waiver rule fields, user's identified team, current roster with selected Yahoo positions, available waiver and free-agent player lists with availability status, own/competitor FAAB balances if exposed, source timestamps, and pool coverage warnings.
+- NHL pools request up to 200 waiver-eligible and 200 free-agent players, ordered by Yahoo ownership, with a visible truncation warning at the cap. This is a candidate discovery pool, **not guaranteed complete**. Waiver eligibility/injury flags, roster/player positions, and source freshness must be kept distinct.
+- Do **not** issue a live export when Yahoo fails or either roster or pool is a historical fallback; return an error instead. A cached export is marked cached and must not be presented as a new read.
+- The route requires admin permissions and enabled authentication (Google accounts or `AUTH_TOKEN`). Tokens and Yahoo OAuth credentials are never included in the export; the export is not anonymously link-shared.
+- This is a private export handoff for ChatGPT. The current ChatGPT conversation does **not** automatically acquire app-session cookies, so using the result here still requires pasting/uploading the copied JSON or an explicit separately authorized connector. Never put private league payloads into the public GitHub repository.
+- It **does not** establish how many weekly adds remain, read pending claims/future-day lineups, execute add/drop transactions, or prove projected goalie starts. Those require separate verified data or manager review before final waiver submission.

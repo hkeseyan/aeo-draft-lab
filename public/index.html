@@ -581,6 +581,17 @@
         <button class="btn ghost" id="faabSourceSync">Refresh now</button>
       </div>
       <div class="small muted" id="faabSourceStatus" style="margin-top:8px">No source refresh has run yet.</div>
+      <div id="hockeyYahooExportPanel" style="display:none;margin-top:12px">
+        <h3 style="margin:0 0 6px">Yahoo NHL: verified live waiver snapshot</h3>
+        <p class="small muted">For your Yahoo points/categories hockey leagues. Refreshes this league's Yahoo roster, available waiver/free-agent pool and official scoring/roster settings via the existing connection. Copy or download the result for a ChatGPT add/drop review. The JSON is private league data; it is not a public share link. The export does not place claims or verify remaining weekly adds.</p>
+        <div class="row">
+          <button class="btn" id="hockeyYahooRefresh">Refresh live Yahoo + prepare export</button>
+          <button class="btn ghost" id="hockeyYahooCopy" disabled>Copy JSON</button>
+          <button class="btn ghost" id="hockeyYahooDownload" disabled>Download JSON</button>
+          <span class="small muted" id="hockeyYahooExportStatus">Select your Yahoo hockey league and refresh.</span>
+        </div>
+        <details style="margin-top:8px"><summary class="small muted">Show snapshot JSON</summary><textarea id="hockeyYahooJson" readonly spellcheck="false" style="min-height:155px;font-family:monospace" aria-label="Yahoo NHL waiver export JSON"></textarea></details>
+      </div>
     </div>
     <div class="card">
       <h2>Bid-history calibration</h2>
@@ -8344,6 +8355,41 @@ async function saveFaabSources(){
     await loadFaabSources();
   }catch(e){status.textContent='⚠ '+e.message;}
 }
+async function refreshHockeyYahooExport(){
+  const status=el('hockeyYahooExportStatus'),refresh=el('hockeyYahooRefresh');
+  if(SPORT.id!=='nhl'||LEAGUE.platform!=='yahoo')return;
+  status.textContent='Refreshing selected Yahoo hockey league…';refresh.disabled=true;
+  el('hockeyYahooCopy').disabled=true;el('hockeyYahooDownload').disabled=true;el('hockeyYahooJson').value='';
+  try{
+    const selected=CURRENT_LEAGUE_ID;
+    const r=await fetch('/api/yahoo/hockey-waiver-export?league='+encodeURIComponent(selected),{method:'POST',headers:tokenHdr()});
+    const d=await r.json();
+    if(!r.ok)throw new Error((d.error||('HTTP '+r.status))+(d.sourceStatus?.yahoo?.error?' — '+d.sourceStatus.yahoo.error:''));
+    if(selected!==CURRENT_LEAGUE_ID)return;
+    el('hockeyYahooJson').value=JSON.stringify(d,null,2);
+    el('hockeyYahooCopy').disabled=false;el('hockeyYahooDownload').disabled=false;
+    // Also hydrate the existing waiver input fields without erasing manual drop tags.
+    const prior=waiverCsvObjects(el('faabRosterCsv').value);
+    const rows=(d.roster||[]).map(p=>{
+      const tag=prior.find(t=>t.name===p.name);
+      return tag?{...p,drop_class:tag.drop_class,drop_notes:tag.drop_notes,lineup_priority:tag.lineup_priority,start_dates:tag.start_dates,fppg:tag.fppg}:p;
+    });
+    el('faabRosterCsv').value=faabRowsCsv(rows,FAAB_ROSTER_HEADERS);
+    el('faabAvailableCsv').value=faabRowsCsv(d.availablePlayers||[],FAAB_AVAILABLE_HEADERS);
+    status.textContent='✓ Verified live Yahoo '+new Date(d.syncedAt).toLocaleString()+' · '+d.roster.length+' rostered · '+d.availablePlayers.length+' available'+(d.availablePool.potentiallyTruncated?' · pool may be truncated':'')+'. Copy JSON to share for analysis.';
+    loadFaabSources();
+  }catch(e){status.textContent='⚠ '+e.message+' (no stale export produced)';}
+  finally{refresh.disabled=false;}
+}
+async function copyHockeyYahooExport(){
+  const value=el('hockeyYahooJson').value;if(!value)return;
+  try{await navigator.clipboard.writeText(value);el('hockeyYahooExportStatus').textContent='✓ Snapshot copied. Paste it into this ChatGPT conversation.';}
+  catch(e){el('hockeyYahooJson').select();el('hockeyYahooExportStatus').textContent='Clipboard unavailable; select and copy the JSON above, or use Download JSON.';}
+}
+function downloadHockeyYahooExport(){
+  const value=el('hockeyYahooJson').value;if(!value)return;
+  exportText(value,'aeo-yahoo-nhl-waivers-'+CURRENT_LEAGUE_ID+'.json');
+}
 async function syncFaabSources(){
   const status=el('faabSourceStatus');status.textContent='Refreshing the best available league sources…';
   try{
@@ -8447,6 +8493,13 @@ function applyFaabState(s={}){
   const guillotine=LEAGUE.leagueType==='guillotine';
   const sports=isScheduleWaiverSport();
   el('sportsWaiverPlanning').style.display=sports?'':'none';
+  const hockeyPanel=el('hockeyYahooExportPanel');
+  if(hockeyPanel){
+    hockeyPanel.style.display=SPORT.id==='nhl'&&LEAGUE.platform==='yahoo'?'':'none';
+    el('hockeyYahooJson').value='';
+    el('hockeyYahooCopy').disabled=true;el('hockeyYahooDownload').disabled=true;
+    el('hockeyYahooExportStatus').textContent='Refresh this Yahoo league to get current roster, scoring and available players.';
+  }
   el('waiverRosterCoverage').innerHTML='';
   el('faabScheduleLabel').textContent=sports?'plan Sundays 9am Pacific':'run Tuesdays 1am Pacific';
   el('faabAutoEmailLabel').style.display=sports?'none':'';
@@ -8915,6 +8968,9 @@ el('faabManualRun').onclick=()=>runFaab(false);
 el('faabSave').onclick=()=>saveFaabState().catch(e=>el('faabStatus').textContent='⚠ '+e.message);
 el('faabSourceSave').onclick=saveFaabSources;
 el('faabSourceSync').onclick=syncFaabSources;
+ el('hockeyYahooRefresh').onclick=refreshHockeyYahooExport;
+ el('hockeyYahooCopy').onclick=copyHockeyYahooExport;
+ el('hockeyYahooDownload').onclick=downloadHockeyYahooExport;
 el('faabHistorySave').onclick=saveFaabCalibration;
 el('faabCalendar').onclick=downloadFaabCalendar;
 el('faabEmailNow').onclick=emailFaabNow;
