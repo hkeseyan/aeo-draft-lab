@@ -217,7 +217,7 @@
     </nav>
     <nav id="pageNav" aria-label="In-season pages">
       <button type="button" data-view="inseason">Waiver Lab</button>
-      <button type="button" data-view="season-trades">Trade Lab <span class="nav-planned">Planned</span></button>
+      <button type="button" data-view="season-trades">Trade Lab</button>
       <button type="button" data-view="roto">Roto standings</button>
       <button type="button" data-view="h2h">H2H matchups <span class="nav-planned">Planned</span></button>
       <button type="button" data-view="radar">Add Radar</button>
@@ -260,7 +260,17 @@
     </div>
   </section>
   <section class="view" id="view-season-trades" aria-label="In-season Trade Lab">
-    <div class="card"><h2>Trade Lab <span class="tag">Planned</span></h2><p>Evaluate player trades using current rosters, league rules, keeper costs and each team's goals.</p><p class="small muted">In-season trade analysis is planned. Draft Trades handles keeper rights, draft rosters and draft picks.</p></div>
+    <div class="card">
+      <h2>Pending Yahoo trade offers</h2>
+      <p class="small muted">Reads proposals involving your team in the selected Yahoo league. Live, read-only; never accepts, rejects or changes a trade.</p>
+      <div class="row" style="margin-bottom:10px">
+        <button class="btn" id="yahooTradeRefresh">Refresh pending offers</button>
+        <button class="btn ghost" id="yahooTradeCopy" disabled>Copy JSON for analysis</button>
+        <span class="small muted" id="yahooTradeStatus">Select a connected Yahoo league.</span>
+      </div>
+      <div id="yahooTradeList" class="small"></div>
+    </div>
+    <div class="card"><h2>Trade analysis <span class="tag">Planned</span></h2><p>Next: evaluate these offers using current rosters, scoring, keeper costs and each team's goals. Draft Trades currently handles keeper rights, draft rosters and picks.</p></div>
   </section>
   <section class="view" id="view-h2h" aria-label="H2H matchup projections">
     <div class="card"><h2>H2H matchup projections <span class="tag">Planned</span></h2><p>Project upcoming matchups using scoring settings, expected lineups, player availability and schedules.</p><p class="small muted">Matchup calculations are planned.</p></div>
@@ -8308,6 +8318,48 @@ function waiverCsvObjects(text){
   const header=rows.shift()||[];return rows.map(r=>Object.fromEntries(header.map((h,i)=>[h,r[i]||''])));
 }
 function faabEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+let YAHOO_PENDING_TRADES=null;
+async function loadYahooPendingTrades(){
+  const status=el('yahooTradeStatus'),list=el('yahooTradeList'),refresh=el('yahooTradeRefresh'),copy=el('yahooTradeCopy');
+  if(!status||!list||!refresh||!copy)return;
+  const selected=CURRENT_LEAGUE_ID,profile=LEAGUES[selected]||{};
+  YAHOO_PENDING_TRADES=null;copy.disabled=true;list.textContent='';
+  if(!ME.admin){refresh.disabled=true;status.textContent='Private trade offers are available only to the Draft Lab admin.';return;}
+  if(profile.platform!=='yahoo'&&!profile.yahooLeagueId&&!profile.yahooLeagueKey){
+    refresh.disabled=true;status.textContent='This league profile has no Yahoo connection.';return;
+  }
+  refresh.disabled=true;status.textContent='Checking live Yahoo trade offers…';
+  try{
+    const r=await fetch('/api/yahoo/pending-trades?league='+encodeURIComponent(selected),{headers:tokenHdr(),cache:'no-store'});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    if(selected!==CURRENT_LEAGUE_ID)return;
+    if(!d.verifiedLiveYahoo)throw new Error('The provider did not verify this as a live read.');
+    YAHOO_PENDING_TRADES=d;copy.disabled=false;
+    const offers=d.offers||[];
+    status.textContent='✓ Live Yahoo · '+new Date(d.fetchedAt).toLocaleString()+' · '+offers.length+' pending trade'+(offers.length===1?'':'s')+' for '+(d.team?.name||'your team');
+    if(!offers.length){list.textContent='No pending offers were returned for this team. This does not include trade suggestions or completed trades.';return;}
+    const names=players=>players?.length?players.map(p=>faabEsc(p.name)).join(', '):'None reported';
+    list.innerHTML=offers.map(o=>{
+      const time=o.proposedAt?new Date(o.proposedAt).toLocaleString():'Time unavailable';
+      const caution=o.complete?'':' <span class="muted">⚠ Some players or draft picks require manual verification in Yahoo.</span>';
+      return '<div style="padding:12px 0;border-bottom:1px solid var(--line)">'+
+        '<b>'+faabEsc(o.direction==='incoming'?'Received from ':'Sent to ')+faabEsc(o.partnerTeamName)+'</b>'+
+        ' <span class="muted">· '+faabEsc(o.status)+' · '+faabEsc(time)+'</span>'+
+        '<p style="margin:8px 0 4px"><b>You receive:</b> '+names(o.receiving)+'</p>'+
+        '<p style="margin:4px 0"><b>You send:</b> '+names(o.giving)+'</p>'+
+        (o.note?'<p class="muted">Note: '+faabEsc(o.note)+'</p>':'')+caution+'</div>';
+    }).join('');
+  }catch(e){
+    if(selected!==CURRENT_LEAGUE_ID)return;
+    status.textContent='⚠ '+e.message;list.textContent='The pending trade list could not be verified. No empty-result assumption was made.';
+  }finally{if(selected===CURRENT_LEAGUE_ID)refresh.disabled=false;}
+}
+async function copyYahooPendingTrades(){
+  if(!YAHOO_PENDING_TRADES)return;
+  const json=JSON.stringify(YAHOO_PENDING_TRADES,null,2);
+  try{await navigator.clipboard.writeText(json);el('yahooTradeStatus').textContent='✓ Copied verified Yahoo proposals for analysis.';}
+  catch(e){el('yahooTradeStatus').textContent='Clipboard unavailable; please use your browser clipboard permissions.';}
+}
 function faabCsvCell(v){const s=String(v==null?'':v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
 function faabRowsCsv(rows,headers){return headers.join(',')+'\n'+(rows||[]).map(r=>headers.map(h=>faabCsvCell(r[h])).join(',')).join('\n');}
 function defaultFaabRosterCsv(){
@@ -8931,6 +8983,7 @@ function showAppPage(view,{historyMode='push',load=true}={}){
     if(view==='leagues')renderLeaguesTab();
     if(view==='commish')renderCommish();
     if(view==='inseason')loadInSeasonState();
+    if(view==='season-trades')loadYahooPendingTrades();
     if(view==='ranker')loadRanker();
     if(view==='roto'&&typeof renderRotoForecast==='function')renderRotoForecast();
   }
@@ -8964,6 +9017,8 @@ document.querySelectorAll('#pageNav [data-view]').forEach(b=>b.onclick=()=>showA
 document.querySelectorAll('#workspaceNav [data-area]').forEach(b=>b.onclick=()=>openAppArea(b.dataset.area));
 el('openPlayerRanker').onclick=()=>{if(SPORT.id!=='nfl')switchSport('nfl');showAppPage('ranker');};
 el('faabYahooRun').onclick=()=>runFaab(true);
+el('yahooTradeRefresh').onclick=loadYahooPendingTrades;
+el('yahooTradeCopy').onclick=copyYahooPendingTrades;
 el('faabManualRun').onclick=()=>runFaab(false);
 el('faabSave').onclick=()=>saveFaabState().catch(e=>el('faabStatus').textContent='⚠ '+e.message);
 el('faabSourceSave').onclick=saveFaabSources;
@@ -9555,6 +9610,7 @@ function applyLeagueProfile(id){
     if(el('faabWeek'))loadInSeasonState();
   }
   restoreAppNavigation();
+  if(ACTIVE_PAGE==='season-trades')loadYahooPendingTrades();
   loadSetup();
   loadExposure();
 }
