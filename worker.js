@@ -2749,7 +2749,7 @@ var worker_default = {
           const token = await getYahooAccessToken(env, kv, url);
           if (!token) return J({ error: "Yahoo account not connected. Connect Yahoo from the Leagues tab." }, 401);
           const key = await resolveYahooLeagueKey(token, profile);
-          if (!/^\\d+\\.l\\.\\d+$/.test(key)) return J({ error: "Invalid Yahoo league key." }, 502);
+          if (!/^\d+\.l\.\d+$/.test(key)) return J({ error: "Invalid Yahoo league key." }, 502);
           const teamRaw = await yahooJson(token, `league/${key}/teams`);
           const teams = collectYahooEntities(teamRaw, "team").filter(t => t.team_key && String(t.team_key).startsWith(key + ".t."));
           const ownTeams = teams.filter(t => String(t.is_owned_by_current_login) === "1");
