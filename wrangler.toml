@@ -14,7 +14,7 @@ directory = "./public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 # OAuth callbacks and API navigations must reach the Worker, not the SPA fallback.
-run_worker_first = ["/api/*", "/auth/*"]
+run_worker_first = ["/api/*", "/auth/*", "/oauth/*", "/.well-known/*", "/mcp"]
 
 # KV namespace for cross-device mock draft history (bound as env.MOCKS in worker.js).
 [[kv_namespaces]]
@@ -26,3 +26,7 @@ id = "1d439dfe62f1412da95101491c170cef"
 # [vars]
 # AUTH_TOKEN = ""
 
+
+# Canonical issuer and protected resource URL for ChatGPT MCP OAuth.
+[vars]
+MCP_PUBLIC_ORIGIN = "https://aeo-draft-lab.hkeseyan.workers.dev"
