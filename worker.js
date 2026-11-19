@@ -1627,7 +1627,7 @@ var worker_default = {
           const profiles = await Promise.all(page.keys.map(x => env.MOCKS.get(x.name, { type: "json" })));
           return { leagues: profiles.filter(p => p && (p.platform === "yahoo" || p.yahooLeagueKey || p.yahooLeagueId))
             .map(p => ({ league: p.id, name: p.name, sport: p.sport || "nfl" })),
-            potentiallyTruncated: !!page.list_complete === false };
+            potentiallyTruncated: page.list_complete === false };
         },
         getTrades: async slug => {
           const profile = await env.MOCKS.get(leagueProfileKey(slug), { type: "json" });
