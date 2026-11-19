@@ -25,6 +25,8 @@ jobs:
           for attempt in $(seq 1 24); do
             html="$(curl -fsS --max-time 15 https://aeo-draft-lab.hkeseyan.workers.dev/ || true)"
             if printf '%s' "$html" | grep -q 'Schedule and usable games' \
+              && printf '%s' "$html" | grep -q 'Pending Yahoo trade offers' \
+              && printf '%s' "$html" | grep -q '/api/yahoo/pending-trades' \
               && printf '%s' "$html" | grep -q 'Roster first: schedules, usable games and drop choices' \
               && printf '%s' "$html" | grep -q 'Priority long-term adds' \
               && printf '%s' "$html" | grep -q 'Drop candidates: fewest usable games first' \
@@ -33,7 +35,7 @@ jobs:
               && printf '%s' "$html" | grep -q "yahoo-nhl-public-categories" \
               && printf '%s' "$html" | grep -q "officialDraft:true" \
               && ! printf '%s' "$html" | grep -q '\.fchip'; then
-              echo "Production Worker matches the final NHL release markers."
+              echo "Production Worker matches latest deployed feature markers."
               exit 0
             fi
             echo "Waiting for Cloudflare Workers Build auto-deploy (attempt $attempt/24)..."
