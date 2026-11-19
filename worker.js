@@ -1,6 +1,7 @@
 import { analyzeScheduleWaivers, planningWindow, localDate } from './waiver-planner.js';
 import { fetchGameSchedule, manualGameSchedule } from './waiver-schedules.js';
 import { buildYahooHockeyWaiverExport } from './yahoo-hockey-export.js';
+import { normalizeYahooPendingTrades } from './yahoo-pending-trades.js';
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
@@ -2730,6 +2731,50 @@ var worker_default = {
           return J({ ...exported, cached: false, freshForCurrentRequest: true }, 201);
         } catch (e) {
           return J({ error: "Yahoo hockey refresh failed: " + e.message, verifiedLiveYahoo: false }, 502);
+        }
+      }
+      if (path === "/api/yahoo/pending-trades") {
+        // Trade proposals are private to the connected Yahoo team. Always read
+        // live, never cache them in shared KV, and expose no mutation endpoint.
+        if (!ACCOUNTS_ON(env) && !env.AUTH_TOKEN) return J({ error: "Configure Google sign-in or AUTH_TOKEN before reading private trades." }, 403);
+        const denied = requireAdmin();
+        if (denied) return denied;
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const profile = await kv.get(leagueProfileKey(lg), { type: "json" });
+        if (!profile) return J({ error: "Draft Lab league profile not found." }, 404);
+        if (profile.platform !== "yahoo" && !profile.yahooLeagueId && !profile.yahooLeagueKey) {
+          return J({ error: "This profile is not linked to a Yahoo league." }, 400);
+        }
+        try {
+          const token = await getYahooAccessToken(env, kv, url);
+          if (!token) return J({ error: "Yahoo account not connected. Connect Yahoo from the Leagues tab." }, 401);
+          const key = await resolveYahooLeagueKey(token, profile);
+          if (!/^\\d+\\.l\\.\\d+$/.test(key)) return J({ error: "Invalid Yahoo league key." }, 502);
+          const teamRaw = await yahooJson(token, `league/${key}/teams`);
+          const teams = collectYahooEntities(teamRaw, "team").filter(t => t.team_key && String(t.team_key).startsWith(key + ".t."));
+          const ownTeams = teams.filter(t => String(t.is_owned_by_current_login) === "1");
+          // Never guess the team's identity from a manager nickname. A mistaken
+          // team key can produce an incorrectly empty list or unrelated trades.
+          if (ownTeams.length !== 1) return J({
+            error: "Could not identify exactly one Yahoo team owned by the connected account.",
+            code: "YAHOO_TEAM_UNVERIFIED",
+            teamCount: teams.length
+          }, 502);
+          const mine = ownTeams[0];
+          const raw = await yahooJson(token, `league/${key}/transactions;types=pending_trade;team_key=${mine.team_key}`);
+          const offers = normalizeYahooPendingTrades(raw, mine.team_key, teams);
+          return new Response(JSON.stringify({
+            source: "Yahoo Fantasy Sports API",
+            verifiedLiveYahoo: true,
+            fetchedAt: new Date().toISOString(),
+            leagueKey: key,
+            leagueName: profile.name || "",
+            team: { key: mine.team_key, name: mine.name || "" },
+            count: offers.length,
+            offers
+          }), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...CORS } });
+        } catch (e) {
+          return J({ error: "Yahoo pending trades request failed: " + e.message, verifiedLiveYahoo: false }, 502);
         }
       }
       if (path === "/api/yahoo/status") {
