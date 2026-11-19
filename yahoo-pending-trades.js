@@ -33,9 +33,18 @@ function fields(value, omit = new Set()) {
 
 export function normalizeYahooPendingTrades(raw, myTeamKey, teams = []) {
   if (!myTeamKey) throw new Error('A verified Yahoo team key is required.');
+  const collections = nodesNamed(raw?.fantasy_content?.league, 'transactions');
+  if (collections.length !== 1 || !collections[0] || typeof collections[0] !== 'object') {
+    throw new Error('Yahoo did not return a pending-trades collection.');
+  }
+  const transactions = nodesNamed(collections[0], 'transaction');
+  const expectedCount = collections[0].count;
+  if (expectedCount != null && (!/^\d+$/.test(String(expectedCount)) || Number(expectedCount) !== transactions.length)) {
+    throw new Error('Yahoo returned incomplete pending-trade data.');
+  }
   const teamNames = new Map(teams.map(t => [String(t.team_key), String(t.name || t.team_key)]));
   const offers = [];
-  for (const transactionNode of nodesNamed(raw, 'transaction')) {
+  for (const transactionNode of transactions) {
     const meta = fields(transactionNode, new Set(['players', 'player', 'transaction_data', 'draft_picks']));
     if (meta.type !== 'pending_trade' || !meta.transaction_key) continue;
     const trader = String(meta.trader_team_key || '');

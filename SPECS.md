@@ -898,6 +898,10 @@ movement between seasons modeled (that's a future season's problem, not
 this one's).
 
 
+## In-season Yahoo trade analysis
+
+The authenticated Draft Lab API and ChatGPT MCP connector read live Yahoo pending offers, official auction draft results, team rosters, league settings and standings. Pending trades use the existing read scope. Auction draft details and trade analysis require separate read-only consent. Analysis uses official season-specific draft prices, commissioner keeper rules, current rosters, dated strategy and independent valuations when available. See [Yahoo trade analysis](docs/YAHOO_TRADE_ANALYSIS.md) for methods, market inputs and verification.
+
 ## Cross-league retention, IR, and auction-keeper rules
 
 These are domain rules for the league-aware rankings/keeper engine, separate from the existing draft-room mechanics.

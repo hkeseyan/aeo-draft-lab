@@ -19,6 +19,8 @@ const deps = {
   getUser: async req => req.headers.get("x-test-user") === "no" ? null :
     req.headers.get("x-test-user") === "ordinary" ? { id: "other", admin: false } :
     { id: "owner-id", email: "owner@example.test", admin: true },
+  getDraft: async (league, season, subject) => ({ league, season, subject }),
+  analyzeTrades: async (league, valuations, subject) => ({ league, valuations, subject }),
   listLeagues: async () => ({ leagues: [{ league: "aeok-auction", name: "AEOK Auction League" }] }),
   getTrades: async league => { calls.push(league); return {
     source: "Yahoo Fantasy Sports API", verifiedLiveYahoo: true, leagueKey: "449.l.868349",
@@ -91,16 +93,18 @@ assert.ok(!JSON.stringify([...kv.records]).includes(token.access_token), "never 
 res = await invoke("/oauth/token", { method: "POST", body: tokenForm });
 assert.equal(res.status, 400, "authorization code must be consumed");
 
-const rpc = (method, params = {}, id = 1) => new Request(origin + "/mcp", {
-  method: "POST", headers: { Authorization: "Bearer " + token.access_token, "Content-Type": "application/json" },
+const rpc = (method, params = {}, id = 1, accessToken = token.access_token) => new Request(origin + "/mcp", {
+  method: "POST", headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
   body: JSON.stringify({ jsonrpc: "2.0", method, params, id })
 });
-res = await handleDraftLabMcp(rpc("initialize"), env, new URL(origin + "/mcp"), deps);
+res = await handleDraftLabMcp(rpc("initialize", { protocolVersion: "2025-06-18" }), env, new URL(origin + "/mcp"), deps);
 assert.equal(res.status, 200);
-assert.ok((await res.json()).result.capabilities.tools);
+const initialized = (await res.json()).result;
+assert.ok(initialized.capabilities.tools);
+assert.equal(initialized.protocolVersion, "2025-06-18");
 res = await handleDraftLabMcp(rpc("tools/list"), env, new URL(origin + "/mcp"), deps);
 const listed = (await res.json()).result.tools;
-assert.deepEqual(listed.map(x => x.name), ["list_yahoo_leagues", "get_pending_trades"]);
+assert.deepEqual(listed.map(x => x.name), ["list_yahoo_leagues", "get_pending_trades", "get_yahoo_draft_results", "get_yahoo_trade_analysis"]);
 assert.ok(listed.every(x => x.annotations?.readOnlyHint === true));
 res = await handleDraftLabMcp(rpc("tools/call", { name: "get_pending_trades", arguments: { league: "aeok-auction" } }),
   env, new URL(origin + "/mcp"), deps);
@@ -110,6 +114,38 @@ assert.deepEqual(calls, ["aeok-auction"]);
 res = await handleDraftLabMcp(rpc("tools/call", { name: "accept_trade", arguments: {} }),
   env, new URL(origin + "/mcp"), deps);
 assert.equal((await res.json()).error.code, -32602, "no transaction writes");
+
+const draftTool = { name: "get_yahoo_draft_results", arguments: { league: "aeok-auction", season: 2026 } };
+const call = async (name, params, accessToken) => (await handleDraftLabMcp(
+  rpc(name, params, 1, accessToken), env, new URL(origin + "/mcp"), deps)).json();
+const missingScope = await call("tools/call", draftTool);
+assert.equal(missingScope.result.isError, true);
+assert.match(missingScope.result._meta["mcp/www_authenticate"][0], /trade-context:read.*insufficient_scope/);
+
+const expandedParams = new URLSearchParams(params);
+expandedParams.set("scope", "trades:read trade-context:read");
+res = await invoke("/oauth/authorize?" + expandedParams);
+const expandedCookie = res.headers.get("set-cookie").split(";")[0];
+const expandedConsent = /name='consent' value='([a-f0-9]+)'/.exec(await res.text())[1];
+res = await invoke("/oauth/authorize", { method: "POST", headers: { cookie: expandedCookie, Origin: origin },
+  body: new URLSearchParams({ consent: expandedConsent, decision: "approve" }) });
+const expandedTokenForm = new URLSearchParams(tokenForm);
+expandedTokenForm.set("code", new URL(res.headers.get("location")).searchParams.get("code"));
+res = await invoke("/oauth/token", { method: "POST", body: expandedTokenForm });
+const expanded = await res.json();
+assert.equal(expanded.scope, "trades:read trade-context:read");
+assert.deepEqual((await call("tools/call", draftTool, expanded.access_token)).result.structuredContent,
+  { league: "aeok-auction", season: 2026, subject: "owner-id" });
+assert.equal((await call("tools/call", { ...draftTool, arguments: { ...draftTool.arguments, season: "2026" } },
+  expanded.access_token)).error.code, -32602);
+assert.equal((await call("tools/call", { name: "get_yahoo_trade_analysis", arguments: { league: "aeok-auction" } },
+  expanded.access_token)).result.structuredContent.subject, "owner-id");
+
+res = await handleDraftLabMcp(rpc("tools/call", { name: "get_pending_trades", arguments: { league: "aeok-auction" } }),
+  env, new URL(origin + "/mcp"), { ...deps, getTrades: () => { throw new Error("Yahoo API 403: secret provider body"); } });
+const failure = (await res.json()).result;
+assert.equal(failure.isError, true);
+assert.equal(failure.content[0].text, "Could not retrieve live Yahoo data (Yahoo HTTP 403)");
 
 const refresh = new URLSearchParams({ grant_type: "refresh_token", client_id: params.get("client_id"),
   resource: origin + "/mcp", refresh_token: token.refresh_token });

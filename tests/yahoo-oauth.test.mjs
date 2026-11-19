@@ -26,4 +26,15 @@ response=await worker.fetch(new Request('https://draft.test/api/yahoo/leagues?ga
 assert.equal(response.status,401,'stale grant should be invalidated before a Yahoo API call');
 assert.equal(kv.data.has('yahooAuth:default'),false,'stale client-bound grant should be removed');
 
+const old = globalThis.fetch;
+globalThis.fetch = async () => { throw new Error("Unsolicited callback must never call Yahoo."); };
+try {
+  response = await worker.fetch(new Request('https://draft.test/auth/yahoo/callback?code=unsolicited'),env,{});
+  assert.equal(response.status, 403);
+  response = await worker.fetch(new Request('https://draft.test/auth/yahoo/start'),env,{});
+  assert.equal(response.status, 302);
+  assert.match(new URL(response.headers.get('location')).searchParams.get('state'), /^[a-f0-9-]+$/);
+  assert.match(response.headers.get('set-cookie'), /aeo_yahoo_oauth_state=.*Secure.*HttpOnly|aeo_yahoo_oauth_state=.*HttpOnly.*Secure/);
+} finally { globalThis.fetch = old; }
+
 console.log('Yahoo OAuth client-binding tests passed.');

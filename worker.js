@@ -1,3 +1,5 @@
+import { normalizeYahooDraft, saveYahooAuctionLedger } from "./yahoo-auction-draft.js";
+import { analyzeYahooOffers, tradeLeagueRules } from "./yahoo-trade-analysis.js";
 import { analyzeScheduleWaivers, planningWindow, localDate } from './waiver-planner.js';
 import { fetchGameSchedule, manualGameSchedule } from './waiver-schedules.js';
 import { buildYahooHockeyWaiverExport } from './yahoo-hockey-export.js';
@@ -204,6 +206,7 @@ async function upsertUser(kv, profile) {
 __name(upsertUser, "upsertUser");
 var scoped = /* @__PURE__ */ __name((base, me) => me && me.admin ? base : `${base}:u:${me.id}`, "scoped");
 var YAHOO_AUTH_KEY = "yahooAuth:default";
+var YAHOO_STATE_COOKIE = "aeo_yahoo_oauth_state";
 var yahooRedirectUri = /* @__PURE__ */ __name((url) => `${url.origin}/auth/yahoo/callback`, "yahooRedirectUri");
 async function yahooTokenRequest(env, params) {
   const basic = btoa(`${env.YAHOO_CLIENT_ID}:${env.YAHOO_CLIENT_SECRET}`);
@@ -216,8 +219,8 @@ async function yahooTokenRequest(env, params) {
   return r.json();
 }
 __name(yahooTokenRequest, "yahooTokenRequest");
-async function getYahooAccessToken(env, kv, url) {
-  const auth = await kv.get(YAHOO_AUTH_KEY, { type: "json" });
+async function getYahooAccessToken(env, kv, url, authorizedGrant) {
+  const auth = authorizedGrant ?? await kv.get(YAHOO_AUTH_KEY, { type: "json" });
   if (!auth) return null;
   if (env.YAHOO_CLIENT_ID && auth.client_id !== env.YAHOO_CLIENT_ID) {
     await kv.delete(YAHOO_AUTH_KEY);
@@ -234,7 +237,8 @@ async function getYahooAccessToken(env, kv, url) {
     refresh_token: tok.refresh_token || auth.refresh_token,
     expires_at: Date.now() + tok.expires_in * 1e3,
     connected_at: auth.connected_at || null,
-    client_id: env.YAHOO_CLIENT_ID || auth.client_id || null
+    client_id: env.YAHOO_CLIENT_ID || auth.client_id || null,
+    owner_id: auth.owner_id || null
   };
   await kv.put(YAHOO_AUTH_KEY, JSON.stringify(updated));
   return updated.access_token;
@@ -1062,26 +1066,169 @@ function mergePlayerRows(primary, enrichment) {
   });
 }
 __name(mergePlayerRows, "mergePlayerRows");
-async function yahooPendingTradesLive(env, kv, originUrl, profile) {
+async function withYahooProfile(kv, slug, read) {
+  const profile = await kv.get(leagueProfileKey(slug), { type: "json" });
+  if (!profile) throw new Error("Draft Lab league profile not found.");
+  return read(profile);
+}
+
+async function readYahooLeague(env, kv, url, profile, subject) {
   if (profile.platform !== "yahoo" && !profile.yahooLeagueId && !profile.yahooLeagueKey) {
     throw new Error("League profile is not connected to Yahoo.");
   }
-  const token = await getYahooAccessToken(env, kv, originUrl);
-  if (!token) throw new Error("Yahoo account not connected. Reconnect Yahoo from the Leagues tab.");
+  let grant;
+  if (subject) {
+    grant = await kv.get(YAHOO_AUTH_KEY, { type: "json" });
+    if (!grant) throw new Error("Yahoo account is not connected.");
+    // Existing single-owner installations predate the owner field.
+    const admins = grant.owner_id ? [] : (await kv.get(USERS_INDEX, { type: "json" }) || []).filter(user => user.admin);
+    const grantOwner = grant.owner_id || (admins.length === 1 ? admins[0].id : null);
+    if (grantOwner !== subject) throw new Error("The Yahoo connection is not linked to this Draft Lab account.");
+  }
+  const token = await getYahooAccessToken(env, kv, url, grant);
+  if (!token) throw new Error("Yahoo account is not connected. Reconnect Yahoo from the Leagues tab.");
   const key = await resolveYahooLeagueKey(token, profile);
   if (!/^\d+\.l\.\d+$/.test(key)) throw new Error("Invalid Yahoo league key.");
-  const teamRaw = await yahooJson(token, "league/" + key + "/teams");
-  const teams = collectYahooEntities(teamRaw, "team").filter(t => t.team_key && String(t.team_key).startsWith(key + ".t."));
-  const ownTeams = teams.filter(t => String(t.is_owned_by_current_login) === "1");
+  return { token, key };
+}
+
+async function readOwnedYahooTeams(token, key) {
+  const teamRaw = await yahooJson(token, `league/${key}/teams`);
+  const teams = collectYahooEntities(teamRaw, "team").filter(team => team.team_key &&
+    team.team_key.startsWith(key + ".t.") && /^\d+$/.test(team.team_key.split(".").at(-1)));
+  const ownTeams = teams.filter(team => String(team.is_owned_by_current_login) === "1");
   if (ownTeams.length !== 1) throw new Error("Could not identify exactly one Yahoo team owned by the connected account.");
-  const mine = ownTeams[0];
-  const raw = await yahooJson(token, "league/" + key + "/transactions;types=pending_trade;team_key=" + mine.team_key);
+  return { teams, mine: ownTeams[0] };
+}
+
+async function yahooPendingTradesForTeam(token, key, profile, { teams, mine }) {
+  const raw = await yahooJson(token, `league/${key}/transactions;types=pending_trade;team_key=${mine.team_key}`);
   const offers = normalizeYahooPendingTrades(raw, mine.team_key, teams);
   return { source: "Yahoo Fantasy Sports API", verifiedLiveYahoo: true, fetchedAt: new Date().toISOString(),
     leagueKey: key, leagueName: profile.name || "", team: { key: mine.team_key, name: mine.name || "" },
     count: offers.length, offers };
 }
-__name(yahooPendingTradesLive, "yahooPendingTradesLive");
+
+async function yahooPendingTradesLive(env, kv, url, profile, subject) {
+  const { token, key } = await readYahooLeague(env, kv, url, profile, subject);
+  return yahooPendingTradesForTeam(token, key, profile, await readOwnedYahooTeams(token, key));
+}
+
+function yahooTradeSettings(raw, key) {
+  const league = raw?.fantasy_content?.league;
+  const meta = Array.isArray(league) ? flattenYahooMeta(league[0]) : {};
+  const settings = collectYahooEntityNodes(league, "settings")[0];
+  if (meta.league_key !== key || !/^\d{4}$/.test(String(meta.season || "")) || !settings) {
+    throw new Error("Yahoo league settings did not identify this league and season.");
+  }
+  const value = Array.isArray(settings) ? settings[0] : settings;
+  const integer = value => value !== "" && value != null && Number.isSafeInteger(Number(value)) ? Number(value) : null;
+  return {
+    season: Number(meta.season), teamCount: integer(meta.num_teams), draftStatus: meta.draft_status || null,
+    draftType: value.draft_type || null, scoringType: value.scoring_type || null,
+    playoffTeams: integer(value.num_playoff_teams), playoffStartWeek: integer(value.playoff_start_week),
+    seasonEndWeek: integer(meta.end_week), rosterPositions: value.roster_positions || [],
+    statCategories: value.stat_categories || null, statModifiers: value.stat_modifiers || null,
+    source: "Yahoo Fantasy Sports API league settings", fetchedAt: new Date().toISOString()
+  };
+}
+
+async function enrichYahooDraft(token, rows, teams, collectNames = true) {
+  const keys = [...new Set(rows.map(row => row.playerKey))];
+  const batches = [];
+  for (let i = 0; collectNames && i < keys.length; i += 25) batches.push(keys.slice(i, i + 25));
+  const raw = await Promise.allSettled(batches.map(batch => yahooJson(token, `players;player_keys=${batch.join(",")}`)));
+  const names = new Map(raw.flatMap(result => result.status === "fulfilled" ? collectYahooEntities(result.value, "player") : [])
+    .map(player => [player.player_key, player.name]));
+  const teamNames = new Map(teams.map(team => [team.key, team.name]));
+  return rows.map(row => ({ ...row, team: teamNames.get(row.teamKey) || row.teamKey,
+    name: names.get(row.playerKey) || row.playerKey }));
+}
+
+function yahooDraftTeams(teams) {
+  return teams.filter(team => team.team_key).map(team => ({
+    key: team.team_key, name: team.name || "", mine: String(team.is_owned_by_current_login || "") === "1"
+  }));
+}
+
+async function officialYahooAuctionDraft(kv, token, key, settings, teams, { enrich = false, profile } = {}) {
+  if (!["auction", "salary_cap"].includes(settings.draftType)) throw new Error("Yahoo reports a non-auction draft.");
+  const raw = await yahooJson(token, `league/${key}/draftresults`);
+  const draft = normalizeYahooDraft(raw, key, collectYahooEntities, settings);
+  const rules = profile ? tradeLeagueRules(profile, key) : null;
+  // Known formats have a fixed number of draftable slots. Count checks guard
+  // against treating a partial finalized feed as evidence of being undrafted.
+  if (rules && draft.results.length !== rules.teamCount * rules.draftableSlots) draft.complete = false;
+  if (draft.complete) draft.ledgerId = await saveYahooAuctionLedger(kv, draft);
+  const normalizedTeams = yahooDraftTeams(teams);
+  const results = enrich ? await enrichYahooDraft(token, draft.results, normalizedTeams) : draft.results;
+  const keeperSeason = rules && draft.complete ? draft.season + 1 : null;
+  return { ...draft, keeperSeason, count: results.length, teams: normalizedTeams, keeperRules: rules,
+    results: enrich && keeperSeason ? results.map(row => ({ ...row,
+      nextKeeperCost: row.cost === null ? null : row.cost + rules.annualIncrease
+    })) : results };
+}
+
+async function yahooAuctionDraftForProfile(env, kv, url, profile, season, subject) {
+  const { token, key } = await readYahooLeague(env, kv, url, profile, subject);
+  const active = yahooTradeSettings(await yahooJson(token, `league/${key}/settings`), key);
+  const draftKey = !season || active.season === season ? key : profile.yahooLeagueKeysBySeason?.[season];
+  if (!/^\d+\.l\.\d+$/.test(draftKey || "")) throw new Error("No Yahoo league is configured for that draft season.");
+  const [settings, { teams }] = await Promise.all([
+    draftKey === key ? active : yahooJson(token, `league/${draftKey}/settings`).then(raw => yahooTradeSettings(raw, draftKey)),
+    readOwnedYahooTeams(token, draftKey)
+  ]);
+  if (season && settings.season !== season) throw new Error("Yahoo returned a different season from the one requested.");
+  return officialYahooAuctionDraft(kv, token, draftKey, settings, teams, { enrich: true, profile });
+}
+
+async function yahooTradeAnalysisLive(env, kv, url, profile, options, subject) {
+  const { token, key } = await readYahooLeague(env, kv, url, profile, subject);
+  const membership = await readOwnedYahooTeams(token, key);
+  const live = await yahooPendingTradesForTeam(token, key, profile, membership);
+  const candidates = options?.counteroffers || [];
+  const settings = yahooTradeSettings(await yahooJson(token, `league/${key}/settings`), key);
+  const rules = tradeLeagueRules(profile, key);
+  const hasOffers = live.offers.length > 0 || candidates.length > 0;
+  const usedTeamKeys = new Set([live.team.key, ...live.offers.map(offer => offer.partnerTeamKey),
+    ...candidates.map(offer => offer.partnerTeamKey)]);
+  const teams = hasOffers ? membership.teams.filter(team => usedTeamKeys.has(team.team_key)) : [];
+  const safeRead = async (read, fallback = null) => {
+    try { return await read(); } catch { return fallback; }
+  };
+  const [draft, standings, rosterEntries] = await Promise.all([
+    rules && hasOffers ? safeRead(() => officialYahooAuctionDraft(kv, token, key, settings, membership.teams, { profile })) : null,
+    teams.length ? safeRead(() => yahooJson(token, `league/${key}/standings`)) : null,
+    Promise.all(teams.map(team => safeRead(async () => [team.team_key, {
+      players: yahooPlayerRows(await yahooJson(token, `team/${team.team_key}/roster`), "", profile.sport),
+      fetchedAt: new Date().toISOString()
+    }])))
+  ]);
+  const standingsByTeam = new Map(collectYahooEntityNodes(standings, "team").map(node => {
+    const info = flattenYahooMeta(node);
+    const record = collectYahooEntityNodes(node, "team_standings")[0];
+    return [info.team_key, record ? flattenYahooMeta(record) : null];
+  }));
+  const rosters = Object.fromEntries(rosterEntries.filter(Boolean).map(([teamKey, roster]) =>
+    [teamKey, { ...roster, record: standingsByTeam.get(teamKey) ?? null }]));
+  const counters = candidates.map((candidate, index) => {
+    const partner = teams.find(team => team.team_key === candidate.partnerTeamKey && team.team_key !== live.team.key);
+    const lookup = (teamKey, keys) => keys.map(key => {
+      const player = rosters[teamKey]?.players.find(player => player.player_key === key);
+      return player && { key, name: player.name, position: player.pos };
+    });
+    const giving = lookup(live.team.key, candidate.giving);
+    const receiving = lookup(candidate.partnerTeamKey, candidate.receiving);
+    if (!partner || ![...giving, ...receiving].every(Boolean)) {
+      return { candidate: index + 1, partnerTeamKey: candidate.partnerTeamKey,
+        error: "Counteroffer players must be on their stated team's current Yahoo roster." };
+    }
+    return { candidate: index + 1, partnerTeamKey: partner.team_key, partnerTeamName: partner.name,
+      status: "hypothetical", direction: "outgoing", giving, receiving, complete: true };
+  });
+  return analyzeYahooOffers({ profile, live, draft, settings, rosters, counters, valuations: options?.valuations });
+}
+
 async function yahooFaabSnapshot(env, kv, originUrl, profile, options = {}) {
   const token = await getYahooAccessToken(env, kv, originUrl);
   if (!token) throw new Error("Yahoo account is not connected.");
@@ -1629,11 +1776,12 @@ var worker_default = {
             .map(p => ({ league: p.id, name: p.name, sport: p.sport || "nfl" })),
             potentiallyTruncated: page.list_complete === false };
         },
-        getTrades: async slug => {
-          const profile = await env.MOCKS.get(leagueProfileKey(slug), { type: "json" });
-          if (!profile) throw new Error("Draft Lab league profile not found.");
-          return yahooPendingTradesLive(env, env.MOCKS, url, profile);
-        }
+        getTrades: (slug, subject) => withYahooProfile(env.MOCKS, slug, profile =>
+          yahooPendingTradesLive(env, env.MOCKS, url, profile, subject)),
+        getDraft: (slug, season, subject) => withYahooProfile(env.MOCKS, slug, profile =>
+          yahooAuctionDraftForProfile(env, env.MOCKS, url, profile, season, subject)),
+        analyzeTrades: (slug, options, subject) => withYahooProfile(env.MOCKS, slug, profile =>
+          yahooTradeAnalysisLive(env, env.MOCKS, url, profile, options, subject))
       });
     }
     if (path === "/auth/google/start") {
@@ -1705,19 +1853,28 @@ var worker_default = {
       const yme = env.MOCKS ? await currentUser(request, env, env.MOCKS) : null;
       if (!yme || !yme.admin) return new Response("Only the admin can connect a Yahoo account.", { status: 403 });
       if (url.searchParams.get("force") === "1" && env.MOCKS) await env.MOCKS.delete(YAHOO_AUTH_KEY);
+      const state = crypto.randomUUID();
       const authUrl = "https://api.login.yahoo.com/oauth2/request_auth?" + new URLSearchParams({
         client_id: env.YAHOO_CLIENT_ID,
         redirect_uri: yahooRedirectUri(url),
         response_type: "code",
         language: "en-us",
-        prompt: "consent"
+        prompt: "consent",
+        state
       }).toString();
-      return Response.redirect(authUrl, 302);
+      return new Response(null, { status: 302,
+        headers: { Location: authUrl, "Set-Cookie": setCookie(YAHOO_STATE_COOKIE, state + ":" + yme.id, 600) } });
     }
     if (path === "/auth/yahoo/callback") {
       const code = url.searchParams.get("code");
       if (!code) return new Response("Missing ?code from Yahoo.", { status: 400 });
       if (!env.MOCKS) return new Response("KV namespace 'MOCKS' is not bound.", { status: 500 });
+      const owner = await currentUser(request, env, env.MOCKS);
+      const state = url.searchParams.get("state");
+      const expectedState = readCookie(request, YAHOO_STATE_COOKIE);
+      if (!owner?.admin || !state || !expectedState || !safeEqual(state + ":" + owner.id, expectedState)) {
+        return new Response("Yahoo sign-in state mismatch. Start again from the Leagues tab.", { status: 403 });
+      }
       try {
         const tok = await yahooTokenRequest(env, {
           grant_type: "authorization_code",
@@ -1734,9 +1891,12 @@ var worker_default = {
           // permission-less no matter how many times it is refreshed. This
           // timestamp is what tells us to stop refreshing and re-consent.
           connected_at: Date.now(),
-          client_id: env.YAHOO_CLIENT_ID || null
+          client_id: env.YAHOO_CLIENT_ID || null,
+          owner_id: owner.accountsOff ? null : owner.id
         }));
-        return new Response("Yahoo account connected. You can close this tab and go back to the app's Leagues tab.", { headers: { "Content-Type": "text/plain" } });
+        return new Response("Yahoo account connected. You can close this tab and go back to the app's Leagues tab.", {
+          headers: { "Content-Type": "text/plain", "Set-Cookie": setCookie(YAHOO_STATE_COOKIE, "", 0) }
+        });
       } catch (e) {
         return new Response("Yahoo auth failed: " + e.message, { status: 500 });
       }
@@ -2887,6 +3047,22 @@ var worker_default = {
           return J({key,source:'Yahoo current rosters',fetchedAt:new Date().toISOString(),teams});
         } catch (e) { return J({ error: "Yahoo roster request failed: " + e.message }, 502); }
       }
+      if (path === "/api/yahoo/trade-analysis" || path === "/api/yahoo/auction-draft-results") {
+        if (!ACCOUNTS_ON(env) && !env.AUTH_TOKEN) return J({ error: "Configure app sign-in before reading private Yahoo data." }, 403);
+        const denied = requireAdmin();
+        if (denied) return denied;
+        if (request.method !== "GET") return J({ error: "method" }, 405);
+        const requestedSeason = url.searchParams.get("season");
+        if (requestedSeason !== null && !/^\d{4}$/.test(requestedSeason)) return J({ error: "invalid season" }, 400);
+        try {
+          const result = await withYahooProfile(kv, lg, profile => path.endsWith("/trade-analysis")
+            ? yahooTradeAnalysisLive(env, kv, url, profile, {}, me.accountsOff ? null : me.id)
+            : yahooAuctionDraftForProfile(env, kv, url, profile, Number(requestedSeason), me.accountsOff ? null : me.id));
+          return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...CORS } });
+        } catch (error) {
+          return J({ error: error.message, verifiedLiveYahoo: false }, 502);
+        }
+      }
       if (path === "/api/yahoo/draft-results") {
         const denied = requireAdmin();
         if (denied) return denied;
@@ -2901,15 +3077,14 @@ var worker_default = {
           const key = suppliedKey || await resolveYahooLeagueKey(token, profile);
           if (!/^\d+\.l\.\d+$/.test(key)) return J({ error: "invalid Yahoo league key" }, 400);
           const [draftRaw, teamsRaw] = await Promise.all([yahooJson(token, `league/${key}/draftresults`), yahooJson(token, `league/${key}/teams`)]);
-          const teams = collectYahooEntities(teamsRaw, "team").filter(t => t.team_key).map(t => ({ key: t.team_key, name: t.name || "", mine: String(t.is_owned_by_current_login || "") === "1" }));
-          const teamNames = new Map(teams.map(t => [t.key, t.name]));
+          const teams = yahooDraftTeams(collectYahooEntities(teamsRaw, "team"));
           const picks = collectYahooEntities(draftRaw, "draft_result").filter(p => p.player_key && p.team_key);
-          const playerKeys = [...new Set(picks.map(p => p.player_key))];
-          const batches = [];
-          for (let i = 0; i < playerKeys.length; i += 25) batches.push(playerKeys.slice(i, i + 25));
-          const playerRaw = await Promise.all(batches.map(keys => yahooJson(token, `players;player_keys=${keys.join(',')}`)));
-          const names = new Map(playerRaw.flatMap(raw => collectYahooEntities(raw, "player")).filter(p => p.player_key).map(p => [p.player_key, p.name]));
-          const results = picks.map(p => ({ pick: Number(p.pick) || null, round: Number(p.round) || null, teamKey: p.team_key, team: teamNames.get(p.team_key) || p.team_key, playerKey: p.player_key, name: names.get(p.player_key) || p.player_key, cost: p.cost != null && p.cost !== '' && Number.isFinite(Number(p.cost)) ? Number(p.cost) : null, keeper: String(p.is_keeper || '') === '1' })).sort((a,b) => (a.pick || 0) - (b.pick || 0));
+          const rows = picks.map(p => ({
+            pick: Number(p.pick) || null, round: Number(p.round) || null, teamKey: p.team_key, playerKey: p.player_key,
+            cost: p.cost != null && p.cost !== "" && Number.isFinite(Number(p.cost)) ? Number(p.cost) : null,
+            keeper: String(p.is_keeper || "") === "1"
+          })).sort((a, b) => (a.pick || 0) - (b.pick || 0));
+          const results = await enrichYahooDraft(token, rows, teams);
           return J({ key, source: "Yahoo official draft results", fetchedAt: new Date().toISOString(), teams, results, count: results.length });
         } catch (e) { return J({ error: "Yahoo draft results request failed: " + e.message }, 502); }
       }
