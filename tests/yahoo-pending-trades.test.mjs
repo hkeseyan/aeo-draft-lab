@@ -35,6 +35,8 @@ assert.deepEqual(offers[1].receiving.map(p=>p.name),['Player D']);
 assert.equal(offers[0].note,'What do you think?');
 assert.deepEqual(normalizeYahooPendingTrades({fantasy_content:{league:[{}, {transactions:{count:0}}]}},mine,teams),[]);
 assert.throws(()=>normalizeYahooPendingTrades(response,'',teams),/verified Yahoo team key/);
+assert.throws(()=>normalizeYahooPendingTrades({},mine,teams),/pending-trades collection/);
+assert.throws(()=>normalizeYahooPendingTrades({fantasy_content:{league:[{}, {transactions:{count:2}}]}},mine,teams),/incomplete/);
 const withPicks={fantasy_content:{league:[{}, {transactions:{0:{transaction:[
   {transaction_key:league+'.pt.19',type:'pending_trade',status:'proposed',trader_team_key:other,tradee_team_key:mine},
   {draft_picks:{0:{draft_pick:{round:4}}}}
